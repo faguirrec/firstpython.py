@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.DS_Store
+*.tsbuildinfo
+
+# Base de datos local: contiene los movimientos y el token de Gmail.
+server/data/
+*.db
+*.db-shm
+*.db-wal
+
+# Secretos
+.env
+.env.local

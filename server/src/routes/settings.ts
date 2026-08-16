@@ -1,0 +1,256 @@
+import { Router } from 'express';
+import { z } from 'zod';
+import { db, uid } from '../lib/db.js';
+import { requireAuth, requireHousehold } from '../lib/auth.js';
+import { applyRule, htmlToText, type EmailRule } from '../services/parser.js';
+import { BANK_TEMPLATES } from '../services/bankTemplates.js';
+
+export const settingsRouter = Router();
+settingsRouter.use(requireAuth, requireHousehold);
+
+/* ------------------------------ Categorías ------------------------------ */
+
+settingsRouter.get('/categories', (req, res) => {
+  const categories = db
+    .prepare('SELECT id, name, kind, color, archived FROM categories WHERE household_id = ? ORDER BY name')
+    .all(req.household!.id);
+  res.json({ categories });
+});
+
+settingsRouter.post('/categories', (req, res) => {
+  const parsed = z
+    .object({
+      name: z.string().min(1).max(60),
+      kind: z.enum(['necesidad', 'gusto', 'ahorro']).default('gusto'),
+      color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#6b7280'),
+    })
+    .safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0].message });
+    return;
+  }
+  const id = uid();
+  try {
+    db.prepare('INSERT INTO categories (id, household_id, name, kind, color) VALUES (?, ?, ?, ?, ?)').run(
+      id, req.household!.id, parsed.data.name, parsed.data.kind, parsed.data.color,
+    );
+  } catch {
+    res.status(409).json({ error: 'Ya existe una categoría con ese nombre' });
+    return;
+  }
+  res.status(201).json({ id, ...parsed.data });
+});
+
+settingsRouter.patch('/categories/:id', (req, res) => {
+  const parsed = z
+    .object({
+      name: z.string().min(1).max(60).optional(),
+      kind: z.enum(['necesidad', 'gusto', 'ahorro']).optional(),
+      color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+      archived: z.boolean().optional(),
+    })
+    .safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0].message });
+    return;
+  }
+  const p = parsed.data;
+  db.prepare(
+    `UPDATE categories SET name = COALESCE(?, name), kind = COALESCE(?, kind),
+            color = COALESCE(?, color), archived = COALESCE(?, archived)
+      WHERE id = ? AND household_id = ?`,
+  ).run(
+    p.name ?? null, p.kind ?? null, p.color ?? null,
+    p.archived === undefined ? null : p.archived ? 1 : 0,
+    req.params.id, req.household!.id,
+  );
+  res.json({ ok: true });
+});
+
+settingsRouter.delete('/categories/:id', (req, res) => {
+  db.prepare('DELETE FROM categories WHERE id = ? AND household_id = ?').run(req.params.id, req.household!.id);
+  res.json({ ok: true });
+});
+
+/* ------------------ Reglas de categorización automática ------------------ */
+
+settingsRouter.get('/category-rules', (req, res) => {
+  const rules = db
+    .prepare(
+      `SELECT r.id, r.pattern, r.priority, r.category_id AS categoryId, c.name AS categoryName
+         FROM category_rules r JOIN categories c ON c.id = r.category_id
+        WHERE r.household_id = ? ORDER BY r.priority`,
+    )
+    .all(req.household!.id);
+  res.json({ rules });
+});
+
+settingsRouter.post('/category-rules', (req, res) => {
+  const parsed = z
+    .object({ pattern: z.string().min(1).max(200), categoryId: z.string(), priority: z.number().int().default(100) })
+    .safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0].message });
+    return;
+  }
+  try {
+    new RegExp(parsed.data.pattern);
+  } catch {
+    res.status(400).json({ error: 'La expresión regular no es válida' });
+    return;
+  }
+  const id = uid();
+  db.prepare('INSERT INTO category_rules (id, household_id, pattern, category_id, priority) VALUES (?, ?, ?, ?, ?)').run(
+    id, req.household!.id, parsed.data.pattern, parsed.data.categoryId, parsed.data.priority,
+  );
+  res.status(201).json({ id });
+});
+
+settingsRouter.delete('/category-rules/:id', (req, res) => {
+  db.prepare('DELETE FROM category_rules WHERE id = ? AND household_id = ?').run(req.params.id, req.household!.id);
+  res.json({ ok: true });
+});
+
+/* -------------------------- Reglas de correo ---------------------------- */
+
+const emailRuleInput = z.object({
+  name: z.string().min(1).max(80),
+  enabled: z.boolean().default(false),
+  gmailQuery: z.string().min(1).max(300),
+  amountRegex: z.string().min(1).max(300),
+  merchantRegex: z.string().max(300).nullable().optional(),
+  dateRegex: z.string().max(300).nullable().optional(),
+  accountRegex: z.string().max(300).nullable().optional(),
+  cardFilter: z.string().max(120).nullable().optional(),
+  type: z.enum(['gasto', 'aporte']).default('gasto'),
+  scope: z.enum(['comun', 'personal']).default('comun'),
+  accountLabel: z.string().max(80).nullable().optional(),
+  priority: z.number().int().default(100),
+});
+
+function validRegexes(input: z.infer<typeof emailRuleInput>): string | null {
+  for (const [label, pattern] of [
+    ['monto', input.amountRegex],
+    ['comercio', input.merchantRegex],
+    ['fecha', input.dateRegex],
+    ['cuenta', input.accountRegex],
+  ] as const) {
+    if (!pattern) continue;
+    try {
+      new RegExp(pattern, 'i');
+    } catch {
+      return `La expresión regular de ${label} no es válida`;
+    }
+  }
+  return null;
+}
+
+settingsRouter.get('/email-rules', (req, res) => {
+  const rules = db
+    .prepare(
+      `SELECT id, name, enabled, gmail_query AS gmailQuery, amount_regex AS amountRegex,
+              merchant_regex AS merchantRegex, date_regex AS dateRegex, account_regex AS accountRegex,
+              card_filter AS cardFilter, type, scope, account_label AS accountLabel, priority
+         FROM email_rules WHERE household_id = ? ORDER BY priority`,
+    )
+    .all(req.household!.id);
+  res.json({ rules, templates: BANK_TEMPLATES });
+});
+
+settingsRouter.post('/email-rules', (req, res) => {
+  const parsed = emailRuleInput.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0].message });
+    return;
+  }
+  const invalid = validRegexes(parsed.data);
+  if (invalid) {
+    res.status(400).json({ error: invalid });
+    return;
+  }
+  const r = parsed.data;
+  const id = uid();
+  db.prepare(
+    `INSERT INTO email_rules
+       (id, household_id, name, enabled, gmail_query, amount_regex, merchant_regex, date_regex,
+        account_regex, card_filter, type, scope, account_label, priority)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    id, req.household!.id, r.name, r.enabled ? 1 : 0, r.gmailQuery, r.amountRegex,
+    r.merchantRegex ?? null, r.dateRegex ?? null, r.accountRegex ?? null, r.cardFilter ?? null,
+    r.type, r.scope, r.accountLabel ?? null, r.priority,
+  );
+  res.status(201).json({ id });
+});
+
+settingsRouter.patch('/email-rules/:id', (req, res) => {
+  const parsed = emailRuleInput.partial().safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0].message });
+    return;
+  }
+  const invalid = validRegexes(parsed.data as z.infer<typeof emailRuleInput>);
+  if (invalid) {
+    res.status(400).json({ error: invalid });
+    return;
+  }
+  const r = parsed.data;
+  db.prepare(
+    `UPDATE email_rules SET
+        name = COALESCE(?, name), enabled = COALESCE(?, enabled), gmail_query = COALESCE(?, gmail_query),
+        amount_regex = COALESCE(?, amount_regex), merchant_regex = COALESCE(?, merchant_regex),
+        date_regex = COALESCE(?, date_regex), account_regex = COALESCE(?, account_regex),
+        card_filter = COALESCE(?, card_filter), type = COALESCE(?, type), scope = COALESCE(?, scope),
+        account_label = COALESCE(?, account_label), priority = COALESCE(?, priority)
+      WHERE id = ? AND household_id = ?`,
+  ).run(
+    r.name ?? null, r.enabled === undefined ? null : r.enabled ? 1 : 0, r.gmailQuery ?? null,
+    r.amountRegex ?? null, r.merchantRegex ?? null, r.dateRegex ?? null, r.accountRegex ?? null,
+    r.cardFilter ?? null, r.type ?? null, r.scope ?? null, r.accountLabel ?? null, r.priority ?? null,
+    req.params.id, req.household!.id,
+  );
+  res.json({ ok: true });
+});
+
+settingsRouter.delete('/email-rules/:id', (req, res) => {
+  db.prepare('DELETE FROM email_rules WHERE id = ? AND household_id = ?').run(req.params.id, req.household!.id);
+  res.json({ ok: true });
+});
+
+/**
+ * Prueba una regla contra el texto de un correo pegado a mano, sin tocar Gmail.
+ * Es la forma práctica de ajustar las expresiones regulares cuando un banco
+ * cambia el formato de sus avisos.
+ */
+settingsRouter.post('/email-rules/test', (req, res) => {
+  const parsed = z
+    .object({
+      sample: z.string().min(1).max(20000),
+      isHtml: z.boolean().default(false),
+      rule: emailRuleInput.partial({ name: true, gmailQuery: true }),
+    })
+    .safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0].message });
+    return;
+  }
+
+  const r = parsed.data.rule;
+  const rule: EmailRule = {
+    id: 'test',
+    name: r.name ?? 'prueba',
+    amount_regex: r.amountRegex ?? '',
+    merchant_regex: r.merchantRegex ?? null,
+    date_regex: r.dateRegex ?? null,
+    account_regex: r.accountRegex ?? null,
+    card_filter: r.cardFilter ?? null,
+    type: r.type ?? 'gasto',
+    scope: r.scope ?? 'comun',
+    account_label: r.accountLabel ?? null,
+  };
+
+  const body = parsed.data.isHtml ? htmlToText(parsed.data.sample) : parsed.data.sample;
+  const movement = applyRule({ from: '', subject: '', body, internalDate: Date.now() }, rule);
+
+  res.json({ matched: movement != null, movement, text: body.slice(0, 2000) });
+});
