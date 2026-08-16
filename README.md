@@ -66,6 +66,12 @@ sueldo de un mes, se arrastra el del último mes declarado.
 
 Requiere Node 20 o superior.
 
+> **Si `npm install` falla en `better-sqlite3` pidiendo Visual Studio**, es que tu
+> versión de Node no tiene binario precompilado para esa librería, y npm intenta
+> compilarla. No hace falta instalar Visual Studio: basta con actualizar la
+> dependencia (`npm install better-sqlite3@latest` en `server/`) o usar la
+> versión LTS de Node. Es la única dependencia nativa del proyecto.
+
 ```bash
 # 1) Backend
 cd server
