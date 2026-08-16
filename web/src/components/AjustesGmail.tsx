@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api, type SyncResult } from '../lib/api';
+import { useSession } from '../lib/session';
+import { money } from '../lib/format';
 
 export default function AjustesGmail() {
+  const currency = useSession().household?.currency ?? 'CLP';
   const [params] = useSearchParams();
   const justConnected = params.get('conectado');
   const [status, setStatus] = useState<{
@@ -36,13 +39,13 @@ export default function AjustesGmail() {
     }
   }
 
-  async function sync() {
+  async function sync(dryRun: boolean) {
     setBusy(true);
     setError(null);
     setResult(null);
     try {
-      setResult(await api.gmailSync());
-      await load();
+      setResult(await api.gmailSync(dryRun));
+      if (!dryRun) await load();
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -97,22 +100,36 @@ export default function AjustesGmail() {
           <button className="primary" onClick={() => void connect()} disabled={!status?.configured}>
             Conectar una cuenta de Gmail
           </button>
-          <button onClick={() => void sync()} disabled={busy || !status?.accounts.length}>
-            {busy ? 'Sincronizando…' : 'Sincronizar ahora'}
+          <button onClick={() => void sync(true)} disabled={busy || !status?.accounts.length}>
+            {busy ? 'Procesando…' : 'Simular (sin guardar)'}
+          </button>
+          <button onClick={() => void sync(false)} disabled={busy || !status?.accounts.length}>
+            Sincronizar de verdad
           </button>
         </div>
+        {status && status.accounts.length > 0 && (
+          <p className="muted" style={{ marginBottom: 0, marginTop: 8 }}>
+            La primera vez conviene <strong>simular</strong>: procesa los correos y te muestra qué crearía, sin
+            escribir nada en la app.
+          </p>
+        )}
       </div>
 
       {result && (
         <div className="card">
-          <h2>Resultado de la sincronización</h2>
+          <div className="card-head">
+            <h2>{result.dryRun ? 'Simulación' : 'Resultado de la sincronización'}</h2>
+            {result.dryRun && <span className="pill warn">no se guardó nada</span>}
+          </div>
           <div className="list">
             <div className="item">
               <div className="body"><div className="title">Correos revisados</div></div>
               <div className="amount">{result.scanned}</div>
             </div>
             <div className="item">
-              <div className="body"><div className="title">Movimientos nuevos</div></div>
+              <div className="body">
+                <div className="title">{result.dryRun ? 'Se crearían' : 'Movimientos nuevos'}</div>
+              </div>
               <div className="amount">{result.imported}</div>
             </div>
             <div className="item">
@@ -123,6 +140,34 @@ export default function AjustesGmail() {
               <div className="amount">{result.skipped}</div>
             </div>
           </div>
+
+          {result.preview.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <h3>Qué se crearía</h3>
+              <p className="muted" style={{ marginTop: 4 }}>
+                Revisa que los montos y comercios estén bien. Si algo sale mal, ajusta la regla antes de sincronizar
+                de verdad.
+              </p>
+              <div className="list">
+                {result.preview.slice(0, 40).map((p, i) => (
+                  <div className="item" key={`${p.subject}-${i}`}>
+                    <div className="body">
+                      <div className="title">
+                        {p.merchant ?? <em className="muted">sin comercio detectado</em>}
+                        {p.duplicate && <span className="pill" style={{ marginLeft: 6 }}>ya existe</span>}
+                      </div>
+                      <div className="meta">{p.occurredOn} · {p.rule}</div>
+                      <div className="meta">{p.subject}</div>
+                    </div>
+                    <div className="amount">{money(p.amount, currency)}</div>
+                  </div>
+                ))}
+              </div>
+              {result.preview.length > 40 && (
+                <p className="muted">…y {result.preview.length - 40} más.</p>
+              )}
+            </div>
+          )}
 
           {Object.keys(result.byRule).length > 0 && (
             <table className="data" style={{ marginTop: 10 }}>
@@ -144,10 +189,16 @@ export default function AjustesGmail() {
             </div>
           )}
 
-          {result.imported > 0 && (
-            <p style={{ marginBottom: 0 }}>
-              <Link to="/movimientos?pendientes=1">Revisar los {result.imported} movimientos importados →</Link>
+          {result.dryRun ? (
+            <p style={{ marginBottom: 0, marginTop: 10 }}>
+              Si el resultado se ve bien, usa <strong>Sincronizar de verdad</strong> para guardarlos.
             </p>
+          ) : (
+            result.imported > 0 && (
+              <p style={{ marginBottom: 0 }}>
+                <Link to="/movimientos?pendientes=1">Revisar los {result.imported} movimientos importados →</Link>
+              </p>
+            )
           )}
         </div>
       )}

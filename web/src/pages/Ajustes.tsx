@@ -5,6 +5,7 @@ import { useSession } from '../lib/session';
 import Categorias from '../components/AjustesCategorias';
 import GmailPanel from '../components/AjustesGmail';
 import ReglasCorreo from '../components/AjustesReglas';
+import Invitacion from '../components/Invitacion';
 
 const TABS = [
   { key: 'hogar', label: 'Hogar' },
@@ -121,15 +122,9 @@ function PanelHogar() {
         </div>
 
         {members.length < 2 && (
-          <div style={{ marginTop: 12 }}>
+          <div style={{ marginTop: 14 }}>
             {code ? (
-              <>
-                <div className="label">Código para que se una la otra persona</div>
-                <div className="hero num" style={{ letterSpacing: '0.15em' }}>{code}</div>
-                <p className="muted">
-                  Que cree su cuenta y elija «Unirme con código». Los dos ven exactamente los mismos datos.
-                </p>
-              </>
+              <Invitacion code={code} onChanged={() => void load()} />
             ) : (
               <button
                 className="primary"
@@ -138,11 +133,35 @@ function PanelHogar() {
                   setCode(created.code);
                 }}
               >
-                Generar código de invitación
+                Generar invitación
               </button>
             )}
           </div>
         )}
+      </div>
+
+      <div className="card">
+        <h2>Fondo de contingencia</h2>
+        <p className="muted" style={{ marginTop: 0 }}>
+          Porcentaje extra sobre el gasto estimado que cada uno aporta —en su misma proporción— para imprevistos.
+          Se acumula en la cuenta del hogar y no cuenta como gasto, así que no altera la liquidación del mes.
+        </p>
+        <label className="field" style={{ marginBottom: 0 }}>
+          <span>Contingencia: {household.contingencyPct}%</span>
+          <input
+            type="range"
+            min={0}
+            max={40}
+            step={1}
+            defaultValue={household.contingencyPct}
+            onChange={(e) => setHousehold({ ...household, contingencyPct: Number(e.target.value) })}
+            onMouseUp={(e) => void save({ contingencyPct: Number((e.target as HTMLInputElement).value) })}
+            onTouchEnd={(e) => void save({ contingencyPct: Number((e.target as HTMLInputElement).value) })}
+          />
+          <em className="muted">
+            Con 10%, si el gasto estimado del mes es $1.000.000 se juntan $1.100.000 y quedan $100.000 de reserva.
+          </em>
+        </label>
       </div>
 
       <div className="card">

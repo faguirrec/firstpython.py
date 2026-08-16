@@ -26,9 +26,16 @@ $1.510.000 y Bruno $1.010.000, a Ana le toca el 59,9% de los gastos comunes y a
 Bruno el 40,1%. La app calcula cuánto debe transferir cada uno a la cuenta del
 hogar y, al cierre del mes, quién le debe a quién.
 
-**Dos cuentas, un hogar.** El primero crea el hogar y recibe un código de 6
-caracteres; el segundo se une con ese código. Los dos ven exactamente los mismos
-datos. El hogar acepta exactamente dos integrantes.
+**Dos cuentas, un hogar.** El primero crea el hogar y comparte una invitación:
+link para WhatsApp, código QR para escanear con la cámara, o un código de 6
+caracteres. Quien lo recibe crea su cuenta y entra al hogar en un solo paso. Los
+dos ven exactamente los mismos datos. El hogar acepta exactamente dos
+integrantes, y el código se puede anular y regenerar.
+
+**Fondo de contingencia.** Un porcentaje configurable sobre el gasto estimado
+que cada uno aporta en su misma proporción. No cuenta como gasto: se acumula en
+la cuenta del hogar como reserva para imprevistos, y la app muestra cuántos
+meses de gastos cubre.
 
 **Lectura de Gmail.** Conectas la cuenta donde llegan los avisos del banco y la
 app los convierte en movimientos: monto, comercio, fecha y últimos 4 dígitos de
@@ -61,6 +68,14 @@ saldo[p]           = puso[p] − le toca[p]
 
 Si no hay sueldos cargados, el reparto cae a 50/50 y la app lo avisa. Si falta el
 sueldo de un mes, se arrastra el del último mes declarado.
+
+La proyección de principio de mes agrega la contingencia sobre el gasto estimado:
+
+```
+objetivo        = gasto estimado × (1 + contingencia%)
+transfiere[p]   = objetivo × participación[p]
+fondo de reserva = Σ (aportes − gastos pagados desde la cuenta del hogar)
+```
 
 ## Levantarla en local
 
@@ -129,11 +144,15 @@ Las reglas vienen **desactivadas** porque cada banco escribe sus avisos distinto
 y los cambia cada cierto tiempo.
 
 1. **Ajustes → Reglas de correo**: elige la plantilla de tu banco y toca *Usar*.
-2. Abre un aviso real en Gmail, copia el texto y pégalo en *Probar con un correo
-   real*.
+2. En *Probar con un correo real*, toca **Traer un correo real de Gmail**: busca
+   en tu bandeja, te muestra remitentes y asuntos, y con *Usar este* carga el
+   texto del correo en el probador. También puedes pegarlo a mano.
 3. Toca **Probar**: la app muestra qué monto, comercio y fecha extrajo.
 4. Ajusta las expresiones regulares hasta que calce, guarda y activa la regla.
-5. **Ajustes → Gmail → Sincronizar ahora**.
+5. **Ajustes → Gmail → Simular (sin guardar)**: procesa los correos y lista qué
+   movimientos crearía, sin escribir nada. Es el paso que conviene repetir hasta
+   que el resultado se vea bien.
+6. Cuando cuadre, **Sincronizar de verdad**.
 
 Consejos:
 

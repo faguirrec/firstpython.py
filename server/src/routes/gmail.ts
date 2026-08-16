@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { db, uid } from '../lib/db.js';
 import { requireAuth, requireHousehold } from '../lib/auth.js';
 import { env } from '../lib/env.js';
-import { authUrl, exchangeCode, syncHousehold } from '../services/gmail.js';
+import { authUrl, exchangeCode, getMessageText, searchMessages, syncHousehold } from '../services/gmail.js';
 
 export const gmailRouter = Router();
 
@@ -59,10 +59,41 @@ gmailRouter.get('/callback', async (req, res) => {
 });
 
 gmailRouter.post('/sync', requireAuth, requireHousehold, async (req, res) => {
-  const parsed = z.object({ maxPerRule: z.number().int().min(1).max(200).default(100) }).safeParse(req.body ?? {});
-  const maxPerRule = parsed.success ? parsed.data.maxPerRule : 100;
+  const parsed = z
+    .object({
+      maxPerRule: z.number().int().min(1).max(200).default(100),
+      /** Simulación: muestra qué se importaría sin escribir nada. */
+      dryRun: z.boolean().default(false),
+    })
+    .safeParse(req.body ?? {});
+  const options = parsed.success ? parsed.data : { maxPerRule: 100, dryRun: false };
   try {
-    res.json(await syncHousehold(req.household!.id, maxPerRule));
+    res.json(await syncHousehold(req.household!.id, options.maxPerRule, options.dryRun));
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+/** Busca correos reales para descubrir remitentes y asuntos antes de escribir una regla. */
+gmailRouter.get('/messages', requireAuth, requireHousehold, async (req, res) => {
+  const parsed = z
+    .object({ q: z.string().min(1).max(300), limit: z.coerce.number().int().min(1).max(25).default(10) })
+    .safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Búsqueda inválida' });
+    return;
+  }
+  try {
+    res.json(await searchMessages(req.household!.id, parsed.data.q, parsed.data.limit));
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+/** Texto plano de un correo, para cargarlo directo en el probador de reglas. */
+gmailRouter.get('/messages/:id', requireAuth, requireHousehold, async (req, res) => {
+  try {
+    res.json(await getMessageText(req.household!.id, req.params.id));
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
   }

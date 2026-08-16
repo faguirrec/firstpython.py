@@ -24,6 +24,8 @@ CREATE TABLE IF NOT EXISTS households (
   currency        TEXT NOT NULL DEFAULT 'CLP',
   -- Etiqueta de la cuenta bancaria "oficial" del hogar (de donde salen los gastos comunes).
   official_account TEXT NOT NULL DEFAULT 'Cuenta del hogar',
+  -- Porcentaje extra sobre el gasto estimado que se aporta como fondo de reserva.
+  contingency_pct REAL NOT NULL DEFAULT 10,
   created_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -41,6 +43,7 @@ CREATE TABLE IF NOT EXISTS invites (
   household_id TEXT NOT NULL REFERENCES households(id) ON DELETE CASCADE,
   created_by   TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   used_by      TEXT REFERENCES users(id),
+  revoked      INTEGER NOT NULL DEFAULT 0,
   created_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -135,6 +138,21 @@ CREATE TABLE IF NOT EXISTS settlements (
   PRIMARY KEY (household_id, month)
 );
 `);
+
+/**
+ * Migraciones incrementales.
+ *
+ * La app ya está en uso, así que las columnas nuevas se agregan sobre la base
+ * existente en vez de recrear tablas: nadie pierde sus movimientos al actualizar.
+ */
+function addColumn(table: string, column: string, definition: string): void {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  if (columns.some((c) => c.name === column)) return;
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+}
+
+addColumn('households', 'contingency_pct', 'REAL NOT NULL DEFAULT 10');
+addColumn('invites', 'revoked', 'INTEGER NOT NULL DEFAULT 0');
 
 export function uid(): string {
   return crypto.randomUUID();

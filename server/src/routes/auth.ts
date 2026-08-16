@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { db, uid } from '../lib/db.js';
 import { clearToken, issueToken, requireAuth } from '../lib/auth.js';
+import { joinByCode } from './household.js';
 
 export const authRouter = Router();
 
@@ -12,13 +13,18 @@ const credentials = z.object({
   name: z.string().min(1).max(60).optional(),
 });
 
+const registration = credentials.extend({
+  /** Si viene, la cuenta queda creada y dentro del hogar en un solo paso. */
+  inviteCode: z.string().min(4).max(12).optional(),
+});
+
 authRouter.post('/register', (req, res) => {
-  const parsed = credentials.safeParse(req.body);
+  const parsed = registration.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.issues[0].message });
     return;
   }
-  const { email, password } = parsed.data;
+  const { email, password, inviteCode } = parsed.data;
   const name = parsed.data.name?.trim() || email.split('@')[0];
   const normalized = email.toLowerCase().trim();
 
@@ -26,6 +32,18 @@ authRouter.post('/register', (req, res) => {
   if (exists) {
     res.status(409).json({ error: 'Ya existe una cuenta con ese correo' });
     return;
+  }
+
+  // Con código de invitación se valida antes de crear nada: si está vencido,
+  // es mejor decirlo ahora que dejar una cuenta suelta sin hogar.
+  if (inviteCode) {
+    const preview = db
+      .prepare('SELECT 1 FROM invites WHERE code = ? AND used_by IS NULL AND revoked = 0')
+      .get(inviteCode.toUpperCase().trim());
+    if (!preview) {
+      res.status(404).json({ error: 'El código de invitación no existe o ya fue usado' });
+      return;
+    }
   }
 
   const user = { id: uid(), email: normalized, name };
@@ -36,8 +54,14 @@ authRouter.post('/register', (req, res) => {
     user.name,
   );
 
+  let joined = false;
+  if (inviteCode) {
+    const result = joinByCode(user.id, inviteCode);
+    joined = result.ok;
+  }
+
   issueToken(res, user);
-  res.status(201).json({ user });
+  res.status(201).json({ user, joined });
 });
 
 authRouter.post('/login', (req, res) => {
@@ -70,7 +94,8 @@ authRouter.post('/logout', (_req, res) => {
 authRouter.get('/me', requireAuth, (req, res) => {
   const household = db
     .prepare(
-      `SELECT h.id, h.name, h.currency, h.official_account AS officialAccount
+      `SELECT h.id, h.name, h.currency, h.official_account AS officialAccount,
+              h.contingency_pct AS contingencyPct
          FROM households h JOIN household_members m ON m.household_id = h.id
         WHERE m.user_id = ? LIMIT 1`,
     )

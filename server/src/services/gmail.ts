@@ -78,15 +78,132 @@ export type SyncResult = {
   scanned: number;
   errors: string[];
   byRule: Record<string, number>;
+  /** En modo simulación, lo que se habría creado. */
+  preview: {
+    rule: string;
+    amount: number;
+    merchant: string | null;
+    occurredOn: string;
+    account: string | null;
+    subject: string;
+    duplicate: boolean;
+  }[];
+  dryRun: boolean;
 };
+
+/** Traduce los errores de Google a algo accionable en la interfaz. */
+function explainGoogleError(err: unknown): string {
+  const message = (err as Error).message ?? String(err);
+  if (message.includes('invalid_grant')) {
+    return 'El permiso de Google expiró o fue revocado. Vuelve a conectar la cuenta desde Ajustes → Gmail.';
+  }
+  if (message.includes('insufficient') || message.includes('Insufficient Permission')) {
+    return 'Faltan permisos de lectura. Desconecta la cuenta y vuelve a conectarla aceptando el acceso a Gmail.';
+  }
+  if (message.includes('invalid_client')) {
+    return 'El GOOGLE_CLIENT_ID o GOOGLE_CLIENT_SECRET del servidor no son válidos.';
+  }
+  if (message.includes('Invalid query') || message.includes('invalid query')) {
+    return 'La búsqueda de Gmail tiene un error de sintaxis. Pruébala primero en el buscador de Gmail.';
+  }
+  if (message.includes('Quota') || message.includes('rate')) {
+    return 'Google está limitando las consultas. Espera un minuto y vuelve a intentar.';
+  }
+  return message;
+}
+
+export type MessagePreview = {
+  id: string;
+  from: string;
+  subject: string;
+  date: string;
+  snippet: string;
+  alreadyImported: boolean;
+};
+
+/**
+ * Lista los correos que calzan con una búsqueda, sin parsear ni guardar nada.
+ * Sirve para encontrar el remitente y el asunto reales antes de escribir la regla.
+ */
+export async function searchMessages(
+  householdId: string,
+  query: string,
+  limit = 10,
+): Promise<{ messages: MessagePreview[]; errors: string[] }> {
+  const accounts = db
+    .prepare('SELECT email, refresh_token AS refreshToken FROM gmail_accounts WHERE household_id = ?')
+    .all(householdId) as { email: string; refreshToken: string }[];
+
+  const messages: MessagePreview[] = [];
+  const errors: string[] = [];
+  const seen = db.prepare('SELECT 1 FROM transactions WHERE household_id = ? AND source_msg_id = ?');
+
+  for (const account of accounts) {
+    try {
+      const gmail = gmailFor(account.refreshToken);
+      const list = await gmail.users.messages.list({ userId: 'me', q: query, maxResults: limit });
+
+      for (const ref of list.data.messages ?? []) {
+        if (!ref.id) continue;
+        // metadata basta para el listado y es una petición mucho más liviana.
+        const meta = await gmail.users.messages.get({
+          userId: 'me',
+          id: ref.id,
+          format: 'metadata',
+          metadataHeaders: ['From', 'Subject', 'Date'],
+        });
+        messages.push({
+          id: ref.id,
+          from: header(meta.data, 'From'),
+          subject: header(meta.data, 'Subject'),
+          date: header(meta.data, 'Date'),
+          snippet: meta.data.snippet ?? '',
+          alreadyImported: Boolean(seen.get(householdId, ref.id)),
+        });
+      }
+    } catch (err) {
+      errors.push(`${account.email}: ${explainGoogleError(err)}`);
+    }
+  }
+
+  return { messages, errors };
+}
+
+/** Texto plano de un correo puntual, para cargarlo en el probador de reglas. */
+export async function getMessageText(
+  householdId: string,
+  messageId: string,
+): Promise<{ subject: string; from: string; body: string }> {
+  const accounts = db
+    .prepare('SELECT email, refresh_token AS refreshToken FROM gmail_accounts WHERE household_id = ?')
+    .all(householdId) as { email: string; refreshToken: string }[];
+
+  let lastError: unknown = new Error('No hay cuentas de Gmail conectadas');
+
+  for (const account of accounts) {
+    try {
+      const gmail = gmailFor(account.refreshToken);
+      const full = await gmail.users.messages.get({ userId: 'me', id: messageId, format: 'full' });
+      return {
+        subject: header(full.data, 'Subject'),
+        from: header(full.data, 'From'),
+        body: extractBody(full.data.payload ?? undefined),
+      };
+    } catch (err) {
+      // El mensaje puede estar en la otra cuenta conectada; se sigue probando.
+      lastError = err;
+    }
+  }
+  throw new Error(explainGoogleError(lastError));
+}
 
 /**
  * Recorre las reglas activas del hogar, busca en cada cuenta de Gmail conectada
  * y crea las transacciones que falten. La deduplicación es por id de mensaje de
  * Gmail (índice único household_id + source_msg_id), así que re-sincronizar es seguro.
  */
-export async function syncHousehold(householdId: string, maxPerRule = 100): Promise<SyncResult> {
-  const result: SyncResult = { imported: 0, skipped: 0, scanned: 0, errors: [], byRule: {} };
+export async function syncHousehold(householdId: string, maxPerRule = 100, dryRun = false): Promise<SyncResult> {
+  const result: SyncResult = { imported: 0, skipped: 0, scanned: 0, errors: [], byRule: {}, preview: [], dryRun };
 
   const accounts = db
     .prepare('SELECT id, email, refresh_token AS refreshToken FROM gmail_accounts WHERE household_id = ?')
@@ -130,7 +247,10 @@ export async function syncHousehold(householdId: string, maxPerRule = 100): Prom
 
         for (const ref of messages) {
           if (!ref.id) continue;
-          if (seen.get(householdId, ref.id)) {
+          const duplicate = Boolean(seen.get(householdId, ref.id));
+          // En simulación los repetidos igual se muestran, marcados como tales,
+          // para que se entienda por qué una segunda pasada importa menos.
+          if (duplicate && !dryRun) {
             result.skipped += 1;
             continue;
           }
@@ -147,6 +267,24 @@ export async function syncHousehold(householdId: string, maxPerRule = 100): Prom
           const movement = applyRule(email, rule);
           if (!movement) {
             result.skipped += 1;
+            continue;
+          }
+
+          if (dryRun) {
+            result.preview.push({
+              rule: rule.name,
+              amount: movement.amount,
+              merchant: movement.merchant,
+              occurredOn: movement.occurredOn,
+              account: movement.account,
+              subject: email.subject.slice(0, 120),
+              duplicate,
+            });
+            if (duplicate) result.skipped += 1;
+            else {
+              result.imported += 1;
+              result.byRule[rule.name] = (result.byRule[rule.name] ?? 0) + 1;
+            }
             continue;
           }
 
@@ -170,11 +308,13 @@ export async function syncHousehold(householdId: string, maxPerRule = 100): Prom
           result.byRule[rule.name] = (result.byRule[rule.name] ?? 0) + 1;
         }
       } catch (err) {
-        result.errors.push(`${account.email} · ${rule.name}: ${(err as Error).message}`);
+        result.errors.push(`${account.email} · ${rule.name}: ${explainGoogleError(err)}`);
       }
     }
 
-    db.prepare("UPDATE gmail_accounts SET last_sync_at = datetime('now') WHERE id = ?").run(account.id);
+    if (!dryRun) {
+      db.prepare("UPDATE gmail_accounts SET last_sync_at = datetime('now') WHERE id = ?").run(account.id);
+    }
   }
 
   return result;

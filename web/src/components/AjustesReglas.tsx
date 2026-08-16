@@ -3,6 +3,7 @@ import { api, type BankTemplate, type EmailRule } from '../lib/api';
 import { useSession } from '../lib/session';
 import { money } from '../lib/format';
 import Sheet from './Sheet';
+import ExploradorCorreos from './ExploradorCorreos';
 
 const EMPTY: Omit<EmailRule, 'id'> = {
   name: '',
@@ -144,6 +145,7 @@ function EditorRegla({
   const [isHtml, setIsHtml] = useState(false);
   const [test, setTest] = useState<Awaited<ReturnType<typeof api.testEmailRule>> | null>(null);
   const [busy, setBusy] = useState(false);
+  const [explorer, setExplorer] = useState(false);
 
   function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -248,8 +250,11 @@ function EditorRegla({
       <div className="card" style={{ background: 'var(--plane)', boxShadow: 'none' }}>
         <h3>Probar con un correo real</h3>
         <p className="muted" style={{ marginTop: 4 }}>
-          Pega el texto de un aviso del banco y revisa qué extrae la regla. No se guarda nada.
+          Trae un aviso de tu bandeja o pega el texto a mano, y revisa qué extrae la regla. No se guarda nada.
         </p>
+        <button className="small" style={{ marginBottom: 8 }} onClick={() => setExplorer(true)}>
+          ✉ Traer un correo real de Gmail
+        </button>
         <textarea
           value={sample}
           onChange={(e) => setSample(e.target.value)}
@@ -303,6 +308,19 @@ function EditorRegla({
           </button>
         )}
       </div>
+
+      {explorer && (
+        <ExploradorCorreos
+          onClose={() => setExplorer(false)}
+          onUseMessage={(body) => {
+            // El servidor ya devuelve texto plano, así que la casilla de HTML sobra.
+            setSample(body);
+            setIsHtml(false);
+            setTest(null);
+            setExplorer(false);
+          }}
+        />
+      )}
     </Sheet>
   );
 }

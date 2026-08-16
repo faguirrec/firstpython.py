@@ -191,15 +191,39 @@ export function computeSettlement(householdId: string, month: string, currency: 
   };
 }
 
+export type Projection = {
+  /** Gasto estimado del mes, sin contingencia. */
+  baseBudget: number;
+  contingencyPct: number;
+  /** Monto de la contingencia sobre el gasto estimado. */
+  contingencyAmount: number;
+  /** baseBudget + contingencyAmount: lo que se junta entre los dos. */
+  target: number;
+  basedOn: string;
+  rows: {
+    userId: string;
+    name: string;
+    share: number;
+    /** Parte del gasto estimado. */
+    base: number;
+    /** Parte de la contingencia. */
+    contingency: number;
+    /** base + contingency: lo que transfiere a la cuenta del hogar. */
+    amount: number;
+  }[];
+};
+
 /**
  * Proyección para el mes en curso: cuánto debería transferir cada uno a la
- * cuenta del hogar dado un presupuesto (o el gasto promedio de los últimos meses).
+ * cuenta del hogar dado un presupuesto (o el gasto promedio de los últimos meses),
+ * más un porcentaje de contingencia que se reparte con el mismo criterio.
  */
 export function projectContributions(
   householdId: string,
   month: string,
   budget: number | null,
-): { budget: number; basedOn: string; rows: { userId: string; name: string; share: number; amount: number }[] } {
+  contingencyPct = 0,
+): Projection {
   const members = db
     .prepare(
       `SELECT u.id AS userId, u.name AS name
@@ -209,9 +233,9 @@ export function projectContributions(
     .all(householdId) as MemberRow[];
 
   let basedOn = 'presupuesto ingresado';
-  let target = budget;
+  let baseBudget = budget;
 
-  if (target == null) {
+  if (baseBudget == null) {
     const avg = db
       .prepare(
         `SELECT AVG(monthly) AS avg FROM (
@@ -222,19 +246,85 @@ export function projectContributions(
              LIMIT 3)`,
       )
       .get(householdId, `${month}-01`) as { avg: number | null };
-    target = avg.avg ?? 0;
+    baseBudget = avg.avg ?? 0;
     basedOn = 'promedio de los últimos 3 meses';
   }
+
+  const contingencyAmount = round2(baseBudget * (contingencyPct / 100));
+  const target = round2(baseBudget + contingencyAmount);
 
   const incomes = members.map((m) => incomeForMonth(householdId, m.userId, month));
   const totalIncome = incomes.reduce((a, b) => a + b, 0);
 
   return {
-    budget: round2(target),
+    baseBudget: round2(baseBudget),
+    contingencyPct,
+    contingencyAmount,
+    target,
     basedOn,
     rows: members.map((m, i) => {
       const share = totalIncome > 0 ? incomes[i] / totalIncome : 1 / Math.max(members.length, 1);
-      return { userId: m.userId, name: m.name, share, amount: round2(target! * share) };
+      return {
+        userId: m.userId,
+        name: m.name,
+        share,
+        base: round2(baseBudget! * share),
+        contingency: round2(contingencyAmount * share),
+        amount: round2(target * share),
+      };
     }),
+  };
+}
+
+export type Reserve = {
+  /** Saldo acumulado de la cuenta del hogar: todo lo aportado menos lo gastado desde ella. */
+  balance: number;
+  totalContributed: number;
+  totalSpentFromAccount: number;
+  /** Gasto común promedio de los últimos meses, para medir la reserva en meses. */
+  monthlyAverage: number;
+  /** Cuántos meses de gastos cubre la reserva. */
+  monthsCovered: number;
+  history: { month: string; contributed: number; spent: number; balance: number }[];
+};
+
+/**
+ * Fondo de reserva: lo que se ha ido acumulando en la cuenta del hogar por
+ * encima de los gastos, mes a mes. Es donde termina la contingencia.
+ */
+export function computeReserve(householdId: string): Reserve {
+  const rows = db
+    .prepare(
+      `SELECT substr(occurred_on, 1, 7) AS month,
+              COALESCE(SUM(CASE WHEN type = 'aporte' THEN amount ELSE 0 END), 0) AS contributed,
+              COALESCE(SUM(CASE WHEN type = 'gasto' AND scope = 'comun' AND funded_by = 'oficial'
+                                THEN amount ELSE 0 END), 0) AS spent
+         FROM transactions
+        WHERE household_id = ?
+        GROUP BY month
+        ORDER BY month`,
+    )
+    .all(householdId) as { month: string; contributed: number; spent: number }[];
+
+  let running = 0;
+  const history = rows.map((r) => {
+    running += r.contributed - r.spent;
+    return { month: r.month, contributed: round2(r.contributed), spent: round2(r.spent), balance: round2(running) };
+  });
+
+  const totalContributed = rows.reduce((a, b) => a + b.contributed, 0);
+  const totalSpent = rows.reduce((a, b) => a + b.spent, 0);
+
+  const recent = rows.slice(-3);
+  const monthlyAverage = recent.length ? recent.reduce((a, b) => a + b.spent, 0) / recent.length : 0;
+  const balance = round2(totalContributed - totalSpent);
+
+  return {
+    balance,
+    totalContributed: round2(totalContributed),
+    totalSpentFromAccount: round2(totalSpent),
+    monthlyAverage: round2(monthlyAverage),
+    monthsCovered: monthlyAverage > 0 ? Math.round((balance / monthlyAverage) * 10) / 10 : 0,
+    history,
   };
 }

@@ -27,8 +27,25 @@ export default function App() {
     );
   }
 
-  if (!user) return <Acceso />;
-  if (!household) return <Hogar />;
+  // Las dos pantallas de entrada se montan como rutas para poder leer el código
+  // de invitación de un link /unirse/ABC123.
+  if (!user) {
+    return (
+      <Routes>
+        <Route path="/unirse/:code" element={<Acceso />} />
+        <Route path="*" element={<Acceso />} />
+      </Routes>
+    );
+  }
+
+  if (!household) {
+    return (
+      <Routes>
+        <Route path="/unirse/:code" element={<Hogar />} />
+        <Route path="*" element={<Hogar />} />
+      </Routes>
+    );
+  }
 
   return (
     <>

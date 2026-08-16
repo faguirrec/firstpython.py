@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { db, uid } from '../lib/db.js';
 import { requireAuth, requireHousehold } from '../lib/auth.js';
-import { computeSettlement, projectContributions } from '../services/split.js';
+import { computeReserve, computeSettlement, projectContributions } from '../services/split.js';
 
 export const financeRouter = Router();
 financeRouter.use(requireAuth, requireHousehold);
@@ -111,7 +111,25 @@ financeRouter.get('/projection', (req, res) => {
     res.status(400).json({ error: 'Presupuesto inválido' });
     return;
   }
-  res.json(projectContributions(req.household!.id, month.data, budget));
+
+  // El porcentaje del hogar se puede sobreescribir por consulta para simular.
+  const overrideRaw = req.query.contingency;
+  const override = overrideRaw != null && overrideRaw !== '' ? Number(overrideRaw) : null;
+  if (override != null && (!Number.isFinite(override) || override < 0 || override > 100)) {
+    res.status(400).json({ error: 'La contingencia debe ir entre 0 y 100' });
+    return;
+  }
+
+  const stored = db
+    .prepare('SELECT contingency_pct AS pct FROM households WHERE id = ?')
+    .get(req.household!.id) as { pct: number };
+
+  res.json(projectContributions(req.household!.id, month.data, budget, override ?? stored.pct));
+});
+
+/** Fondo de reserva acumulado en la cuenta del hogar. */
+financeRouter.get('/reserve', (req, res) => {
+  res.json(computeReserve(req.household!.id));
 });
 
 /* ------------------------------- Reportes ------------------------------- */

@@ -1,15 +1,17 @@
 import { useState, type FormEvent } from 'react';
+import { useParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useSession } from '../lib/session';
 
 /** Onboarding: el primero crea el hogar, el segundo entra con el código. */
 export default function Hogar() {
   const { user, refresh, signOut } = useSession();
-  const [mode, setMode] = useState<'create' | 'join'>('create');
+  const { code: codeFromUrl } = useParams<{ code: string }>();
+  const [mode, setMode] = useState<'create' | 'join'>(codeFromUrl ? 'join' : 'create');
   const [name, setName] = useState('Nuestra casa');
   const [currency, setCurrency] = useState('CLP');
   const [officialAccount, setOfficialAccount] = useState('Cuenta del hogar');
-  const [code, setCode] = useState('');
+  const [code, setCode] = useState(codeFromUrl?.toUpperCase() ?? '');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 

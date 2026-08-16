@@ -1,5 +1,11 @@
 export type User = { id: string; email: string; name: string };
-export type Household = { id: string; name: string; currency: string; officialAccount: string };
+export type Household = {
+  id: string;
+  name: string;
+  currency: string;
+  officialAccount: string;
+  contingencyPct: number;
+};
 export type Member = { id: string; name: string; email: string; role: string; joinedAt: string };
 
 export type Transaction = {
@@ -86,6 +92,43 @@ export type SyncResult = {
   scanned: number;
   errors: string[];
   byRule: Record<string, number>;
+  dryRun: boolean;
+  preview: {
+    rule: string;
+    amount: number;
+    merchant: string | null;
+    occurredOn: string;
+    account: string | null;
+    subject: string;
+    duplicate: boolean;
+  }[];
+};
+
+export type MessagePreview = {
+  id: string;
+  from: string;
+  subject: string;
+  date: string;
+  snippet: string;
+  alreadyImported: boolean;
+};
+
+export type Projection = {
+  baseBudget: number;
+  contingencyPct: number;
+  contingencyAmount: number;
+  target: number;
+  basedOn: string;
+  rows: { userId: string; name: string; share: number; base: number; contingency: number; amount: number }[];
+};
+
+export type Reserve = {
+  balance: number;
+  totalContributed: number;
+  totalSpentFromAccount: number;
+  monthlyAverage: number;
+  monthsCovered: number;
+  history: { month: string; contributed: number; spent: number; balance: number }[];
 };
 
 export class ApiError extends Error {
@@ -122,8 +165,8 @@ const del = <T,>(path: string) => request<T>(path, { method: 'DELETE' });
 export const api = {
   me: () => get<{ user: User; household: Household | null }>('/auth/me'),
   login: (email: string, password: string) => post<{ user: User }>('/auth/login', { email, password }),
-  register: (email: string, password: string, name: string) =>
-    post<{ user: User }>('/auth/register', { email, password, name }),
+  register: (body: { email: string; password: string; name: string; inviteCode?: string }) =>
+    post<{ user: User; joined: boolean }>('/auth/register', body),
   logout: () => post<{ ok: true }>('/auth/logout'),
 
   createHousehold: (body: { name: string; currency: string; officialAccount: string }) =>
@@ -132,6 +175,10 @@ export const api = {
   household: () => get<{ household: Household; members: Member[]; inviteCode: string | null }>('/household'),
   updateHousehold: (body: Partial<Household>) => patch<{ ok: true }>('/household', body),
   invite: () => post<{ code: string }>('/household/invite'),
+  rotateInvite: () => post<{ code: string }>('/household/invite/rotate'),
+  revokeInvite: () => del<{ ok: true }>('/household/invite'),
+  invitePreview: (code: string) =>
+    get<{ householdName: string; invitedBy: string }>(`/household/invite/${encodeURIComponent(code)}`),
 
   transactions: (params: Record<string, string | number | undefined>) => {
     const query = new URLSearchParams();
@@ -150,10 +197,13 @@ export const api = {
   settlement: (month: string) => get<Settlement>(`/finance/settlement?month=${month}`),
   closeSettlement: (month: string) => post<{ ok: true }>('/finance/settlement/close', { month }),
   reopenSettlement: (month: string) => del<{ ok: true }>(`/finance/settlement/close?month=${month}`),
-  projection: (month: string, budget?: number) =>
-    get<{ budget: number; basedOn: string; rows: { userId: string; name: string; share: number; amount: number }[] }>(
-      `/finance/projection?month=${month}${budget != null ? `&budget=${budget}` : ''}`,
+  projection: (month: string, budget?: number, contingency?: number) =>
+    get<Projection>(
+      `/finance/projection?month=${month}` +
+        (budget != null ? `&budget=${budget}` : '') +
+        (contingency != null ? `&contingency=${contingency}` : ''),
     ),
+  reserve: () => get<Reserve>('/finance/reserve'),
 
   monthlyReport: (months = 12) =>
     get<{ months: { month: string; shared: number; personal: number; contributions: number; income: number }[] }>(
@@ -188,6 +238,11 @@ export const api = {
       '/gmail/status',
     ),
   gmailAuthUrl: () => get<{ url: string }>('/gmail/auth-url'),
-  gmailSync: () => post<SyncResult>('/gmail/sync', {}),
+  gmailSync: (dryRun = false) => post<SyncResult>('/gmail/sync', { dryRun }),
+  gmailSearch: (q: string, limit = 10) =>
+    get<{ messages: MessagePreview[]; errors: string[] }>(
+      `/gmail/messages?q=${encodeURIComponent(q)}&limit=${limit}`,
+    ),
+  gmailMessage: (id: string) => get<{ subject: string; from: string; body: string }>(`/gmail/messages/${id}`),
   disconnectGmail: (id: string) => del<{ ok: true }>(`/gmail/accounts/${id}`),
 };

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api, type Member, type Settlement } from '../lib/api';
+import { api, type Member, type Projection, type Reserve, type Settlement } from '../lib/api';
 import { useSession } from '../lib/session';
 import { currentMonth, money, monthLabel, percent } from '../lib/format';
 import MonthNav from '../components/MonthNav';
@@ -12,7 +12,8 @@ export default function Liquidacion() {
   const [settlement, setSettlement] = useState<Settlement | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [incomes, setIncomes] = useState<Record<string, string>>({});
-  const [projection, setProjection] = useState<{ budget: number; basedOn: string; rows: { userId: string; name: string; amount: number }[] } | null>(null);
+  const [projection, setProjection] = useState<Projection | null>(null);
+  const [reserve, setReserve] = useState<Reserve | null>(null);
   const [budget, setBudget] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -20,15 +21,17 @@ export default function Liquidacion() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [s, h, i, p] = await Promise.all([
+      const [s, h, i, p, r] = await Promise.all([
         api.settlement(month),
         api.household(),
         api.incomes(),
         api.projection(month),
+        api.reserve(),
       ]);
       setSettlement(s);
       setMembers(h.members);
       setProjection(p);
+      setReserve(r);
       const map: Record<string, string> = {};
       for (const row of i.incomes.filter((x) => x.month === month)) map[row.userId] = String(row.amount);
       setIncomes(map);
@@ -122,22 +125,93 @@ export default function Liquidacion() {
             inputMode="decimal"
             value={budget}
             onChange={(e) => setBudget(e.target.value)}
-            placeholder={`Presupuesto del mes (${projection ? money(projection.budget, currency) : '—'})`}
+            placeholder={`Presupuesto (${projection ? money(projection.baseBudget, currency) : '—'})`}
           />
           <button onClick={() => void recalcProjection()}>Calcular</button>
         </div>
-        <div className="list">
-          {projection?.rows.map((row) => (
-            <div className="item" key={row.userId}>
-              <div className="body"><div className="title">{row.name}</div></div>
-              <div className="amount">{money(row.amount, currency)}</div>
-            </div>
-          ))}
-        </div>
-        <p className="muted" style={{ marginBottom: 0 }}>
-          Cada uno transfiere ese monto a {household?.officialAccount ?? 'la cuenta del hogar'}.
-        </p>
+
+        {projection && (
+          <>
+            <table className="data">
+              <thead>
+                <tr>
+                  <th>Persona</th>
+                  <th>Gasto</th>
+                  <th>Contingencia</th>
+                  <th>Transfiere</th>
+                </tr>
+              </thead>
+              <tbody>
+                {projection.rows.map((row) => (
+                  <tr key={row.userId}>
+                    <td>
+                      {row.name}
+                      <div className="muted">{percent(row.share)}</div>
+                    </td>
+                    <td className="num">{money(row.base, currency)}</td>
+                    <td className="num">{money(row.contingency, currency)}</td>
+                    <td className="num"><strong>{money(row.amount, currency)}</strong></td>
+                  </tr>
+                ))}
+                <tr>
+                  <td><strong>Total</strong></td>
+                  <td className="num">{money(projection.baseBudget, currency)}</td>
+                  <td className="num">{money(projection.contingencyAmount, currency)}</td>
+                  <td className="num"><strong>{money(projection.target, currency)}</strong></td>
+                </tr>
+              </tbody>
+            </table>
+
+            <p className="muted" style={{ marginBottom: 0, marginTop: 10 }}>
+              Cada uno transfiere su monto a {household?.officialAccount ?? 'la cuenta del hogar'}.
+              {projection.contingencyPct > 0 ? (
+                <>
+                  {' '}Incluye un {projection.contingencyPct}% de contingencia que se acumula como reserva; se ajusta en
+                  Ajustes → Hogar.
+                </>
+              ) : (
+                <> Sin contingencia configurada: puedes activarla en Ajustes → Hogar.</>
+              )}
+            </p>
+          </>
+        )}
       </div>
+
+      {reserve && (
+        <div className="card">
+          <div className="card-head">
+            <h2>Fondo de reserva</h2>
+            {reserve.monthsCovered > 0 && (
+              <span className={`pill ${reserve.monthsCovered >= 1 ? 'good' : 'warn'}`}>
+                {reserve.monthsCovered} {reserve.monthsCovered === 1 ? 'mes' : 'meses'} de gastos
+              </span>
+            )}
+          </div>
+          <div className="hero num" style={{ color: reserve.balance < 0 ? 'var(--critical)' : undefined }}>
+            {money(reserve.balance, currency)}
+          </div>
+          <p className="muted" style={{ marginTop: 4 }}>
+            {reserve.balance < 0
+              ? 'La cuenta del hogar está en rojo: se ha gastado más de lo aportado.'
+              : `Acumulado en ${household?.officialAccount ?? 'la cuenta del hogar'} sobre los gastos pagados.`}
+          </p>
+          <table className="data">
+            <thead>
+              <tr><th>Mes</th><th>Aportes</th><th>Gastos</th><th>Saldo</th></tr>
+            </thead>
+            <tbody>
+              {[...reserve.history].reverse().slice(0, 6).map((h) => (
+                <tr key={h.month}>
+                  <td>{monthLabel(h.month)}</td>
+                  <td className="num">{money(h.contributed, currency)}</td>
+                  <td className="num">{money(h.spent, currency)}</td>
+                  <td className="num">{money(h.balance, currency)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {settlement && (
         <div className="card">
