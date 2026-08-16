@@ -237,7 +237,10 @@ export const api = {
     get<{ configured: boolean; accounts: { id: string; email: string; lastSyncAt: string | null }[]; pendingReview: number }>(
       '/gmail/status',
     ),
-  gmailAuthUrl: () => get<{ url: string }>('/gmail/auth-url'),
+  // El origen viaja explícito para que Google devuelva a la misma dirección
+  // desde la que se abrió la app (localhost, IP de la casa o túnel HTTPS).
+  gmailAuthUrl: () =>
+    get<{ url: string }>(`/gmail/auth-url?origin=${encodeURIComponent(window.location.origin)}`),
   gmailSync: (dryRun = false) => post<SyncResult>('/gmail/sync', { dryRun }),
   gmailSearch: (q: string, limit = 10) =>
     get<{ messages: MessagePreview[]; errors: string[] }>(

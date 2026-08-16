@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type Request } from 'express';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { db, uid } from '../lib/db.js';
@@ -8,11 +8,22 @@ import { authUrl, exchangeCode, getMessageText, searchMessages, syncHousehold } 
 
 export const gmailRouter = Router();
 
-type OAuthState = { userId: string; householdId: string };
+type OAuthState = { userId: string; householdId: string; origin: string };
 
 /** El callback de Google no lleva cookies de sesión, así que el estado va firmado. */
 function signState(payload: OAuthState): string {
   return jwt.sign(payload, env.jwtSecret, { expiresIn: '15m' });
+}
+
+/**
+ * A dónde volver después de autorizar. La app puede estar servida en el mismo
+ * puerto que la API, en el servidor de desarrollo, o en un túnel HTTPS, así que
+ * el origen lo informa el front. Se acepta sólo si es uno conocido: de lo
+ * contrario el callback sería un redirect abierto.
+ */
+function resolveOrigin(req: Request, claimed: unknown): string {
+  const allowed = [env.webOrigin, `${req.protocol}://${req.get('host')}`];
+  return typeof claimed === 'string' && allowed.includes(claimed) ? claimed : env.webOrigin;
 }
 
 gmailRouter.get('/status', requireAuth, requireHousehold, (req, res) => {
@@ -30,7 +41,11 @@ gmailRouter.get('/auth-url', requireAuth, requireHousehold, (req, res) => {
     res.status(503).json({ error: 'El servidor no tiene credenciales de Google configuradas' });
     return;
   }
-  const state = signState({ userId: req.user!.id, householdId: req.household!.id });
+  const state = signState({
+    userId: req.user!.id,
+    householdId: req.household!.id,
+    origin: resolveOrigin(req, req.query.origin),
+  });
   res.json({ url: authUrl(state) });
 });
 
@@ -52,7 +67,7 @@ gmailRouter.get('/callback', async (req, res) => {
        ON CONFLICT (household_id, email) DO UPDATE SET refresh_token = excluded.refresh_token`,
     ).run(uid(), payload.householdId, payload.userId, email, refreshToken);
 
-    res.redirect(`${env.webOrigin}/ajustes/gmail?conectado=${encodeURIComponent(email)}`);
+    res.redirect(`${payload.origin ?? env.webOrigin}/ajustes/gmail?conectado=${encodeURIComponent(email)}`);
   } catch (err) {
     res.status(400).send(`No se pudo conectar la cuenta: ${(err as Error).message}`);
   }
