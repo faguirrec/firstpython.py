@@ -28,13 +28,29 @@ app.use(cors({ origin: env.webOrigin, credentials: true }));
 /** Momento en que arrancó este proceso: sirve para saber si ya tomó el cambio. */
 const ARRANQUE = new Date().toISOString();
 
+/**
+ * Sello del frontend compilado. Se genera al compilar y viaja dentro de la
+ * imagen, así que refleja el código que está corriendo. El commit que informa
+ * el proveedor llega por variable de entorno y sólo dice qué disparó el
+ * despliegue, no qué quedó adentro.
+ */
+const BUILD = (() => {
+  try {
+    const ruta = path.resolve(process.cwd(), '../web/dist/build.json');
+    return JSON.parse(fs.readFileSync(ruta, 'utf8')) as { build: string; compiladoEn: string };
+  } catch {
+    return { build: 'desarrollo', compiladoEn: ARRANQUE };
+  }
+})();
+
 app.get('/api/health', (_req, res) => {
   res.json({
     ok: true,
     gmail: env.gmailEnabled,
     correo: correoConfigurado(),
-    // Render entrega el commit desplegado; en local no existe.
     version: env.version,
+    build: BUILD.build,
+    compiladoEn: BUILD.compiladoEn,
     desde: ARRANQUE,
   });
 });

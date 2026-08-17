@@ -218,10 +218,13 @@ function PanelVersion() {
       <div className="list">
         <div className="item">
           <div className="body">
-            <div className="title">Publicada</div>
-            <div className="meta">Se actualizó {antiguedad}</div>
+            <div className="title">Versión publicada</div>
+            <div className="meta">
+              Compilada el {new Date(salud.compiladoEn).toLocaleDateString('es-CL')} · el servidor se reinició{' '}
+              {antiguedad}
+            </div>
           </div>
-          <span className="pill num">{salud.version}</span>
+          <span className="pill num">{salud.build}</span>
         </div>
         <div className="item">
           <div className="body"><div className="title">Lectura de Gmail</div></div>
