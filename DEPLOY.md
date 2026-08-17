@@ -399,25 +399,27 @@ un dominio propio en Cloudflare) o directamente la opción A o B.
 
 ---
 
-## Si el correo de verificación "no registra" tu clic
+## Si el registro "no registra" tu clic
 
-Pasa con cualquiera de estos servicios cuando te registras con un correo
-corporativo. Los filtros de seguridad de la empresa (Defender, Proofpoint y
-similares) **abren cada enlace de cada correo entrante** para revisarlo. Los
-enlaces de verificación son de un solo uso, así que el escáner los quema antes
-de que llegues tú: haces clic y la plataforma no registra nada.
+Síntoma: completas la verificación pero la plataforma sigue como si nada. Le
+pasa a cualquiera de estos servicios, y casi siempre viene del equipo o la red
+de la empresa. Tres causas, en orden de frecuencia:
 
-La salida es no pasar por el correo de la empresa:
+1. **Navegador administrado.** Las políticas corporativas bloquean cookies de
+   terceros o extensiones de seguridad cortan la redirección de vuelta. La
+   autenticación ocurre, pero la sesión no queda anclada.
+2. **Proxy de red.** El proxy de la empresa intercepta el retorno desde el
+   proveedor y la respuesta nunca llega completa.
+3. **Filtros de correo.** Defender, Proofpoint y similares abren cada enlace de
+   los correos entrantes para revisarlos. Los enlaces de verificación son de un
+   solo uso, así que el escáner los quema antes que tú. Esta sólo aplica con
+   correo corporativo.
 
-1. Regístrate con un **correo personal** (Gmail, por ejemplo).
-2. Mejor todavía, hazlo **desde tu teléfono con datos móviles**, no desde el
-   computador de la empresa: así evitas de una el correo corporativo y la red
-   corporativa.
-3. Si la cuenta anterior quedó a medias, crea una nueva en vez de intentar
-   recuperarla.
-
-Vale la pena resolverlo en vez de cambiar de proveedor: el problema viaja
-contigo a cualquier plataforma que verifique por correo.
+**La prueba que las descarta todas de una:** hazlo desde tu **teléfono, con Wi-Fi
+apagado y datos móviles**, en Safari, usando un correo personal. Eso saca de la
+ecuación el equipo, el navegador, la red y el correo de la empresa a la vez. Si
+ahí funciona, ya sabes que el problema era el entorno corporativo y no la
+plataforma.
 
 ## Usar tu propio dominio .cl
 
