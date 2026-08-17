@@ -108,6 +108,19 @@ if ($Fresh) {
   Write-Host "    Listo, se parte de cero"
 }
 
+Write-Step "Revisando el firewall"
+try {
+  if (Get-NetFirewallRule -DisplayName 'Cuentas del Hogar' -ErrorAction SilentlyContinue) {
+    Write-Host "    Regla encontrada: el telefono puede conectarse"
+  } else {
+    Write-Host "    Falta la regla para el puerto 4000." -ForegroundColor Yellow
+    Write-Host "    Si el iPhone no carga la pagina, abre PowerShell COMO ADMINISTRADOR y corre:" -ForegroundColor Yellow
+    Write-Host "    New-NetFirewallRule -DisplayName 'Cuentas del Hogar' -Direction Inbound -LocalPort 4000 -Protocol TCP -Action Allow" -ForegroundColor Yellow
+  }
+} catch {
+  Write-Host "    No se pudo revisar el firewall, no es grave"
+}
+
 Write-Step "Buscando la direccion de red"
 $ip = $null
 try {
