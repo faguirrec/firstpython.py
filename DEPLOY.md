@@ -6,16 +6,29 @@ no autoriza Gmail sobre HTTP), y que los datos **no se pierdan** al actualizar.
 
 ## Qué opción elegir
 
-**Recomendada: Fly.io.** Corre en un servidor de verdad, en Santiago, con HTTPS
-y dominio propio incluidos. Se actualiza con un comando. No depende de que tu
-computador esté encendido. Cuesta unos pocos dólares al mes y pide tarjeta.
+| | Costo | Siempre encendida | Trabajo de instalación |
+|---|---|---|---|
+| **Fly.io** | ~1 a 3 USD/mes | Sí | Bajo: 5 comandos |
+| Túnel desde tu PC | Gratis | Sólo con el PC prendido | Bajo |
+| Oracle Cloud gratis | Gratis | Sí | Alto: administras un Linux |
+| Raspberry Pi + túnel | ~60 USD una vez | Sí | Medio |
 
-**Alternativa rápida: un túnel desde tu computador.** Gratis, los datos nunca
-salen de tu casa, y sirve para probarlo hoy mismo desde el iPhone. El costo es
-que si apagas el computador, la app se cae.
+**Recomendación: Fly.io.** Es la que menos te va a costar en tiempo, que es lo
+caro acá. La máquina está configurada en el tamaño más chico y se suspende
+sola cuando nadie la usa, así que dos personas revisando gastos gastan muy
+poco. Servidor en Santiago, HTTPS y dominio incluidos, y se actualiza con un
+comando.
 
-Si quieren usarla todos los meses en serio, Fly.io. Si quieren probar esta
-semana antes de decidir, el túnel.
+Sobre las opciones gratis: existen y funcionan, pero "gratis" se paga en otra
+moneda. Oracle Cloud regala una máquina para siempre, pero significa
+administrar un servidor Linux —usuarios, firewall, certificados, respaldos— y
+que cuando algo se caiga, lo arregles tú. El túnel desde tu PC es gratis de
+verdad y es buena idea para probar, pero la app se cae cada vez que apagas el
+computador, y eso rompe la costumbre de anotar los gastos, que es justamente lo
+que hace que esto sirva.
+
+Si el presupuesto manda, empieza con el túnel (opción B) y cámbiate a Fly.io
+cuando confirmen que la usan. Migrar es copiar un archivo.
 
 ---
 
@@ -49,10 +62,18 @@ app = "cuentas-hogar-a7k2"
 
 ### 3. Crear la app y el disco
 
+Un comando a la vez, desde la carpeta del proyecto:
+
 ```powershell
 cd $HOME\Documents\firstpython.py
-fly launch --no-deploy --copy-config --name cuentas-hogar-a7k2 --region scl
-fly volumes create datos --size 1 --region scl
+```
+
+```powershell
+fly apps create cuentas-hogar-a7k2
+```
+
+```powershell
+fly volumes create datos --size 1 --region scl --yes
 ```
 
 El volumen es donde vive la base de datos. **Sin él, cada actualización borraría
@@ -64,7 +85,13 @@ Genera una clave larga para firmar las sesiones:
 
 ```powershell
 $clave = -join ((1..32) | ForEach-Object { '{0:x2}' -f (Get-Random -Maximum 256) })
+```
+
+```powershell
 fly secrets set JWT_SECRET=$clave
+```
+
+```powershell
 fly secrets set WEB_ORIGIN=https://cuentas-hogar-a7k2.fly.dev
 ```
 
@@ -72,13 +99,29 @@ fly secrets set WEB_ORIGIN=https://cuentas-hogar-a7k2.fly.dev
 
 ```powershell
 fly deploy
+```
+
+```powershell
 fly scale count 1
 ```
 
 `fly scale count 1` es importante: con SQLite tiene que haber **una sola**
 máquina, o cada una tendría su propia copia de los datos.
 
-Listo. Abre `https://cuentas-hogar-a7k2.fly.dev`.
+Listo. Abre `https://cuentas-hogar-a7k2.fly.dev` desde cualquier navegador, en
+cualquier parte.
+
+### Para que el gasto se mantenga bajo
+
+Ya viene configurado así en `fly.toml`, pero conviene que sepas por qué:
+
+- **`memory = "256mb"`** — la máquina más chica. Para dos personas sobra.
+- **`auto_stop_machines = "suspend"`** y **`min_machines_running = 0`** — cuando
+  nadie usa la app, la máquina se suspende y deja de contar. Al abrirla de nuevo
+  despierta en un par de segundos.
+- **Volumen de 1 GB** — miles de movimientos caben de sobra.
+
+Puedes revisar el gasto real cuando quieras con `fly dashboard`.
 
 ### 6. Crear las dos cuentas y cerrar la puerta
 
@@ -101,6 +144,9 @@ encuentre la dirección.
 
 ```powershell
 git pull
+```
+
+```powershell
 fly deploy
 ```
 
@@ -113,6 +159,16 @@ Vale la pena hacerlo de vez en cuando:
 ```powershell
 fly ssh console -C "cat /data/hogar.db" > respaldo-hogar.db
 ```
+
+### Si algo falla
+
+- **`fly deploy` se cae construyendo la imagen** — corre `fly logs` y mándame la
+  salida.
+- **La app abre pero no deja entrar** — falta `JWT_SECRET`. Revísalo con
+  `fly secrets list`.
+- **Se perdieron los datos tras desplegar** — no se creó el volumen, o hay más de
+  una máquina. Verifica con `fly volumes list` y `fly status`.
+- **"Out of memory"** — sube la memoria: `fly scale memory 512`.
 
 ---
 

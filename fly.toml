@@ -1,10 +1,12 @@
 # Configuración para Fly.io. Cambia `app` por el nombre que elijas: pasa a ser
 # tu dirección, https://<app>.fly.dev
 #
-#   fly launch --no-deploy --copy-config
-#   fly volumes create datos --size 1 --region scl
-#   fly secrets set JWT_SECRET=... GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=...
+#   fly apps create <app>
+#   fly volumes create datos --size 1 --region scl --yes
+#   fly secrets set JWT_SECRET=...
 #   fly deploy
+#
+# Los pasos completos están en DEPLOY.md.
 
 app = "cuentas-hogar"
 primary_region = "scl"   # Santiago de Chile
@@ -44,5 +46,8 @@ primary_region = "scl"   # Santiago de Chile
   path = "/api/health"
 
 [[vm]]
+  # La máquina más chica que existe. Para dos personas sobra, y es la diferencia
+  # entre pagar centavos o algunos dólares. Si alguna vez se queda sin memoria,
+  # súbela a "512mb" con: fly scale memory 512
   size = "shared-cpu-1x"
-  memory = "512mb"
+  memory = "256mb"
