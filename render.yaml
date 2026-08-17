@@ -26,13 +26,10 @@ services:
         value: production
       - key: DB_PATH
         value: /data/hogar.db
-      # Render entrega la URL pública del servicio; la app la usa como origen
-      # si no se define WEB_ORIGIN a mano.
-      - key: RENDER_EXTERNAL_URL
-        fromService:
-          type: web
-          name: cuentas-hogar
-          envVarKey: RENDER_EXTERNAL_URL
+      # RENDER_EXTERNAL_URL no se declara acá: Render la inyecta sola, y la app
+      # la toma como origen público si no hay WEB_ORIGIN. Declararla sería una
+      # referencia del servicio a sí mismo.
+      #
       # La primera cuenta se puede crear sin código porque la base está vacía;
       # de ahí en adelante hace falta invitación.
       - key: ALLOW_SIGNUP
