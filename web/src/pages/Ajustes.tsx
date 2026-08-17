@@ -181,7 +181,77 @@ function PanelHogar() {
       <div className="card">
         <button className="danger" onClick={() => void signOut()}>Cerrar sesión</button>
       </div>
+
+      <PanelVersion />
     </>
+  );
+}
+
+/**
+ * Qué versión está corriendo. Con despliegue automático es la forma directa de
+ * saber si un cambio ya llegó, sin tener que entrar al panel del servidor.
+ */
+function PanelVersion() {
+  const [salud, setSalud] = useState<Awaited<ReturnType<typeof api.health>> | null>(null);
+  const [refrescando, setRefrescando] = useState(false);
+
+  const consultar = () => api.health().then(setSalud).catch(() => setSalud(null));
+
+  useEffect(() => {
+    void consultar();
+  }, []);
+
+  if (!salud) return null;
+
+  const desde = new Date(salud.desde);
+  const minutos = Math.round((Date.now() - desde.getTime()) / 60000);
+  const antiguedad =
+    minutos < 60
+      ? `hace ${minutos} min`
+      : minutos < 60 * 24
+        ? `hace ${Math.round(minutos / 60)} h`
+        : `hace ${Math.round(minutos / 1440)} días`;
+
+  return (
+    <div className="card">
+      <h2>Versión</h2>
+      <div className="list">
+        <div className="item">
+          <div className="body">
+            <div className="title">Publicada</div>
+            <div className="meta">Se actualizó {antiguedad}</div>
+          </div>
+          <span className="pill num">{salud.version}</span>
+        </div>
+        <div className="item">
+          <div className="body"><div className="title">Lectura de Gmail</div></div>
+          <span className={`pill ${salud.gmail ? 'good' : ''}`}>{salud.gmail ? '● activa' : '○ sin configurar'}</span>
+        </div>
+        <div className="item">
+          <div className="body"><div className="title">Envío de correo</div></div>
+          <span className={`pill ${salud.correo ? 'good' : ''}`}>{salud.correo ? '● activo' : '○ sin configurar'}</span>
+        </div>
+      </div>
+
+      <button
+        className="small"
+        style={{ marginTop: 10 }}
+        disabled={refrescando}
+        onClick={async () => {
+          setRefrescando(true);
+          await consultar();
+          // Limpia la copia local del service worker y recarga, por si el
+          // teléfono sigue mostrando una versión guardada.
+          if ('serviceWorker' in navigator) {
+            const registros = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(registros.map((r) => r.update()));
+          }
+          window.location.reload();
+        }}
+      >
+        {refrescando ? 'Buscando…' : 'Buscar actualizaciones'}
+      </button>
+    </div>
   );
 }
 

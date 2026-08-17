@@ -12,6 +12,7 @@ import { settingsRouter } from './routes/settings.js';
 import { gmailRouter } from './routes/gmail.js';
 import { tareasRouter } from './routes/tareas.js';
 import { correoConfigurado } from './services/mailer.js';
+// (enviarReportesMensuales se importa más abajo junto al temporizador)
 import { enviarReportesMensuales } from './services/reporteMensual.js';
 
 const app = express();
@@ -24,8 +25,18 @@ app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
 app.use(cors({ origin: env.webOrigin, credentials: true }));
 
+/** Momento en que arrancó este proceso: sirve para saber si ya tomó el cambio. */
+const ARRANQUE = new Date().toISOString();
+
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, gmail: env.gmailEnabled });
+  res.json({
+    ok: true,
+    gmail: env.gmailEnabled,
+    correo: correoConfigurado(),
+    // Render entrega el commit desplegado; en local no existe.
+    version: env.version,
+    desde: ARRANQUE,
+  });
 });
 
 app.use('/api/auth', authRouter);

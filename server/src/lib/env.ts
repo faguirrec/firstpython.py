@@ -61,6 +61,15 @@ export const env = {
    * Sin ella, ese acceso queda cerrado.
    */
   cronSecret: process.env.CRON_SECRET ?? '',
+
+  /**
+   * Identificador de la versión desplegada. Render expone el commit en
+   * RENDER_GIT_COMMIT; Fly, en FLY_MACHINE_VERSION. Sin ninguno, es local.
+   */
+  version:
+    process.env.RENDER_GIT_COMMIT?.slice(0, 7) ??
+    process.env.FLY_MACHINE_VERSION?.slice(0, 7) ??
+    'local',
   get gmailEnabled() {
     return Boolean(this.google.clientId && this.google.clientSecret);
   },

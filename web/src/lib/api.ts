@@ -231,6 +231,8 @@ const del = <T,>(path: string) => request<T>(path, { method: 'DELETE' });
 
 export const api = {
   me: () => get<{ user: User; household: Household | null }>('/auth/me'),
+  health: () =>
+    get<{ ok: true; gmail: boolean; correo: boolean; version: string; desde: string }>('/health'),
   login: (email: string, password: string) => post<{ user: User }>('/auth/login', { email, password }),
   register: (body: { email: string; password: string; name: string; inviteCode?: string }) =>
     post<{ user: User; joined: boolean }>('/auth/register', body),
