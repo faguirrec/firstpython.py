@@ -1,0 +1,50 @@
+# Configuración para Render (https://render.com).
+#
+# Render lee este archivo y arma el servicio solo: no hay que instalar nada ni
+# usar terminal. En el panel: New -> Blueprint -> conectar este repositorio.
+#
+# Lo único que queda por hacer a mano después del primer despliegue es apuntar
+# WEB_ORIGIN a la dirección definitiva, y sólo si usas un dominio propio.
+
+services:
+  - type: web
+    name: cuentas-hogar
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    # El plan gratuito no admite disco persistente y apaga el servicio al rato:
+    # los datos se perderían. Éste es el más barato que sirve de verdad.
+    plan: starter
+    region: ohio
+    healthCheckPath: /api/health
+    # Con SQLite tiene que haber una sola instancia, o serían dos copias
+    # distintas de la misma base.
+    numInstances: 1
+    autoDeploy: true
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DB_PATH
+        value: /data/hogar.db
+      # Render entrega la URL pública del servicio; la app la usa como origen
+      # si no se define WEB_ORIGIN a mano.
+      - key: RENDER_EXTERNAL_URL
+        fromService:
+          type: web
+          name: cuentas-hogar
+          envVarKey: RENDER_EXTERNAL_URL
+      # La primera cuenta se puede crear sin código porque la base está vacía;
+      # de ahí en adelante hace falta invitación.
+      - key: ALLOW_SIGNUP
+        value: invite
+      - key: TRUST_PROXY
+        value: "1"
+      # Render la genera sola y no queda escrita en ninguna parte del repo.
+      - key: JWT_SECRET
+        generateValue: true
+
+    # Acá vive la base de datos. Sin esto, cada despliegue borraría todo.
+    disk:
+      name: datos
+      mountPath: /data
+      sizeGB: 1

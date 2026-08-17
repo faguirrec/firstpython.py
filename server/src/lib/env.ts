@@ -28,7 +28,11 @@ function signupMode(): SignupMode {
 export const env = {
   port: Number(process.env.PORT ?? 4000),
   jwtSecret: required('JWT_SECRET', isProduction ? undefined : 'dev-secret-cambiar'),
-  webOrigin: process.env.WEB_ORIGIN ?? 'http://localhost:5173',
+  /**
+   * Origen público de la app. Render entrega la URL del servicio en
+   * RENDER_EXTERNAL_URL, así que en ese caso no hay que configurar nada a mano.
+   */
+  webOrigin: process.env.WEB_ORIGIN ?? process.env.RENDER_EXTERNAL_URL ?? 'http://localhost:5173',
   isProduction,
   signupMode: signupMode(),
   /**

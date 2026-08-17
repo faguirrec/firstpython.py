@@ -8,10 +8,16 @@ no autoriza Gmail sobre HTTP), y que los datos **no se pierdan** al actualizar.
 
 | | Costo | Siempre encendida | Trabajo de instalación |
 |---|---|---|---|
+| **Render** | ~7 USD/mes | Sí | Ninguno: todo con el mouse |
 | **Fly.io** | ~1 a 3 USD/mes | Sí | Bajo: 5 comandos |
 | Túnel desde tu PC | Gratis | Sólo con el PC prendido | Bajo |
 | Oracle Cloud gratis | Gratis | Sí | Alto: administras un Linux |
 | Raspberry Pi + túnel | ~60 USD una vez | Sí | Medio |
+
+**Si no puedes usar terminal ni instalar programas, ve directo a Render**: se
+hace entero desde el navegador conectando este repositorio, sin CLI, sin tokens
+y sin cuentas de por medio. Sale más caro que Fly.io, pero es la diferencia
+entre unos dólares y no tener la app andando.
 
 **Recomendación: Fly.io.** Es la que menos te va a costar en tiempo, que es lo
 caro acá. La máquina está configurada en el tamaño más chico y se suspende
@@ -27,12 +33,69 @@ verdad y es buena idea para probar, pero la app se cae cada vez que apagas el
 computador, y eso rompe la costumbre de anotar los gastos, que es justamente lo
 que hace que esto sirva.
 
-Si el presupuesto manda, empieza con el túnel (opción B) y cámbiate a Fly.io
+Si el presupuesto manda, empieza con el túnel (opción C) y cámbiate a Fly.io
 cuando confirmen que la usan. Migrar es copiar un archivo.
 
 ---
 
-## Opción A — Fly.io
+## Opción A — Render (todo desde el navegador)
+
+Sin terminal, sin instalar nada, sin tokens. Render lee el archivo `render.yaml`
+del repositorio y arma el servicio solo.
+
+### 1. Crear la cuenta
+
+En [render.com](https://render.com), entrando **con tu cuenta de GitHub**. Así
+queda conectado el repositorio de una vez.
+
+### 2. Crear el servicio
+
+1. En el panel: **New** → **Blueprint**.
+2. Elige el repositorio `firstpython.py`.
+3. Elige la rama `claude/shared-expense-management-app-5yyoxu`.
+4. Render lee `render.yaml` y te muestra lo que va a crear: un servicio web con
+   un disco de 1 GB. Confirma.
+
+Le toma unos minutos construir la imagen la primera vez.
+
+### 3. Listo
+
+Tu dirección queda como `https://cuentas-hogar.onrender.com` (Render le agrega
+un sufijo si el nombre está tomado). Aparece arriba en el panel del servicio.
+
+No hay que configurar variables a mano: el `JWT_SECRET` lo genera Render, y la
+dirección pública la toma la app sola.
+
+### 4. Crear las cuentas y cerrar la puerta
+
+`render.yaml` deja el registro en modo invitación:
+
+- La **primera** cuenta se crea sin código, porque la base está vacía.
+- De ahí en adelante hace falta un código de invitación.
+
+Crea tu cuenta, arma el hogar, comparte el QR con la otra persona, y cuando
+ambos estén adentro cierra el registro: en el panel del servicio →
+**Environment** → cambia `ALLOW_SIGNUP` a `closed` → **Save**.
+
+### 5. Actualizar
+
+Cada vez que se suba un cambio al repositorio, Render lo publica solo. No hay
+que hacer nada.
+
+### Qué cuesta
+
+El plan `starter` ronda los 7 USD al mes, más un poco por el disco. El plan
+gratuito **no sirve acá**: no admite disco persistente —los datos se perderían
+en cada despliegue— y apaga el servicio tras un rato de inactividad.
+
+### Si algo falla
+
+En el panel del servicio, pestaña **Logs**, está el detalle. Los errores más
+probables son de construcción de la imagen; mándame lo que digan.
+
+---
+
+## Opción B — Fly.io
 
 ### Sin terminal, todo desde el navegador
 
@@ -289,7 +352,7 @@ fly ssh console -C "cat /data/hogar.db" > respaldo-hogar.db
 
 ---
 
-## Opción B — Túnel desde tu computador
+## Opción C — Túnel desde tu computador
 
 Deja la app corriendo en tu PC como hasta ahora, y Cloudflare le pone una
 dirección HTTPS pública.
@@ -332,7 +395,7 @@ Y reinicia la app.
 **Ojo:** con `cloudflared tunnel --url` la dirección cambia cada vez que
 reinicias el túnel, así que hay que actualizar `WEB_ORIGIN` y la configuración
 de Google cada vez. Para algo permanente conviene un túnel con nombre (requiere
-un dominio propio en Cloudflare) o directamente la opción A.
+un dominio propio en Cloudflare) o directamente la opción A o B.
 
 ---
 

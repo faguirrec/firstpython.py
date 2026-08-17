@@ -37,11 +37,15 @@ ENV DB_PATH=/data/hogar.db
 ENV PORT=8080
 EXPOSE 8080
 
-# El proceso corre sin privilegios; el volumen se monta a nombre de este usuario.
 RUN mkdir -p /data && chown -R node:node /data /app
-USER node
+
+# El arranque entra como root sólo para dejar el volumen escribible y enseguida
+# baja a usuario `node`: los discos persistentes se montan como root y, sin ese
+# ajuste, SQLite no podría escribir.
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 HEALTHCHECK --interval=30s --timeout=4s --start-period=10s \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||8080)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
-CMD ["node", "dist/index.js"]
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
