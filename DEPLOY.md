@@ -85,12 +85,29 @@ En **Actions** → **Operar la app** hay un flujo para lo del día a día:
 | `respaldar-base-de-datos` | Descarga la base como archivo adjunto |
 | `reiniciar` | Cuando queda pegada |
 
-### Si prefieres una terminal de verdad
+### Sin token: una terminal en el navegador
 
-**GitHub Codespaces** te da una máquina Linux completa dentro del navegador, con
-terminal, sin instalar nada en tu computador. En tu repositorio → botón verde
-**Code** → pestaña **Codespaces** → **Create codespace**. Adentro corres los
-comandos de `flyctl` como si fuera tu máquina. Tiene horas gratis al mes.
+Si el token o los secretos de GitHub se hacen cuesta arriba, este camino los
+evita por completo.
+
+**GitHub Codespaces** te da una máquina Linux dentro del navegador. El
+repositorio ya viene configurado: al crearla se instalan las dependencias, se
+compila la app y queda `flyctl` listo.
+
+1. En tu repositorio → botón verde **Code** → pestaña **Codespaces** →
+   **Create codespace on ...**
+2. Espera a que termine de prepararse (un par de minutos la primera vez).
+3. En la terminal de abajo, escribe:
+
+```bash
+./deploy.sh
+```
+
+Te va a mostrar un enlace para iniciar sesión en Fly.io desde tu navegador, y
+después hace todo lo demás solo. **No necesita ningún token.**
+
+Codespaces tiene horas gratis al mes, y para publicar de vez en cuando alcanza
+de sobra.
 
 ### El camino corto desde tu propia terminal: un comando
 

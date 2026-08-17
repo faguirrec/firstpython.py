@@ -9,7 +9,7 @@
 # Los pasos completos están en DEPLOY.md.
 
 app = "cuentas-hogar"
-primary_region = "scl"   # Santiago de Chile
+primary_region = "scl"
 
 [build]
   dockerfile = "Dockerfile"
