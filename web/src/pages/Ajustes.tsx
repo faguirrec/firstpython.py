@@ -6,6 +6,7 @@ import Categorias from '../components/AjustesCategorias';
 import GmailPanel from '../components/AjustesGmail';
 import ReglasCorreo from '../components/AjustesReglas';
 import Invitacion from '../components/Invitacion';
+import Cabecera from '../components/Cabecera';
 
 const TABS = [
   { key: 'hogar', label: 'Hogar' },
@@ -29,9 +30,7 @@ export default function Ajustes() {
 
   return (
     <>
-      <div className="topbar">
-        <h1>Ajustes</h1>
-      </div>
+      <Cabecera hogar="Ajustes" />
 
       <div className="tabs">
         {TABS.map((t) => (

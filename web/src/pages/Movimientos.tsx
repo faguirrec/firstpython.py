@@ -3,7 +3,8 @@ import { useSearchParams } from 'react-router-dom';
 import { api, type Category, type Transaction } from '../lib/api';
 import { useSession } from '../lib/session';
 import { currentMonth, dayLabel, money, monthLabel } from '../lib/format';
-import MonthNav from '../components/MonthNav';
+import Cabecera from '../components/Cabecera';
+import { IconoMas } from '../components/Icons';
 import NuevoMovimiento from '../components/NuevoMovimiento';
 import Sheet from '../components/Sheet';
 
@@ -66,17 +67,20 @@ export default function Movimientos() {
 
   return (
     <>
-      <div className="topbar">
-        <div>
-          <h1>Movimientos</h1>
-          <div className="sub">
-            {onlyPending ? 'Pendientes de revisar' : monthLabel(month)} · {rows.length} movimientos
-          </div>
-        </div>
-        <button className="primary small" onClick={() => setAdding(true)}>+ Nuevo</button>
-      </div>
-
-      {!onlyPending && <MonthNav month={month} onChange={setMonth} />}
+      <Cabecera
+        hogar={onlyPending ? 'Pendientes de revisar' : 'Movimientos'}
+        month={onlyPending ? undefined : month}
+        onMonthChange={onlyPending ? undefined : setMonth}
+        accion={
+          <button
+            className="primary small"
+            onClick={() => setAdding(true)}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, flex: 'none' }}
+          >
+            <IconoMas size={16} /> Nuevo
+          </button>
+        }
+      />
 
       {onlyPending && (
         <div className="card">

@@ -2,9 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, type BudgetStatus, type Settlement, type Transaction } from '../lib/api';
 import { useSession } from '../lib/session';
-import { currentMonth, dayLabel, money, monthLabel, percent } from '../lib/format';
+import { currentMonth, dayLabel, money, percent } from '../lib/format';
 import { CategoryBars, SplitBar, type CategorySlice } from '../components/Charts';
-import MonthNav from '../components/MonthNav';
+import Cabecera from '../components/Cabecera';
 import NuevoMovimiento from '../components/NuevoMovimiento';
 import { IconoAlerta, IconoBolsillo, IconoMas } from '../components/Icons';
 import { TarjetaCargando, Vacio } from '../components/Estados';
@@ -49,21 +49,20 @@ export default function Resumen() {
 
   return (
     <>
-      <div className="topbar">
-        <div>
-          <h1>{household?.name}</h1>
-          <div className="sub">{monthLabel(month)}</div>
-        </div>
-        <button
-          className="primary small"
-          onClick={() => setAdding(true)}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}
-        >
-          <IconoMas size={16} /> Movimiento
-        </button>
-      </div>
-
-      <MonthNav month={month} onChange={setMonth} />
+      <Cabecera
+        hogar={household?.name ?? 'Mi hogar'}
+        month={month}
+        onMonthChange={setMonth}
+        accion={
+          <button
+            className="primary small"
+            onClick={() => setAdding(true)}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, flex: 'none' }}
+          >
+            <IconoMas size={16} /> Movimiento
+          </button>
+        }
+      />
 
       {error && <div className="error">{error}</div>}
 
@@ -96,9 +95,7 @@ export default function Resumen() {
 
         {settlement && settlement.members.length > 0 && (
           <div style={{ marginTop: 16 }}>
-            <div className="label" style={{ marginBottom: 6 }}>
-              Reparto según sueldo · {money(settlement.totalSharedExpenses, currency)} en gastos comunes
-            </div>
+            <div className="label" style={{ marginBottom: 8 }}>Reparto según sueldo</div>
             <SplitBar
               parts={settlement.members.map((m, i) => ({
                 name: m.name,
@@ -106,6 +103,9 @@ export default function Resumen() {
                 color: i === 0 ? 'var(--series-1)' : 'var(--series-2)',
               }))}
             />
+            <div className="muted" style={{ marginTop: 2 }}>
+              Sobre {money(settlement.totalSharedExpenses, currency)} en gastos comunes del mes.
+            </div>
           </div>
         )}
 

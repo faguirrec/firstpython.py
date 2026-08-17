@@ -23,10 +23,15 @@
   --critical: #d03b3b;
 
   --marca: #2a78d6;
+  --marca-suave: #eaf2fd;
 
-  --radius: 16px;
-  --radius-sm: 10px;
-  --shadow: 0 1px 2px rgba(11, 11, 11, 0.06), 0 8px 24px rgba(11, 11, 11, 0.04);
+  --radius: 18px;
+  --radius-sm: 11px;
+
+  /* Sombras en dos capas: uña de contacto y difusión amplia. Una sola sombra
+     grande aplana; dos dan la sensación de tarjeta apoyada. */
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.05), 0 6px 20px -6px rgba(16, 24, 40, 0.09);
+  --shadow-alta: 0 2px 4px rgba(16, 24, 40, 0.06), 0 16px 32px -12px rgba(16, 24, 40, 0.16);
 
   /* Escala tipográfica. Las cifras llevan tamaños propios: en una app de plata,
      el número es el contenido y necesita jerarquía propia. */
@@ -62,7 +67,10 @@
     --seq-450: #3987e5;
     --seq-600: #86b6ef;
     --good-text: #0ca30c;
-    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --marca: #3987e5;
+    --marca-suave: #16304d;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 6px 20px -6px rgba(0, 0, 0, 0.6);
+    --shadow-alta: 0 2px 6px rgba(0, 0, 0, 0.55), 0 18px 34px -14px rgba(0, 0, 0, 0.75);
   }
 }
 
@@ -83,7 +91,10 @@
   --seq-450: #3987e5;
   --seq-600: #86b6ef;
   --good-text: #0ca30c;
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --marca: #3987e5;
+  --marca-suave: #16304d;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 6px 20px -6px rgba(0, 0, 0, 0.6);
+  --shadow-alta: 0 2px 6px rgba(0, 0, 0, 0.55), 0 18px 34px -14px rgba(0, 0, 0, 0.75);
 }
 
 * { box-sizing: border-box; }
@@ -91,6 +102,10 @@
 body {
   margin: 0;
   background: var(--plane);
+  /* Un velo del color de marca arriba: da profundidad sin competir con el
+     contenido, y evita el gris plano que hace ver casera una app. */
+  background-image: radial-gradient(120% 55% at 50% 0%, var(--marca-suave) 0%, transparent 62%);
+  background-attachment: fixed;
   color: var(--text-primary);
   font-size: 16px;
   line-height: 1.45;
@@ -102,8 +117,8 @@ h1, h2, h3 { line-height: 1.2; margin: 0; }
 /* clamp evita que el nombre del hogar, si es largo, empuje el botón de la
    cabecera a otra línea en pantallas angostas. */
 h1 { font-size: clamp(1.15rem, 5.2vw, 1.4rem); letter-spacing: -0.02em; }
-h2 { font-size: 1.08rem; }
-h3 { font-size: 0.95rem; }
+h2 { font-size: 1.06rem; letter-spacing: -0.015em; font-weight: 640; }
+h3 { font-size: 0.94rem; letter-spacing: -0.01em; font-weight: 620; }
 
 a { color: var(--series-1); }
 
@@ -166,7 +181,7 @@ a { color: var(--series-1); }
   background: var(--surface-1);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 14px;
+  padding: 16px;
   margin-bottom: 12px;
   box-shadow: var(--shadow);
 }
@@ -192,8 +207,11 @@ a { color: var(--series-1); }
 /* La tarjeta que responde "¿cómo vamos?" de un vistazo. Es la única con este
    peso visual en la pantalla: si todo destaca, nada destaca. */
 .card.principal {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--marca) 7%, var(--surface-1)), var(--surface-1));
-  border-color: color-mix(in srgb, var(--marca) 22%, transparent);
+  background:
+    radial-gradient(120% 130% at 0% 0%, color-mix(in srgb, var(--marca) 13%, var(--surface-1)) 0%, var(--surface-1) 70%);
+  border-color: color-mix(in srgb, var(--marca) 26%, transparent);
+  box-shadow: var(--shadow-alta);
+  padding: 18px;
 }
 
 .cifra-md { font-size: var(--cifra-md); font-weight: 640; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
@@ -246,7 +264,13 @@ a { color: var(--series-1); }
   }
 }
 
-.label { font-size: 0.78rem; color: var(--text-secondary); }
+.label {
+  font-size: var(--t-micro);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.055em;
+  font-weight: 600;
+}
 .muted { color: var(--text-muted); font-size: 0.8rem; }
 .num { font-variant-numeric: tabular-nums; }
 .right { text-align: right; }
@@ -428,3 +452,112 @@ details.table-view summary { font-size: 0.8rem; color: var(--text-secondary); cu
   .sheet-backdrop { align-items: center; }
   .sheet { border-radius: 18px; margin: 20px; }
 }
+
+/* ------------------------------- Cabecera -------------------------------- */
+
+.cabecera {
+  position: sticky;
+  top: 0;
+  z-index: 15;
+  margin: 0 -14px 14px;
+  padding: max(10px, env(safe-area-inset-top)) 14px 10px;
+  background: color-mix(in srgb, var(--plane) 86%, transparent);
+  backdrop-filter: saturate(180%) blur(14px);
+  -webkit-backdrop-filter: saturate(180%) blur(14px);
+  border-bottom: 1px solid var(--border);
+}
+
+.cabecera-fila {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 40px;
+}
+
+.cabecera-marca { display: flex; align-items: center; gap: 10px; min-width: 0; }
+
+.cabecera-nombre { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; }
+
+.cabecera-nombre strong {
+  font-size: 1.02rem;
+  letter-spacing: -0.015em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cabecera-nombre span {
+  font-size: var(--t-micro);
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
+
+/* Selector de mes como control segmentado: se lee como una pieza, no como tres
+   botones sueltos, y deja el mes siempre visible al hacer scroll. */
+.selector-mes {
+  display: grid;
+  grid-template-columns: 40px 1fr 40px;
+  align-items: center;
+  margin-top: 10px;
+  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 3px;
+}
+
+.selector-mes button {
+  min-height: 32px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 1.15rem;
+  line-height: 1;
+  border-radius: 8px;
+}
+
+.selector-mes button:disabled { opacity: 0.3; }
+
+@media (hover: hover) {
+  .selector-mes button:hover:not(:disabled) { background: var(--surface-1); }
+}
+
+.selector-mes-actual {
+  text-align: center;
+  font-size: var(--t-base);
+  font-weight: 600;
+  text-transform: capitalize;
+  letter-spacing: -0.01em;
+}
+
+/* Indicador de pestaña activa: una barra corta arriba del icono. */
+.tabbar a { position: relative; }
+
+.tabbar a.active::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  width: 18px;
+  height: 3px;
+  border-radius: 0 0 3px 3px;
+  background: var(--marca);
+}
+
+/* Píldoras con un punto de color en vez de sólo texto teñido. */
+.pill {
+  font-weight: 560;
+  padding: 4px 10px;
+}
+
+.pill.good { background: color-mix(in srgb, var(--good) 10%, var(--surface-1)); }
+.pill.alert { background: color-mix(in srgb, var(--critical) 10%, var(--surface-1)); }
+.pill.warn { background: color-mix(in srgb, var(--warning) 14%, var(--surface-1)); }
+
+/* Filas de lista con respuesta al toque. */
+.item { transition: background-color var(--transicion); }
+.list > button.item:active { background: color-mix(in srgb, var(--text-primary) 4%, transparent); }
+
+/* Las etiquetas largas se dejan partir: forzarlas a una línea las haría
+   desbordar la tarjeta, que es peor. Lo que no deben hacer es competir con una
+   cifra dentro de la misma fila; en esos casos la cifra va debajo. */
+.label { text-wrap: balance; }

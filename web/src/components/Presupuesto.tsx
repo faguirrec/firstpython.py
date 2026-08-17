@@ -119,11 +119,12 @@ export default function Presupuesto({ month }: { month: string }) {
 
         {conPresupuesto.length > 0 && (
           <>
-            <div className="row" style={{ marginBottom: 4 }}>
-              <span className="label">En categorías con tope</span>
-              <strong className="num">
-                {money(status.budgetedSpent, currency)} de {money(status.totalBudget, currency)}
-              </strong>
+            <div style={{ marginBottom: 8 }}>
+              <div className="label">Gastado del tope</div>
+              <div className="cifra-md" style={{ marginTop: 2 }}>
+                {money(status.budgetedSpent, currency)}
+                <span className="muted" style={{ fontWeight: 400 }}> de {money(status.totalBudget, currency)}</span>
+              </div>
             </div>
             <Barra
               row={{

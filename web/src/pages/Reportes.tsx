@@ -3,7 +3,7 @@ import { api } from '../lib/api';
 import { useSession } from '../lib/session';
 import { currentMonth, money, monthLabel } from '../lib/format';
 import { CategoryBars, TrendChart, type CategorySlice, type TrendPoint } from '../components/Charts';
-import MonthNav from '../components/MonthNav';
+import Cabecera from '../components/Cabecera';
 import Presupuesto from '../components/Presupuesto';
 import Comparacion from '../components/Comparacion';
 
@@ -21,12 +21,11 @@ export default function Reportes() {
 
   return (
     <>
-      <div className="topbar">
-        <div>
-          <h1>Análisis</h1>
-          <div className="sub">Cómo se comportan las finanzas de la casa</div>
-        </div>
-      </div>
+      <Cabecera
+        hogar="Análisis"
+        month={vista !== 'tendencia' ? month : undefined}
+        onMonthChange={vista !== 'tendencia' ? setMonth : undefined}
+      />
 
       <div className="tabs">
         {VISTAS.map((v) => (
@@ -35,8 +34,6 @@ export default function Reportes() {
           </button>
         ))}
       </div>
-
-      {vista !== 'tendencia' && <MonthNav month={month} onChange={setMonth} />}
 
       {vista === 'presupuesto' && <Presupuesto month={month} />}
       {vista === 'comparacion' && <Comparacion month={month} />}

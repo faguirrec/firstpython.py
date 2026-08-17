@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, type Member, type Projection, type Reserve, type Settlement } from '../lib/api';
 import { useSession } from '../lib/session';
 import { currentMonth, money, monthLabel, percent } from '../lib/format';
-import MonthNav from '../components/MonthNav';
+import Cabecera from '../components/Cabecera';
 import { SplitBar } from '../components/Charts';
 import Metas from '../components/Metas';
 
@@ -63,14 +63,7 @@ export default function Liquidacion() {
 
   return (
     <>
-      <div className="topbar">
-        <div>
-          <h1>Reparto</h1>
-          <div className="sub">Quién pone cuánto, según lo que gana cada uno</div>
-        </div>
-      </div>
-
-      <MonthNav month={month} onChange={setMonth} />
+      <Cabecera hogar="Reparto" month={month} onMonthChange={setMonth} />
 
       {error && <div className="error">{error}</div>}
       {message && <div className="ok">{message}</div>}
