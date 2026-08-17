@@ -34,6 +34,48 @@ cuando confirmen que la usan. Migrar es copiar un archivo.
 
 ## Opción A — Fly.io
 
+### El camino corto: un comando
+
+`deploy.ps1` hace todo lo automatizable: instala flyctl, crea la app y el disco,
+genera los secretos, publica y deja una sola máquina corriendo.
+
+```powershell
+.\deploy.ps1
+```
+
+Sólo te va a pedir **iniciar sesión en Fly.io** desde el navegador, que es lo
+único que no puede hacer un script. Si algo falla, se detiene indicando el paso;
+los pasos ya hechos quedan hechos, así que puedes volver a correrlo.
+
+Para elegir el nombre tú:
+
+```powershell
+.\deploy.ps1 -AppName cuentas-hogar-a7k2
+```
+
+### Despliegue automático en cada cambio
+
+El repositorio trae un flujo de GitHub Actions que compila la app en cada push
+y, si le das acceso, la publica sola.
+
+1. Genera un token en tu cuenta de Fly:
+
+```powershell
+fly tokens create deploy --name github-actions
+```
+
+2. Copia el token completo (empieza con `FlyV1 ...`).
+3. En GitHub → tu repositorio → **Settings** → **Secrets and variables** →
+   **Actions** → **New repository secret**.
+4. Nombre: `FLY_API_TOKEN`. Valor: el token.
+
+Desde ahí, cada `git push` publica la nueva versión. Sin el secreto, el flujo
+igual compila y avisa que el despliegue está sin configurar, sin marcar error.
+
+---
+
+Si prefieres entender cada paso, o si el script falla, acá está lo mismo a mano.
+
 ### 1. Instalar la herramienta
 
 En PowerShell:

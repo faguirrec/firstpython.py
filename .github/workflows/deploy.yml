@@ -1,0 +1,88 @@
+name: Compilar y desplegar
+
+on:
+  push:
+    branches:
+      - main
+      - claude/shared-expense-management-app-5yyoxu
+  workflow_dispatch:
+
+jobs:
+  # Compila siempre, haya o no despliegue configurado: si algo no compila,
+  # conviene saberlo antes de publicarlo.
+  compilar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            web/package-lock.json
+            server/package-lock.json
+
+      - name: Instalar y compilar el frontend
+        working-directory: web
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+
+      - name: Instalar y compilar el backend
+        working-directory: server
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+
+      - name: Verificar que el servidor levanta y responde
+        working-directory: server
+        env:
+          NODE_ENV: production
+          JWT_SECRET: solo-para-esta-verificacion-0123456789
+          PORT: 4321
+          DB_PATH: /tmp/ci/hogar.db
+        run: |
+          node dist/index.js &
+          for i in $(seq 1 20); do
+            sleep 1
+            if curl -sf "http://localhost:4321/api/health" > /dev/null; then
+              echo "El servidor responde."
+              curl -s "http://localhost:4321/api/health"
+              exit 0
+            fi
+          done
+          echo "El servidor no respondió a tiempo."
+          exit 1
+
+  desplegar:
+    needs: compilar
+    runs-on: ubuntu-latest
+    # Un despliegue a la vez: dos en paralelo pelearían por la misma base.
+    concurrency:
+      group: despliegue-produccion
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      # Sin el token configurado el flujo termina en verde con un aviso, en vez
+      # de fallar en cada push mientras el despliegue todavía no existe.
+      - id: revisar
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          if [ -n "$FLY_API_TOKEN" ]; then
+            echo "listo=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "listo=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Falta el secreto FLY_API_TOKEN. Mira DEPLOY.md para configurarlo."
+          fi
+
+      - if: steps.revisar.outputs.listo == 'true'
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - if: steps.revisar.outputs.listo == 'true'
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        # --remote-only construye la imagen en los servidores de Fly.
+        run: flyctl deploy --remote-only
