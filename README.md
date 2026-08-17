@@ -81,6 +81,16 @@ fondo de reserva = Σ (aportes − gastos pagados desde la cuenta del hogar)
 
 Requiere Node 20 o superior.
 
+**En Windows**, `start.ps1` hace todo de una: cierra el servidor anterior,
+compila las dos partes y arranca la app, deteniéndose con un mensaje claro si
+algo falla.
+
+```powershell
+.\start.ps1            # actualiza, compila y arranca
+.\start.ps1 -Fresh     # además borra la base de datos y parte de cero
+.\start.ps1 -SkipBuild # arranca sin recompilar
+```
+
 > **Si `npm install` falla en `better-sqlite3` pidiendo Visual Studio**, es que tu
 > versión de Node no tiene binario precompilado para esa librería, y npm intenta
 > compilarla. No hace falta instalar Visual Studio: basta con actualizar la
