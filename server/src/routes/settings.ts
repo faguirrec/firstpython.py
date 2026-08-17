@@ -2,11 +2,82 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { db, uid } from '../lib/db.js';
 import { requireAuth, requireHousehold } from '../lib/auth.js';
+import { env } from '../lib/env.js';
 import { applyRule, htmlToText, type EmailRule } from '../services/parser.js';
 import { BANK_TEMPLATES } from '../services/bankTemplates.js';
+import { correoConfigurado, enviarCorreo, envoltorio, probarConexion } from '../services/mailer.js';
+import { construirReporte, mesPasado } from '../services/reporteMensual.js';
 
 export const settingsRouter = Router();
 settingsRouter.use(requireAuth, requireHousehold);
+
+/* -------------------------------- Correo -------------------------------- */
+
+settingsRouter.get('/email', (_req, res) => {
+  res.json({ configured: correoConfigurado(), from: correoConfigurado() ? env.smtp.from : null });
+});
+
+/** Comprueba la conexión SMTP sin mandar nada. */
+settingsRouter.post('/email/test', async (req, res) => {
+  const conexion = await probarConexion();
+  if (!conexion.ok) {
+    res.status(502).json({ error: conexion.error });
+    return;
+  }
+
+  const envio = await enviarCorreo({
+    para: req.user!.email,
+    asunto: 'Prueba de correo — Cuentas del Hogar',
+    html: envoltorio(
+      'El correo está funcionando',
+      `<p style="color:#52514e;margin:0;">
+         Si estás leyendo esto, la app puede mandar invitaciones y el resumen mensual.
+       </p>`,
+    ),
+    texto: 'El correo está funcionando: la app puede mandar invitaciones y el resumen mensual.',
+  });
+
+  if (!envio.ok) {
+    res.status(502).json({ error: envio.error });
+    return;
+  }
+  res.json({ ok: true, enviadoA: req.user!.email });
+});
+
+/**
+ * Manda el reporte de un mes a quien lo pide, sin registrarlo como enviado:
+ * sirve para ver cómo queda antes de que salga automáticamente.
+ */
+settingsRouter.post('/email/reporte-de-prueba', async (req, res) => {
+  const parsed = z
+    .object({ month: z.string().regex(/^\d{4}-\d{2}$/).optional() })
+    .safeParse(req.body ?? {});
+  const mes = parsed.success && parsed.data.month ? parsed.data.month : mesPasado();
+
+  if (!correoConfigurado()) {
+    res.status(503).json({ error: 'El envío de correo no está configurado en el servidor.' });
+    return;
+  }
+
+  const reporte = construirReporte(req.household!.id, mes);
+  if (!reporte) {
+    res.status(404).json({ error: `No hay gastos comunes registrados en ${mes}, así que no hay reporte que enviar.` });
+    return;
+  }
+
+  const envio = await enviarCorreo({
+    para: req.user!.email,
+    asunto: `[Prueba] ${reporte.asunto}`,
+    html: reporte.html,
+    texto: reporte.texto,
+  });
+
+  if (!envio.ok) {
+    res.status(502).json({ error: envio.error });
+    return;
+  }
+  res.json({ ok: true, enviadoA: req.user!.email, mes });
+});
 
 /* ------------------------------ Categorías ------------------------------ */
 

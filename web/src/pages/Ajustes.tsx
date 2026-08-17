@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { api, type Household, type Member } from '../lib/api';
+import { api, type CambiosHogar, type Household, type Member } from '../lib/api';
 import { useSession } from '../lib/session';
 import Categorias from '../components/AjustesCategorias';
 import GmailPanel from '../components/AjustesGmail';
@@ -67,7 +67,7 @@ function PanelHogar() {
     void load();
   }, []);
 
-  async function save(patch: Partial<Household>) {
+  async function save(patch: CambiosHogar) {
     await api.updateHousehold(patch);
     await Promise.all([load(), refresh()]);
     setMessage('Guardado.');
@@ -164,6 +164,8 @@ function PanelHogar() {
         </label>
       </div>
 
+      <PanelCorreo household={household} onSave={save} />
+
       <div className="card">
         <h2>Instalar en el iPhone</h2>
         <ol style={{ paddingLeft: 20, margin: 0 }} className="muted">
@@ -180,5 +182,100 @@ function PanelHogar() {
         <button className="danger" onClick={() => void signOut()}>Cerrar sesión</button>
       </div>
     </>
+  );
+}
+
+/** Estado del correo y el resumen mensual automático. */
+function PanelCorreo({
+  household,
+  onSave,
+}: {
+  household: Household;
+  onSave: (patch: CambiosHogar) => Promise<void>;
+}) {
+  const [estado, setEstado] = useState<{ configured: boolean; from: string | null } | null>(null);
+  const [aviso, setAviso] = useState<{ ok: boolean; texto: string } | null>(null);
+  const [ocupado, setOcupado] = useState(false);
+
+  useEffect(() => {
+    void api.emailStatus().then(setEstado).catch(() => setEstado({ configured: false, from: null }));
+  }, []);
+
+  async function accion(fn: () => Promise<{ enviadoA: string }>, exito: (a: string) => string) {
+    setOcupado(true);
+    setAviso(null);
+    try {
+      const r = await fn();
+      setAviso({ ok: true, texto: exito(r.enviadoA) });
+    } catch (err) {
+      setAviso({ ok: false, texto: (err as Error).message });
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  if (!estado) return null;
+
+  return (
+    <div className="card">
+      <h2>Correo</h2>
+
+      {!estado.configured ? (
+        <>
+          <p className="muted" style={{ marginTop: 0 }}>
+            El servidor todavía no puede enviar correos, así que la invitación se comparte con el link o el QR, y no
+            hay resumen mensual automático.
+          </p>
+          <p className="muted" style={{ marginBottom: 0 }}>
+            Para activarlo hay que definir <code>SMTP_HOST</code> y sus credenciales en el servidor. Los pasos están
+            en el archivo <code>DEPLOY.md</code> del proyecto.
+          </p>
+        </>
+      ) : (
+        <>
+          <p className="muted" style={{ marginTop: 0 }}>
+            Los correos salen desde <strong>{estado.from}</strong>.
+          </p>
+
+          {aviso && <div className={aviso.ok ? 'ok' : 'error'}>{aviso.texto}</div>}
+
+          <label className="row" style={{ justifyContent: 'flex-start', gap: 10, margin: '12px 0' }}>
+            <input
+              type="checkbox"
+              style={{ width: 'auto' }}
+              checked={household.sendMonthlyReport === 1}
+              onChange={(e) => void onSave({ sendMonthlyReport: e.target.checked })}
+            />
+            <span>
+              <strong>Resumen mensual automático</strong>
+              <div className="muted">
+                A los primeros días de cada mes, les llega a ambos cómo cerró el mes anterior: gastos, quién puso
+                cuánto, presupuestos excedidos y el fondo de reserva.
+              </div>
+            </span>
+          </label>
+
+          <div className="wrap">
+            <button
+              disabled={ocupado}
+              onClick={() => void accion(() => api.sendTestEmail(), (a) => `Correo de prueba enviado a ${a}.`)}
+            >
+              Enviar correo de prueba
+            </button>
+            <button
+              disabled={ocupado}
+              onClick={() =>
+                void accion(
+                  () => api.sendTestReport(),
+                  (a) => `Resumen del mes pasado enviado a ${a}. Así lo van a recibir.`,
+                )
+              }
+            >
+              Verme el resumen mensual
+            </button>
+          </div>
+        </>
+      )}
+    </div>
   );
 }

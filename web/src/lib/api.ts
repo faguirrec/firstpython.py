@@ -5,6 +5,11 @@ export type Household = {
   currency: string;
   officialAccount: string;
   contingencyPct: number;
+  sendMonthlyReport: number;
+};
+
+export type CambiosHogar = Partial<Omit<Household, 'id' | 'sendMonthlyReport'>> & {
+  sendMonthlyReport?: boolean;
 };
 export type Member = { id: string; name: string; email: string; role: string; joinedAt: string };
 
@@ -235,12 +240,21 @@ export const api = {
     post<{ id: string }>('/household', body),
   joinHousehold: (code: string) => post<{ id: string }>('/household/join', { code }),
   household: () => get<{ household: Household; members: Member[]; inviteCode: string | null }>('/household'),
-  updateHousehold: (body: Partial<Household>) => patch<{ ok: true }>('/household', body),
+  // El hogar llega con sendMonthlyReport como 0/1 (viene de SQLite), pero al
+  // guardarlo se manda como booleano, que es lo que valida el servidor.
+  updateHousehold: (body: CambiosHogar) => patch<{ ok: true }>('/household', body),
   invite: () => post<{ code: string }>('/household/invite'),
   rotateInvite: () => post<{ code: string }>('/household/invite/rotate'),
   revokeInvite: () => del<{ ok: true }>('/household/invite'),
   invitePreview: (code: string) =>
     get<{ householdName: string; invitedBy: string }>(`/household/invite/${encodeURIComponent(code)}`),
+  inviteByEmail: (email: string) =>
+    post<{ ok: true; enviadoA: string }>('/household/invite/email', { email, origin: window.location.origin }),
+
+  emailStatus: () => get<{ configured: boolean; from: string | null }>('/settings/email'),
+  sendTestEmail: () => post<{ ok: true; enviadoA: string }>('/settings/email/test'),
+  sendTestReport: (month?: string) =>
+    post<{ ok: true; enviadoA: string; mes: string }>('/settings/email/reporte-de-prueba', { month }),
 
   transactions: (params: Record<string, string | number | undefined>) => {
     const query = new URLSearchParams();

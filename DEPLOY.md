@@ -421,6 +421,69 @@ ecuación el equipo, el navegador, la red y el correo de la empresa a la vez. Si
 ahí funciona, ya sabes que el problema era el entorno corporativo y no la
 plataforma.
 
+## Activar el correo
+
+Sirve para dos cosas: mandar la invitación por correo, y el resumen mensual
+automático que les llega a ambos con el cierre del mes.
+
+### 1. Conseguir un servidor SMTP
+
+Dos opciones fáciles:
+
+**Gmail.** Necesita verificación en dos pasos activada. Después, en
+[myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords)
+generas una **contraseña de aplicación** — no sirve la contraseña normal de tu
+cuenta.
+
+```
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=tu@gmail.com
+SMTP_PASS=la-contraseña-de-aplicación
+SMTP_FROM=Cuentas del Hogar <tu@gmail.com>
+```
+
+**Resend** ([resend.com](https://resend.com)), con 100 correos al día gratis:
+
+```
+SMTP_HOST=smtp.resend.com
+SMTP_PORT=587
+SMTP_USER=resend
+SMTP_PASS=tu-api-key
+SMTP_FROM=Cuentas del Hogar <onboarding@resend.dev>
+```
+
+### 2. Configurarlo en el servidor
+
+En Render: panel del servicio → **Environment** → agrega esas variables →
+**Save**. En Fly: `fly secrets set SMTP_HOST=... SMTP_USER=...` y así.
+
+### 3. Comprobar
+
+En la app: **Ajustes → Hogar → Correo**. Ahí hay dos botones: uno manda un
+correo de prueba, y el otro te manda el resumen del mes pasado tal como lo van a
+recibir.
+
+### 4. Programar el envío mensual
+
+La app trae un temporizador propio, pero si el servidor se suspende por
+inactividad no corre a la hora indicada. Para que no falle, hay un flujo de
+GitHub que lo dispara desde fuera los primeros días de cada mes.
+
+Genera una clave y configúrala en el servidor:
+
+```
+CRON_SECRET=una-clave-larga-y-aleatoria
+```
+
+Y en GitHub → Settings → Secrets and variables → Actions, agrega dos secretos:
+
+- `APP_URL`: la dirección de tu app, por ejemplo `https://mi-app.onrender.com`
+- `CRON_SECRET`: la misma clave
+
+El envío queda registrado por hogar, mes y destinatario, así que aunque se
+dispare varias veces nadie recibe el correo repetido.
+
 ## Usar tu propio dominio .cl
 
 Se puede, y queda mejor que la dirección `.fly.dev`: `https://casa.tudominio.cl`.

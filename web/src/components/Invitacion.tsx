@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import qrcode from 'qrcode-generator';
 import { api } from '../lib/api';
 
@@ -42,6 +42,18 @@ export default function Invitacion({ code, onChanged }: { code: string; onChange
   const [copied, setCopied] = useState<'link' | 'code' | null>(null);
   const [showQr, setShowQr] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [correoDisponible, setCorreoDisponible] = useState(false);
+  const [destino, setDestino] = useState('');
+  const [enviando, setEnviando] = useState(false);
+  const [envio, setEnvio] = useState<{ ok: boolean; texto: string } | null>(null);
+
+  // El envío por correo sólo se ofrece si el servidor puede mandarlo.
+  useEffect(() => {
+    void api
+      .emailStatus()
+      .then((e) => setCorreoDisponible(e.configured))
+      .catch(() => setCorreoDisponible(false));
+  }, []);
 
   const link = `${window.location.origin}/unirse/${code}`;
   const message = `Te invito a administrar nuestras cuentas del hogar. Entra acá y crea tu cuenta: ${link}`;
@@ -96,6 +108,41 @@ export default function Invitacion({ code, onChanged }: { code: string; onChange
           {showQr ? 'Ocultar QR' : 'Mostrar QR'}
         </button>
       </div>
+
+      {correoDisponible && (
+        <div className="card" style={{ background: 'var(--plane)', boxShadow: 'none', marginBottom: 10 }}>
+          <div className="label" style={{ marginBottom: 6 }}>O mándasela por correo</div>
+          {envio && <div className={envio.ok ? 'ok' : 'error'}>{envio.texto}</div>}
+          <div className="wrap">
+            <input
+              style={{ flex: 1, minWidth: 150 }}
+              type="email"
+              inputMode="email"
+              placeholder="correo de la otra persona"
+              value={destino}
+              onChange={(e) => setDestino(e.target.value)}
+            />
+            <button
+              disabled={enviando || !destino.includes('@')}
+              onClick={async () => {
+                setEnviando(true);
+                setEnvio(null);
+                try {
+                  const r = await api.inviteByEmail(destino.trim());
+                  setEnvio({ ok: true, texto: `Invitación enviada a ${r.enviadoA}.` });
+                  setDestino('');
+                } catch (err) {
+                  setEnvio({ ok: false, texto: (err as Error).message });
+                } finally {
+                  setEnviando(false);
+                }
+              }}
+            >
+              {enviando ? 'Enviando…' : 'Enviar'}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="card" style={{ background: 'var(--plane)', boxShadow: 'none', marginBottom: 10 }}>
         <div className="label">O que escriba este código a mano</div>

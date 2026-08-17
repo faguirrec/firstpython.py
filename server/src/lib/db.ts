@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS households (
   official_account TEXT NOT NULL DEFAULT 'Cuenta del hogar',
   -- Porcentaje extra sobre el gasto estimado que se aporta como fondo de reserva.
   contingency_pct REAL NOT NULL DEFAULT 10,
+  -- Envío automático del resumen del mes cerrado a los dos integrantes.
+  send_monthly_report INTEGER NOT NULL DEFAULT 1,
   created_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -156,6 +158,20 @@ CREATE TABLE IF NOT EXISTS savings_goals (
   created_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Registro de correos enviados. Es lo que evita mandar dos veces el mismo
+-- reporte cuando la tarea se dispara desde varios lados.
+CREATE TABLE IF NOT EXISTS email_log (
+  id           TEXT PRIMARY KEY,
+  household_id TEXT NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+  kind         TEXT NOT NULL,
+  reference    TEXT NOT NULL,
+  recipient    TEXT NOT NULL,
+  sent_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_email_log_unico
+  ON email_log (household_id, kind, reference, recipient);
+
 -- Cierre de mes: deja congelado quién le debía a quién.
 CREATE TABLE IF NOT EXISTS settlements (
   household_id TEXT NOT NULL REFERENCES households(id) ON DELETE CASCADE,
@@ -180,6 +196,7 @@ function addColumn(table: string, column: string, definition: string): void {
 
 addColumn('households', 'contingency_pct', 'REAL NOT NULL DEFAULT 10');
 addColumn('invites', 'revoked', 'INTEGER NOT NULL DEFAULT 0');
+addColumn('households', 'send_monthly_report', 'INTEGER NOT NULL DEFAULT 1');
 
 export function uid(): string {
   return crypto.randomUUID();

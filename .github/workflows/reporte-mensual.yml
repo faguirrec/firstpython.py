@@ -1,0 +1,63 @@
+# Dispara el resumen mensual desde fuera de la app.
+#
+# El servidor también lleva su propio temporizador, pero no basta: en los planes
+# que suspenden la máquina cuando nadie la usa, el proceso no está vivo a la
+# hora señalada. Esta petición la despierta y ejecuta la tarea.
+#
+# El envío está registrado por hogar, mes y destinatario, así que aunque se
+# dispare varias veces nadie recibe el correo dos veces.
+#
+# Requiere dos secretos en el repositorio (Settings -> Secrets -> Actions):
+#   APP_URL      la dirección de la app, por ejemplo https://mi-app.onrender.com
+#   CRON_SECRET  la misma clave configurada en el servidor
+
+name: Resumen mensual por correo
+
+on:
+  schedule:
+    # Los días 1, 2 y 3 de cada mes a las 12:00 UTC (09:00 en Chile).
+    # Se repite por si la app está dormida o falla el primer intento.
+    - cron: '0 12 1-3 * *'
+  workflow_dispatch:
+    inputs:
+      mes:
+        description: 'Mes a reportar (YYYY-MM). Vacío = el mes pasado.'
+        required: false
+
+jobs:
+  enviar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Disparar el envío
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          MES: ${{ inputs.mes }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "::notice::Faltan los secretos APP_URL o CRON_SECRET; no hay nada que hacer."
+            exit 0
+          fi
+
+          cuerpo='{}'
+          if [ -n "$MES" ]; then cuerpo="{\"mes\":\"$MES\"}"; fi
+
+          # La app puede estar suspendida: el primer intento la despierta y
+          # puede demorar, así que se reintenta.
+          for intento in 1 2 3; do
+            respuesta=$(curl -sS --max-time 120 -w '\n%{http_code}' \
+              -X POST "$APP_URL/api/tareas/reporte-mensual" \
+              -H "x-cron-secret: $CRON_SECRET" \
+              -H 'content-type: application/json' \
+              -d "$cuerpo") && codigo=$(printf '%s' "$respuesta" | tail -1) || codigo=000
+
+            if [ "$codigo" = "200" ]; then
+              printf '%s\n' "$respuesta" | head -n -1
+              exit 0
+            fi
+            echo "Intento $intento devolvió $codigo; se reintenta."
+            sleep 20
+          done
+
+          echo "::error::No se pudo disparar el resumen mensual."
+          exit 1

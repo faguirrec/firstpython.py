@@ -2,7 +2,9 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { db, uid } from '../lib/db.js';
 import { requireAuth, requireHousehold } from '../lib/auth.js';
+import { env } from '../lib/env.js';
 import { BANK_TEMPLATES, DEFAULT_CATEGORIES, DEFAULT_CATEGORY_RULES } from '../services/bankTemplates.js';
+import { boton, correoConfigurado, enviarCorreo, envoltorio } from '../services/mailer.js';
 
 export const householdRouter = Router();
 
@@ -107,7 +109,8 @@ householdRouter.post('/', (req, res) => {
 householdRouter.get('/', requireHousehold, (req, res) => {
   const household = db
     .prepare(
-      `SELECT id, name, currency, official_account AS officialAccount, contingency_pct AS contingencyPct
+      `SELECT id, name, currency, official_account AS officialAccount, contingency_pct AS contingencyPct,
+              send_monthly_report AS sendMonthlyReport
          FROM households WHERE id = ?`,
     )
     .get(req.household!.id);
@@ -138,25 +141,28 @@ householdRouter.patch('/', requireHousehold, (req, res) => {
       currency: z.string().length(3).optional(),
       officialAccount: z.string().max(80).optional(),
       contingencyPct: z.number().min(0).max(100).optional(),
+      sendMonthlyReport: z.boolean().optional(),
     })
     .safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.issues[0].message });
     return;
   }
-  const { name, currency, officialAccount, contingencyPct } = parsed.data;
+  const { name, currency, officialAccount, contingencyPct, sendMonthlyReport } = parsed.data;
   db.prepare(
     `UPDATE households
         SET name = COALESCE(?, name),
             currency = COALESCE(?, currency),
             official_account = COALESCE(?, official_account),
-            contingency_pct = COALESCE(?, contingency_pct)
+            contingency_pct = COALESCE(?, contingency_pct),
+            send_monthly_report = COALESCE(?, send_monthly_report)
       WHERE id = ?`,
   ).run(
     name ?? null,
     currency?.toUpperCase() ?? null,
     officialAccount ?? null,
     contingencyPct ?? null,
+    sendMonthlyReport === undefined ? null : sendMonthlyReport ? 1 : 0,
     req.household!.id,
   );
   res.json({ ok: true });
@@ -185,6 +191,64 @@ householdRouter.post('/invite', requireHousehold, (req, res) => {
     code, req.household!.id, req.user!.id,
   );
   res.status(201).json({ code });
+});
+
+/** Manda la invitación por correo, además de mostrarla en pantalla. */
+householdRouter.post('/invite/email', requireHousehold, async (req, res) => {
+  const parsed = z
+    .object({ email: z.string().email('Correo inválido'), origin: z.string().url().optional() })
+    .safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0].message });
+    return;
+  }
+
+  if (!correoConfigurado()) {
+    res.status(503).json({
+      error: 'El envío de correo no está configurado en el servidor. Puedes compartir el link o el QR igual.',
+    });
+    return;
+  }
+
+  const invitacion = db
+    .prepare('SELECT code FROM invites WHERE household_id = ? AND used_by IS NULL AND revoked = 0 LIMIT 1')
+    .get(req.household!.id) as { code: string } | undefined;
+  if (!invitacion) {
+    res.status(409).json({ error: 'No hay una invitación vigente. Genera una primero.' });
+    return;
+  }
+
+  const hogar = db.prepare('SELECT name FROM households WHERE id = ?').get(req.household!.id) as { name: string };
+  const base = parsed.data.origin ?? env.webOrigin;
+  const link = `${base}/unirse/${invitacion.code}`;
+
+  const envio = await enviarCorreo({
+    para: parsed.data.email,
+    asunto: `${req.user!.name} te invitó a administrar ${hogar.name}`,
+    html: envoltorio(
+      `${req.user!.name} te invitó a ${hogar.name}`,
+      `<p style="color:#52514e;margin:0 0 8px;">
+         Van a llevar juntos las cuentas de la casa: los gastos comunes se reparten según lo que gana cada uno,
+         no a la mitad.
+       </p>
+       <p style="color:#52514e;margin:0;">Crea tu cuenta con este enlace y quedan conectados:</p>
+       ${boton('Entrar al hogar', link)}
+       <p style="font-size:13px;color:#898781;margin:0;">
+         Si el botón no funciona, copia esta dirección:<br>
+         <span style="word-break:break-all;">${link}</span>
+       </p>
+       <p style="font-size:13px;color:#898781;margin:14px 0 0;">
+         O usa el código <strong style="letter-spacing:2px;">${invitacion.code}</strong> dentro de la app.
+       </p>`,
+    ),
+    texto: `${req.user!.name} te invitó a administrar ${hogar.name}.\n\nEntra acá y crea tu cuenta: ${link}\n\nO usa el código ${invitacion.code} dentro de la app.`,
+  });
+
+  if (!envio.ok) {
+    res.status(502).json({ error: envio.error });
+    return;
+  }
+  res.json({ ok: true, enviadoA: parsed.data.email });
 });
 
 /** Anula los códigos vigentes y emite uno nuevo (si el anterior se filtró). */

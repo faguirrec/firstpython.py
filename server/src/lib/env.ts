@@ -46,6 +46,21 @@ export const env = {
     clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
     redirectUri: process.env.GOOGLE_REDIRECT_URI ?? 'http://localhost:4000/api/gmail/callback',
   },
+
+  /** SMTP para invitaciones y reportes. Sin SMTP_HOST, el correo queda apagado. */
+  smtp: {
+    host: process.env.SMTP_HOST ?? '',
+    port: Number(process.env.SMTP_PORT ?? 587),
+    user: process.env.SMTP_USER ?? '',
+    pass: process.env.SMTP_PASS ?? '',
+    from: process.env.SMTP_FROM ?? process.env.SMTP_USER ?? 'Cuentas del Hogar <no-reply@localhost>',
+  },
+
+  /**
+   * Clave para disparar tareas programadas desde fuera (un cron de GitHub).
+   * Sin ella, ese acceso queda cerrado.
+   */
+  cronSecret: process.env.CRON_SECRET ?? '',
   get gmailEnabled() {
     return Boolean(this.google.clientId && this.google.clientSecret);
   },

@@ -11,6 +11,7 @@
     "seed": "tsx src/scripts/seed.ts"
   },
   "dependencies": {
+    "@types/nodemailer": "^8.0.1",
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^12.11.1",
     "cookie-parser": "^1.4.7",
@@ -19,6 +20,7 @@
     "express": "^4.21.1",
     "googleapis": "^144.0.0",
     "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^9.0.5",
     "zod": "^3.23.8"
   },
   "devDependencies": {
