@@ -1,10 +1,51 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { useSession } from '../lib/session';
-import { money, monthLabel } from '../lib/format';
+import { currentMonth, money, monthLabel } from '../lib/format';
 import { CategoryBars, TrendChart, type CategorySlice, type TrendPoint } from '../components/Charts';
+import MonthNav from '../components/MonthNav';
+import Presupuesto from '../components/Presupuesto';
+import Comparacion from '../components/Comparacion';
+
+const VISTAS = [
+  { key: 'presupuesto', label: 'Presupuesto' },
+  { key: 'comparacion', label: 'Comparación' },
+  { key: 'tendencia', label: 'Tendencia' },
+] as const;
+
+type Vista = (typeof VISTAS)[number]['key'];
 
 export default function Reportes() {
+  const [vista, setVista] = useState<Vista>('presupuesto');
+  const [month, setMonth] = useState(currentMonth());
+
+  return (
+    <>
+      <div className="topbar">
+        <div>
+          <h1>Análisis</h1>
+          <div className="sub">Cómo se comportan las finanzas de la casa</div>
+        </div>
+      </div>
+
+      <div className="tabs">
+        {VISTAS.map((v) => (
+          <button key={v.key} className={vista === v.key ? 'active' : ''} onClick={() => setVista(v.key)}>
+            {v.label}
+          </button>
+        ))}
+      </div>
+
+      {vista !== 'tendencia' && <MonthNav month={month} onChange={setMonth} />}
+
+      {vista === 'presupuesto' && <Presupuesto month={month} />}
+      {vista === 'comparacion' && <Comparacion month={month} />}
+      {vista === 'tendencia' && <Tendencia />}
+    </>
+  );
+}
+
+function Tendencia() {
   const { household } = useSession();
   const currency = household?.currency ?? 'CLP';
   const [range, setRange] = useState(12);
@@ -15,7 +56,7 @@ export default function Reportes() {
   useEffect(() => {
     void (async () => {
       try {
-        const [m, c] = await Promise.all([api.monthlyReport(range), api.byCategory()]);
+        const [m, c] = await Promise.all([api.monthlyReport(range), api.byCategory(undefined, 'comun')]);
         setMonths(m.months);
         setCategories(c.categories);
       } catch (err) {
@@ -32,13 +73,6 @@ export default function Reportes() {
 
   return (
     <>
-      <div className="topbar">
-        <div>
-          <h1>Reportes</h1>
-          <div className="sub">Cómo evoluciona el gasto de la casa</div>
-        </div>
-      </div>
-
       <div className="tabs">
         {[6, 12, 24].map((r) => (
           <button key={r} className={range === r ? 'active' : ''} onClick={() => setRange(r)}>
@@ -70,8 +104,8 @@ export default function Reportes() {
       </div>
 
       <div className="card">
-        <h2>Gasto acumulado por categoría</h2>
-        <p className="muted" style={{ marginTop: 0 }}>Todo el historial registrado.</p>
+        <h2>Gasto común acumulado por categoría</h2>
+        <p className="muted" style={{ marginTop: 0 }}>Todo el historial registrado, sin los gastos personales.</p>
         <CategoryBars data={categories} currency={currency} limit={12} />
       </div>
 

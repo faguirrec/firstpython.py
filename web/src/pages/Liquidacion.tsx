@@ -4,6 +4,7 @@ import { useSession } from '../lib/session';
 import { currentMonth, money, monthLabel, percent } from '../lib/format';
 import MonthNav from '../components/MonthNav';
 import { SplitBar } from '../components/Charts';
+import Metas from '../components/Metas';
 
 export default function Liquidacion() {
   const { user, household } = useSession();
@@ -212,6 +213,8 @@ export default function Liquidacion() {
           </table>
         </div>
       )}
+
+      <Metas />
 
       {settlement && (
         <div className="card">

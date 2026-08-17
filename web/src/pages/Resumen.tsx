@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, type Settlement, type Transaction } from '../lib/api';
+import { api, type BudgetStatus, type Settlement, type Transaction } from '../lib/api';
 import { useSession } from '../lib/session';
 import { currentMonth, dayLabel, money, monthLabel, percent } from '../lib/format';
 import { CategoryBars, SplitBar, type CategorySlice } from '../components/Charts';
@@ -15,22 +15,25 @@ export default function Resumen() {
   const [categories, setCategories] = useState<CategorySlice[]>([]);
   const [recent, setRecent] = useState<Transaction[]>([]);
   const [pending, setPending] = useState(0);
+  const [budget, setBudget] = useState<BudgetStatus | null>(null);
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [s, c, t, g] = await Promise.all([
+      const [s, c, t, g, b] = await Promise.all([
         api.settlement(month),
-        api.byCategory(month),
+        api.byCategory(month, 'comun'),
         api.transactions({ month, limit: 6 }),
         api.gmailStatus().catch(() => ({ pendingReview: 0 })),
+        api.budgets(month),
       ]);
       setSettlement(s);
       setCategories(c.categories);
       setRecent(t.transactions);
       setPending(g.pendingReview);
+      setBudget(b);
     } catch (err) {
       setError((err as Error).message);
     }
@@ -130,10 +133,55 @@ export default function Resumen() {
         </div>
       )}
 
+      {budget && budget.totalBudget > 0 && (
+        <div className="card">
+          <div className="card-head">
+            <h2>Presupuesto</h2>
+            <Link to="/reportes" className="muted">Ver detalle →</Link>
+          </div>
+          <div className="row" style={{ marginBottom: 6 }}>
+            <span className="num">
+              {money(budget.budgetedSpent, currency)}
+              <span className="muted"> de {money(budget.totalBudget, currency)}</span>
+            </span>
+            {budget.overBudget.length > 0 ? (
+              <span className="pill alert">
+                ✕ {budget.overBudget.length} categoría{budget.overBudget.length === 1 ? '' : 's'} excedida
+                {budget.overBudget.length === 1 ? '' : 's'}
+              </span>
+            ) : budget.nearLimit.length > 0 ? (
+              <span className="pill warn">▲ {budget.nearLimit.length} cerca del tope</span>
+            ) : (
+              <span className="pill good">✓ en rango</span>
+            )}
+          </div>
+          <div style={{ height: 10, background: 'var(--grid)', borderRadius: 5 }}>
+            <div
+              style={{
+                width: `${Math.min(budget.budgetedSpent / budget.totalBudget, 1) * 100}%`,
+                height: '100%',
+                borderRadius: 5,
+                background:
+                  budget.budgetedSpent > budget.totalBudget
+                    ? 'var(--critical)'
+                    : budget.budgetedSpent / budget.totalBudget >= 0.8
+                      ? 'var(--warning)'
+                      : 'var(--good)',
+              }}
+            />
+          </div>
+          {budget.overBudget.length > 0 && (
+            <p className="muted" style={{ marginBottom: 0, marginTop: 8 }}>
+              Excedidas: {budget.overBudget.map((c) => c.category).join(', ')}.
+            </p>
+          )}
+        </div>
+      )}
+
       <div className="card">
         <div className="card-head">
           <h2>En qué se fue</h2>
-          <Link to="/reportes" className="muted">Reportes →</Link>
+          <Link to="/reportes" className="muted">Análisis →</Link>
         </div>
         <CategoryBars data={categories} currency={currency} limit={6} />
       </div>

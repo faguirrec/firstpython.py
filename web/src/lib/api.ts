@@ -122,6 +122,68 @@ export type Projection = {
   rows: { userId: string; name: string; share: number; base: number; contingency: number; amount: number }[];
 };
 
+export type CategoryBudget = {
+  categoryId: string;
+  category: string;
+  color: string;
+  budget: number;
+  fromBase: boolean;
+  spent: number;
+  remaining: number;
+  used: number;
+  status: 'sin-presupuesto' | 'ok' | 'atencion' | 'excedido';
+};
+
+export type BudgetStatus = {
+  month: string;
+  totalBudget: number;
+  totalSpent: number;
+  budgetedSpent: number;
+  unbudgetedSpent: number;
+  categories: CategoryBudget[];
+  monthProgress: number;
+  overBudget: CategoryBudget[];
+  nearLimit: CategoryBudget[];
+};
+
+export type Goal = {
+  id: string;
+  name: string;
+  targetAmount: number;
+  targetDate: string | null;
+  priority: number;
+  funded: number;
+  progress: number;
+  complete: boolean;
+  monthsLeft: number | null;
+  monthlyNeeded: number | null;
+  onTrack: boolean | null;
+};
+
+export type GoalsView = { reserve: number; goals: Goal[]; unassigned: number };
+
+export type CategoryChange = {
+  category: string;
+  color: string;
+  current: number;
+  previous: number;
+  average: number;
+  deltaPrevious: number;
+  deltaAverage: number;
+  changePct: number | null;
+};
+
+export type Comparison = {
+  month: string;
+  previousMonth: string;
+  totalCurrent: number;
+  totalPrevious: number;
+  totalAverage: number;
+  categories: CategoryChange[];
+  biggestIncreases: CategoryChange[];
+  biggestDecreases: CategoryChange[];
+};
+
 export type Reserve = {
   balance: number;
   totalContributed: number;
@@ -209,10 +271,26 @@ export const api = {
     get<{ months: { month: string; shared: number; personal: number; contributions: number; income: number }[] }>(
       `/finance/reports/monthly?months=${months}`,
     ),
-  byCategory: (month?: string) =>
-    get<{ categories: { category: string; color: string; total: number; count: number }[] }>(
-      `/finance/reports/by-category${month ? `?month=${month}` : ''}`,
-    ),
+  byCategory: (month?: string, scope?: 'comun' | 'personal') => {
+    const query = new URLSearchParams();
+    if (month) query.set('month', month);
+    if (scope) query.set('scope', scope);
+    return get<{ categories: { category: string; color: string; total: number; count: number }[] }>(
+      `/finance/reports/by-category?${query.toString()}`,
+    );
+  },
+  comparison: (month: string, lookback = 3) =>
+    get<Comparison>(`/finance/reports/comparison?month=${month}&lookback=${lookback}`),
+
+  budgets: (month: string) => get<BudgetStatus>(`/finance/budgets?month=${month}`),
+  saveBudget: (body: { categoryId: string; amount: number; month?: string | null }) =>
+    put<{ ok: true }>('/finance/budgets', body),
+
+  goals: () => get<GoalsView>('/finance/goals'),
+  createGoal: (body: { name: string; targetAmount: number; targetDate?: string | null }) =>
+    post<{ id: string }>('/finance/goals', body),
+  updateGoal: (id: string, body: Record<string, unknown>) => patch<{ ok: true }>(`/finance/goals/${id}`, body),
+  deleteGoal: (id: string) => del<{ ok: true }>(`/finance/goals/${id}`),
 
   categories: () => get<{ categories: Category[] }>('/settings/categories'),
   createCategory: (body: { name: string; kind: string; color: string }) => post<Category>('/settings/categories', body),

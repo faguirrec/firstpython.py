@@ -12,7 +12,7 @@ const TABS = [
   { to: '/', glyph: '◈', label: 'Resumen', end: true },
   { to: '/movimientos', glyph: '≡', label: 'Movimientos', end: false },
   { to: '/liquidacion', glyph: '⇄', label: 'Reparto', end: false },
-  { to: '/reportes', glyph: '▤', label: 'Reportes', end: false },
+  { to: '/reportes', glyph: '▤', label: 'Análisis', end: false },
   { to: '/ajustes', glyph: '⚙', label: 'Ajustes', end: false },
 ];
 

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { db, uid } from '../lib/db.js';
 import { requireAuth, requireHousehold } from '../lib/auth.js';
 import { computeReserve, computeSettlement, projectContributions } from '../services/split.js';
+import { compareMonths, computeBudgetStatus, computeGoals } from '../services/planning.js';
 
 export const financeRouter = Router();
 financeRouter.use(requireAuth, requireHousehold);
@@ -132,7 +133,151 @@ financeRouter.get('/reserve', (req, res) => {
   res.json(computeReserve(req.household!.id));
 });
 
+/* ------------------------------ Presupuesto ------------------------------ */
+
+financeRouter.get('/budgets', (req, res) => {
+  const month = monthSchema.safeParse(req.query.month ?? currentMonth());
+  if (!month.success) {
+    res.status(400).json({ error: month.error.issues[0].message });
+    return;
+  }
+  res.json(computeBudgetStatus(req.household!.id, month.data));
+});
+
+/**
+ * Guarda el presupuesto de una categoría. Sin `month` queda como presupuesto
+ * base y rige todos los meses; con `month` sólo afecta a ese.
+ */
+financeRouter.put('/budgets', (req, res) => {
+  const parsed = z
+    .object({
+      categoryId: z.string(),
+      amount: z.number().min(0),
+      month: monthSchema.nullable().optional(),
+    })
+    .safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0].message });
+    return;
+  }
+
+  const owned = db
+    .prepare('SELECT 1 FROM categories WHERE id = ? AND household_id = ?')
+    .get(parsed.data.categoryId, req.household!.id);
+  if (!owned) {
+    res.status(404).json({ error: 'La categoría no existe en este hogar' });
+    return;
+  }
+
+  const month = parsed.data.month ?? null;
+
+  // Poner el presupuesto en cero equivale a quitarlo.
+  if (parsed.data.amount === 0) {
+    db.prepare(
+      `DELETE FROM budgets WHERE household_id = ? AND category_id = ?
+        AND (month IS ? OR month = ?)`,
+    ).run(req.household!.id, parsed.data.categoryId, month, month);
+    res.json({ ok: true, removed: true });
+    return;
+  }
+
+  const existing = db
+    .prepare(
+      `SELECT id FROM budgets WHERE household_id = ? AND category_id = ?
+        AND (month IS ? OR month = ?)`,
+    )
+    .get(req.household!.id, parsed.data.categoryId, month, month) as { id: string } | undefined;
+
+  if (existing) {
+    db.prepare('UPDATE budgets SET amount = ? WHERE id = ?').run(parsed.data.amount, existing.id);
+  } else {
+    db.prepare('INSERT INTO budgets (id, household_id, category_id, month, amount) VALUES (?, ?, ?, ?, ?)').run(
+      uid(), req.household!.id, parsed.data.categoryId, month, parsed.data.amount,
+    );
+  }
+  res.json({ ok: true });
+});
+
+/* ---------------------------- Metas de ahorro ---------------------------- */
+
+financeRouter.get('/goals', (req, res) => {
+  res.json(computeGoals(req.household!.id));
+});
+
+financeRouter.post('/goals', (req, res) => {
+  const parsed = z
+    .object({
+      name: z.string().min(1).max(80),
+      targetAmount: z.number().positive('La meta debe ser mayor que cero'),
+      targetDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+      priority: z.number().int().optional(),
+    })
+    .safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0].message });
+    return;
+  }
+
+  const next = db
+    .prepare('SELECT COALESCE(MAX(priority), 0) + 10 AS next FROM savings_goals WHERE household_id = ?')
+    .get(req.household!.id) as { next: number };
+
+  const id = uid();
+  db.prepare(
+    `INSERT INTO savings_goals (id, household_id, name, target_amount, target_date, priority)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run(
+    id, req.household!.id, parsed.data.name, parsed.data.targetAmount,
+    parsed.data.targetDate ?? null, parsed.data.priority ?? next.next,
+  );
+  res.status(201).json({ id });
+});
+
+financeRouter.patch('/goals/:id', (req, res) => {
+  const parsed = z
+    .object({
+      name: z.string().min(1).max(80).optional(),
+      targetAmount: z.number().positive().optional(),
+      targetDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+      priority: z.number().int().optional(),
+    })
+    .safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0].message });
+    return;
+  }
+  const p = parsed.data;
+  db.prepare(
+    `UPDATE savings_goals SET
+        name = COALESCE(?, name),
+        target_amount = COALESCE(?, target_amount),
+        target_date = COALESCE(?, target_date),
+        priority = COALESCE(?, priority)
+      WHERE id = ? AND household_id = ?`,
+  ).run(
+    p.name ?? null, p.targetAmount ?? null, p.targetDate ?? null, p.priority ?? null,
+    req.params.id, req.household!.id,
+  );
+  res.json({ ok: true });
+});
+
+financeRouter.delete('/goals/:id', (req, res) => {
+  db.prepare('DELETE FROM savings_goals WHERE id = ? AND household_id = ?').run(req.params.id, req.household!.id);
+  res.json({ ok: true });
+});
+
 /* ------------------------------- Reportes ------------------------------- */
+
+/** En qué cambió el gasto respecto del mes anterior y del promedio. */
+financeRouter.get('/reports/comparison', (req, res) => {
+  const month = monthSchema.safeParse(req.query.month ?? currentMonth());
+  if (!month.success) {
+    res.status(400).json({ error: month.error.issues[0].message });
+    return;
+  }
+  const lookback = Math.min(Math.max(Number(req.query.lookback ?? 3) || 3, 1), 12);
+  res.json(compareMonths(req.household!.id, month.data, lookback));
+});
 
 financeRouter.get('/reports/monthly', (req, res) => {
   const months = Math.min(Number(req.query.months ?? 12) || 12, 36);
@@ -167,11 +312,17 @@ financeRouter.get('/reports/monthly', (req, res) => {
 
 financeRouter.get('/reports/by-category', (req, res) => {
   const month = req.query.month as string | undefined;
+  const scope = req.query.scope as string | undefined;
   const params: unknown[] = [req.household!.id];
   let filter = '';
   if (month) {
-    filter = 'AND t.occurred_on LIKE ?';
+    filter += ' AND t.occurred_on LIKE ?';
     params.push(`${month}-%`);
+  }
+  // Sin filtro se ven todos; las vistas del hogar piden explícitamente 'comun'.
+  if (scope === 'comun' || scope === 'personal') {
+    filter += ' AND t.scope = ?';
+    params.push(scope);
   }
 
   const rows = db

@@ -37,6 +37,23 @@ que cada uno aporta en su misma proporción. No cuenta como gasto: se acumula en
 la cuenta del hogar como reserva para imprevistos, y la app muestra cuántos
 meses de gastos cubre.
 
+**Presupuesto por categoría.** Un tope mensual por categoría, con aviso al
+llegar al 80% y cuando se pasa. La barra marca por dónde va el mes, para
+distinguir "gastamos el 60%" el día 10 de gastarlo el día 28.
+
+**Metas de ahorro.** Metas con monto y fecha, que se financian desde el fondo de
+reserva **por orden de prioridad**: la primera se completa antes de que la
+siguiente reciba un peso. Repartir la misma bolsa entre todas a la vez daría a
+entender que hay más plata de la que hay. Con fecha, calcula cuánto apartar cada
+mes.
+
+**Comparación entre meses.** En qué categorías subió y bajó el gasto respecto
+del mes anterior y del promedio, ordenado por impacto.
+
+> Presupuestos, metas y comparaciones miran **sólo los gastos comunes**. Lo que
+> cada uno gasta por su cuenta queda registrado pero fuera del análisis del
+> hogar.
+
 **Lectura de Gmail.** Conectas la cuenta donde llegan los avisos del banco y la
 app los convierte en movimientos: monto, comercio, fecha y últimos 4 dígitos de
 la tarjeta. El acceso es de **sólo lectura** y sólo toca los correos que calzan

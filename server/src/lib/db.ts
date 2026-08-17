@@ -129,6 +129,33 @@ CREATE TABLE IF NOT EXISTS gmail_accounts (
   UNIQUE (household_id, email)
 );
 
+-- Presupuesto por categoría. month NULL = presupuesto base, vale todos los meses;
+-- una fila con mes concreto lo reemplaza sólo para ese mes.
+CREATE TABLE IF NOT EXISTS budgets (
+  id           TEXT PRIMARY KEY,
+  household_id TEXT NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+  category_id  TEXT NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+  month        TEXT,
+  amount       REAL NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_budget_base
+  ON budgets (household_id, category_id) WHERE month IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_budget_month
+  ON budgets (household_id, category_id, month) WHERE month IS NOT NULL;
+
+-- Metas de ahorro. Se financian desde el fondo de reserva por orden de prioridad.
+CREATE TABLE IF NOT EXISTS savings_goals (
+  id           TEXT PRIMARY KEY,
+  household_id TEXT NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+  name         TEXT NOT NULL,
+  target_amount REAL NOT NULL,
+  target_date  TEXT,
+  priority     INTEGER NOT NULL DEFAULT 100,
+  achieved_at  TEXT,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- Cierre de mes: deja congelado quién le debía a quién.
 CREATE TABLE IF NOT EXISTS settlements (
   household_id TEXT NOT NULL REFERENCES households(id) ON DELETE CASCADE,
