@@ -3,6 +3,8 @@ import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { db, uid } from '../lib/db.js';
 import { clearToken, issueToken, requireAuth } from '../lib/auth.js';
+import { env } from '../lib/env.js';
+import { rateLimit } from '../lib/rateLimit.js';
 import { joinByCode } from './household.js';
 
 export const authRouter = Router();
@@ -18,13 +20,45 @@ const registration = credentials.extend({
   inviteCode: z.string().min(4).max(12).optional(),
 });
 
-authRouter.post('/register', (req, res) => {
+/**
+ * Cupos separados y generosos: para un hogar de dos personas lo que importa es
+ * frenar la fuerza bruta, no castigar a quien se equivoca de contraseña.
+ */
+const loginLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 12,
+  message: 'Demasiados intentos fallidos.',
+  refundOnSuccess: true,
+});
+
+const registerLimit = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 6,
+  message: 'Demasiados registros desde esta conexión.',
+});
+
+authRouter.post('/register', registerLimit, (req, res) => {
   const parsed = registration.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.issues[0].message });
     return;
   }
   const { email, password, inviteCode } = parsed.data;
+
+  // En un servidor público conviene cerrar el registro una vez que ambos entraron.
+  if (env.signupMode === 'closed') {
+    res.status(403).json({ error: 'El registro está cerrado en este servidor.' });
+    return;
+  }
+  if (env.signupMode === 'invite' && !inviteCode) {
+    // Excepción de arranque: en una instalación recién desplegada no existe
+    // ningún código todavía, así que la primera cuenta se permite sin él.
+    const empty = !db.prepare('SELECT 1 FROM users LIMIT 1').get();
+    if (!empty) {
+      res.status(403).json({ error: 'Este servidor sólo acepta registros con un código de invitación.' });
+      return;
+    }
+  }
   const name = parsed.data.name?.trim() || email.split('@')[0];
   const normalized = email.toLowerCase().trim();
 
@@ -64,7 +98,7 @@ authRouter.post('/register', (req, res) => {
   res.status(201).json({ user, joined });
 });
 
-authRouter.post('/login', (req, res) => {
+authRouter.post('/login', loginLimit, (req, res) => {
   const parsed = credentials.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.issues[0].message });

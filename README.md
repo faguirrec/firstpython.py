@@ -182,9 +182,9 @@ Consejos:
 2. Toca **Compartir** → **Agregar a pantalla de inicio**.
 3. Queda con su icono, a pantalla completa y sin barra del navegador.
 
-Para que funcione fuera de la casa hay que publicarla en un servidor con HTTPS
-(Fly.io, Railway, Render, un VPS con Caddy). En local, ambos teléfonos deben
-estar en la misma red Wi-Fi y hay que apuntar a la IP del computador.
+En la red de la casa basta con apuntar a la IP del computador. Para usarla
+desde cualquier lado hace falta HTTPS: los pasos están en **[DEPLOY.md](DEPLOY.md)**,
+con `Dockerfile` y `fly.toml` ya incluidos en el repositorio.
 
 ## Estructura
 

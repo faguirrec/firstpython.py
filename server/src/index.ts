@@ -13,6 +13,10 @@ import { gmailRouter } from './routes/gmail.js';
 
 const app = express();
 
+// Necesario detrás del proxy de Fly.io / Render / un túnel: sin esto req.ip es
+// la del proxy y req.protocol siempre 'http', y las cookies seguras se rompen.
+if (env.trustProxy) app.set('trust proxy', 1);
+
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
 app.use(cors({ origin: env.webOrigin, credentials: true }));

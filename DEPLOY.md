@@ -1,0 +1,215 @@
+# Publicar la app para usarla desde el iPhone
+
+Para que funcione fuera de la casa hacen falta tres cosas: que esté **siempre
+encendida**, que tenga **HTTPS** (el iPhone no instala una PWA sin eso, y Google
+no autoriza Gmail sobre HTTP), y que los datos **no se pierdan** al actualizar.
+
+## Qué opción elegir
+
+**Recomendada: Fly.io.** Corre en un servidor de verdad, en Santiago, con HTTPS
+y dominio propio incluidos. Se actualiza con un comando. No depende de que tu
+computador esté encendido. Cuesta unos pocos dólares al mes y pide tarjeta.
+
+**Alternativa rápida: un túnel desde tu computador.** Gratis, los datos nunca
+salen de tu casa, y sirve para probarlo hoy mismo desde el iPhone. El costo es
+que si apagas el computador, la app se cae.
+
+Si quieren usarla todos los meses en serio, Fly.io. Si quieren probar esta
+semana antes de decidir, el túnel.
+
+---
+
+## Opción A — Fly.io
+
+### 1. Instalar la herramienta
+
+En PowerShell:
+
+```powershell
+iwr https://fly.io/install.ps1 -useb | iex
+```
+
+Cierra y abre PowerShell. Después crea tu cuenta:
+
+```powershell
+fly auth signup
+```
+
+### 2. Elegir un nombre
+
+El nombre pasa a ser tu dirección: `https://TU-NOMBRE.fly.dev`. Elige algo poco
+adivinable — es una app con tus finanzas y no queremos que la encuentren por
+casualidad. Por ejemplo `cuentas-hogar-a7k2`.
+
+Ábre `fly.toml` y cambia la primera línea:
+
+```toml
+app = "cuentas-hogar-a7k2"
+```
+
+### 3. Crear la app y el disco
+
+```powershell
+cd $HOME\Documents\firstpython.py
+fly launch --no-deploy --copy-config --name cuentas-hogar-a7k2 --region scl
+fly volumes create datos --size 1 --region scl
+```
+
+El volumen es donde vive la base de datos. **Sin él, cada actualización borraría
+todos los movimientos.**
+
+### 4. Configurar los secretos
+
+Genera una clave larga para firmar las sesiones:
+
+```powershell
+$clave = -join ((1..32) | ForEach-Object { '{0:x2}' -f (Get-Random -Maximum 256) })
+fly secrets set JWT_SECRET=$clave
+fly secrets set WEB_ORIGIN=https://cuentas-hogar-a7k2.fly.dev
+```
+
+### 5. Desplegar
+
+```powershell
+fly deploy
+fly scale count 1
+```
+
+`fly scale count 1` es importante: con SQLite tiene que haber **una sola**
+máquina, o cada una tendría su propia copia de los datos.
+
+Listo. Abre `https://cuentas-hogar-a7k2.fly.dev`.
+
+### 6. Crear las dos cuentas y cerrar la puerta
+
+`fly.toml` viene con `ALLOW_SIGNUP = "invite"`, lo que significa:
+
+- La **primera** cuenta se puede crear sin código, porque la base está vacía.
+- De ahí en adelante hace falta un código de invitación.
+
+Entonces: crea tu cuenta, crea el hogar, comparte el QR con tu señora, y cuando
+ella ya esté adentro, cierra el registro del todo:
+
+```powershell
+fly secrets set ALLOW_SIGNUP=closed
+```
+
+Desde ese momento nadie más puede crear una cuenta en tu servidor, aunque
+encuentre la dirección.
+
+### 7. Actualizar más adelante
+
+```powershell
+git pull
+fly deploy
+```
+
+Los datos quedan intactos: viven en el volumen, no en la imagen.
+
+### 8. Respaldar la base
+
+Vale la pena hacerlo de vez en cuando:
+
+```powershell
+fly ssh console -C "cat /data/hogar.db" > respaldo-hogar.db
+```
+
+---
+
+## Opción B — Túnel desde tu computador
+
+Deja la app corriendo en tu PC como hasta ahora, y Cloudflare le pone una
+dirección HTTPS pública.
+
+### 1. Instalar cloudflared
+
+```powershell
+winget install --id Cloudflare.cloudflared
+```
+
+### 2. Levantar la app y el túnel
+
+En una ventana, la app:
+
+```powershell
+cd $HOME\Documents\firstpython.py
+.\start.ps1
+```
+
+En **otra** ventana, el túnel:
+
+```powershell
+cloudflared tunnel --url http://localhost:4000
+```
+
+Te devuelve una dirección tipo `https://algo-random.trycloudflare.com`. Esa
+funciona desde cualquier lado, con HTTPS.
+
+### 3. Avisarle a la app cuál es su dirección
+
+En `server\.env` agrega la línea, con **tu** dirección:
+
+```env
+WEB_ORIGIN=https://algo-random.trycloudflare.com
+ALLOW_SIGNUP=invite
+```
+
+Y reinicia la app.
+
+**Ojo:** con `cloudflared tunnel --url` la dirección cambia cada vez que
+reinicias el túnel, así que hay que actualizar `WEB_ORIGIN` y la configuración
+de Google cada vez. Para algo permanente conviene un túnel con nombre (requiere
+un dominio propio en Cloudflare) o directamente la opción A.
+
+---
+
+## Gmail en producción
+
+Cuando la app tenga su dirección definitiva, hay que decírselo a Google:
+
+1. En [Google Cloud Console](https://console.cloud.google.com/) → Credenciales →
+   tu ID de cliente OAuth.
+2. En *URI de redirección autorizados* agrega:
+   `https://TU-DIRECCION/api/gmail/callback`
+3. En Fly: `fly secrets set GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=... GOOGLE_REDIRECT_URI=https://TU-DIRECCION/api/gmail/callback`
+
+Recuerda que mientras la pantalla de consentimiento esté en modo *Prueba*, Google
+caduca el permiso cada 7 días y hay que reconectar la cuenta. Para dejarlo
+permanente hay que publicarla, y al ser un permiso sensible pasa por una
+verificación de Google.
+
+---
+
+## Instalar en el iPhone
+
+Con la app ya en HTTPS, en **cada** teléfono:
+
+1. Abre la dirección en **Safari** (Chrome en iOS no ofrece instalar).
+2. Toca **Compartir** → **Agregar a pantalla de inicio**.
+3. Queda con su icono, a pantalla completa y sin barra del navegador.
+
+Recién ahí funciona el service worker, así que la app abre incluso con mala
+señal (los datos siempre se piden a la red; lo que queda guardado es la interfaz).
+
+## ¿Y una app de la App Store?
+
+No vale la pena para dos personas. Necesitarías un Mac, la cuenta de
+desarrollador de Apple (99 dólares al año) y pasar por revisión cada
+actualización. La PWA instalada se ve y se usa igual: icono propio, pantalla
+completa, y se actualiza sola cuando despliegas.
+
+---
+
+## Seguridad, en corto
+
+La app queda expuesta a internet, así que:
+
+- **Cierra el registro** (`ALLOW_SIGNUP=closed`) apenas ambos tengan cuenta.
+- Usa un nombre de app poco adivinable.
+- Contraseñas largas y distintas de las del banco.
+- `JWT_SECRET` largo y aleatorio, nunca el del ejemplo.
+- La base contiene tus movimientos y el permiso de Gmail: respáldala, y no la
+  subas nunca al repositorio.
+
+El login ya viene con límite de intentos, las contraseñas se guardan con bcrypt,
+las sesiones van en cookies `httpOnly` y el permiso de Gmail es de sólo lectura.

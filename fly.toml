@@ -1,0 +1,48 @@
+# Configuración para Fly.io. Cambia `app` por el nombre que elijas: pasa a ser
+# tu dirección, https://<app>.fly.dev
+#
+#   fly launch --no-deploy --copy-config
+#   fly volumes create datos --size 1 --region scl
+#   fly secrets set JWT_SECRET=... GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=...
+#   fly deploy
+
+app = "cuentas-hogar"
+primary_region = "scl"   # Santiago de Chile
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+  DB_PATH = "/data/hogar.db"
+  # Una vez que ambos tengan cuenta, cámbialo a "closed" y vuelve a desplegar.
+  ALLOW_SIGNUP = "invite"
+
+# La base SQLite vive acá: sin este volumen se perdería en cada despliegue.
+[[mounts]]
+  source = "datos"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  # Con una sola máquina la base nunca se parte en dos copias. No subir de 1.
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 40
+    hard_limit = 80
+
+[[http_service.checks]]
+  interval = "30s"
+  timeout = "5s"
+  grace_period = "10s"
+  method = "GET"
+  path = "/api/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
