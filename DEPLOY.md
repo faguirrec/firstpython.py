@@ -219,6 +219,80 @@ un dominio propio en Cloudflare) o directamente la opción A.
 
 ---
 
+## Usar tu propio dominio .cl
+
+Se puede, y queda mejor que la dirección `.fly.dev`: `https://casa.tudominio.cl`.
+
+### 1. Comprar el dominio
+
+En [nic.cl](https://www.nic.cl), que es el registrador oficial de los `.cl`.
+Cuesta del orden de 10.000 pesos al año. Cualquiera puede registrar uno, no hace
+falta empresa.
+
+### 2. Usa un subdominio, no el dominio pelado
+
+Esto te ahorra plata. Un subdominio (`casa.tudominio.cl`) se apunta con un
+registro CNAME y funciona con la IP compartida de Fly, que va incluida. El
+dominio pelado (`tudominio.cl`) no admite CNAME, necesita una IP dedicada, y esa
+sí se cobra aparte.
+
+### 3. Pedirle el certificado a Fly
+
+```powershell
+fly certs add casa.tudominio.cl
+```
+
+Te va a responder qué registro DNS crear. Es un CNAME:
+
+| Tipo | Nombre | Valor |
+|---|---|---|
+| CNAME | `casa` | `cuentas-hogar-a7k2.fly.dev` |
+
+### 4. Crear ese registro en NIC Chile
+
+En el panel de nic.cl, sección de DNS de tu dominio, agrega el CNAME de arriba.
+Puede demorar entre unos minutos y algunas horas en propagarse.
+
+### 5. Confirmar
+
+```powershell
+fly certs show casa.tudominio.cl
+```
+
+Cuando diga que el certificado está emitido, ya está: `https://casa.tudominio.cl`
+con HTTPS válido, gratis y renovado solo.
+
+### 6. Avisarle a la app y a Google
+
+```powershell
+fly secrets set WEB_ORIGIN=https://casa.tudominio.cl
+```
+
+Y en Google Cloud, agrega `https://casa.tudominio.cl/api/gmail/callback` a los
+URI de redirección autorizados.
+
+---
+
+## Llevar los datos que ya cargaste
+
+Si alcanzaste a cargar movimientos reales en tu computador, se pueden subir. La
+base es un solo archivo.
+
+Con la app **detenida** en producción para que nadie escriba mientras tanto:
+
+```powershell
+fly ssh sftp shell
+```
+
+Y dentro de esa consola:
+
+```
+put server/data/hogar.db /data/hogar.db
+```
+
+Si todavía no cargaste casi nada, es más simple partir de cero en producción y
+dejar la base local como estaba.
+
 ## Gmail en producción
 
 Cuando la app tenga su dirección definitiva, hay que decírselo a Google:
