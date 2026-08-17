@@ -11,6 +11,9 @@ services:
     name: cuentas-hogar
     runtime: docker
     dockerfilePath: ./Dockerfile
+    # Rama que se publica. Sin esto, Render toma la rama por defecto del
+    # repositorio, que no es donde está el código de la app.
+    branch: claude/shared-expense-management-app-5yyoxu
     # El plan gratuito no admite disco persistente y apaga el servicio al rato:
     # los datos se perderían. Éste es el más barato que sirve de verdad.
     plan: starter
