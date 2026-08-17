@@ -1,5 +1,13 @@
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
 import { useSession } from './lib/session';
+import {
+  IconoAjustes,
+  IconoAnalisis,
+  IconoMovimientos,
+  IconoReparto,
+  IconoResumen,
+  Logo,
+} from './components/Icons';
 import Acceso from './pages/Acceso';
 import Hogar from './pages/Hogar';
 import Resumen from './pages/Resumen';
@@ -9,11 +17,11 @@ import Reportes from './pages/Reportes';
 import Ajustes from './pages/Ajustes';
 
 const TABS = [
-  { to: '/', glyph: '◈', label: 'Resumen', end: true },
-  { to: '/movimientos', glyph: '≡', label: 'Movimientos', end: false },
-  { to: '/liquidacion', glyph: '⇄', label: 'Reparto', end: false },
-  { to: '/reportes', glyph: '▤', label: 'Análisis', end: false },
-  { to: '/ajustes', glyph: '⚙', label: 'Ajustes', end: false },
+  { to: '/', Icono: IconoResumen, label: 'Resumen', end: true },
+  { to: '/movimientos', Icono: IconoMovimientos, label: 'Movimientos', end: false },
+  { to: '/liquidacion', Icono: IconoReparto, label: 'Reparto', end: false },
+  { to: '/reportes', Icono: IconoAnalisis, label: 'Análisis', end: false },
+  { to: '/ajustes', Icono: IconoAjustes, label: 'Ajustes', end: false },
 ];
 
 export default function App() {
@@ -22,7 +30,10 @@ export default function App() {
   if (loading) {
     return (
       <div className="app">
-        <p className="muted">Cargando…</p>
+        <div style={{ display: 'grid', placeItems: 'center', paddingTop: '28vh', gap: 14 }}>
+          <Logo size={56} />
+          <span className="muted">Cargando tus cuentas…</span>
+        </div>
       </div>
     );
   }
@@ -61,10 +72,10 @@ export default function App() {
       </div>
 
       <nav className="tabbar">
-        {TABS.map((tab) => (
-          <NavLink key={tab.to} to={tab.to} end={tab.end} className={({ isActive }) => (isActive ? 'active' : '')}>
-            <span className="glyph" aria-hidden="true">{tab.glyph}</span>
-            <span>{tab.label}</span>
+        {TABS.map(({ to, Icono, label, end }) => (
+          <NavLink key={to} to={to} end={end} className={({ isActive }) => (isActive ? 'active' : '')}>
+            <Icono size={21} />
+            <span>{label}</span>
           </NavLink>
         ))}
       </nav>

@@ -22,8 +22,23 @@
   --warning: #fab219;
   --critical: #d03b3b;
 
-  --radius: 14px;
+  --marca: #2a78d6;
+
+  --radius: 16px;
+  --radius-sm: 10px;
   --shadow: 0 1px 2px rgba(11, 11, 11, 0.06), 0 8px 24px rgba(11, 11, 11, 0.04);
+
+  /* Escala tipográfica. Las cifras llevan tamaños propios: en una app de plata,
+     el número es el contenido y necesita jerarquía propia. */
+  --t-micro: 0.72rem;
+  --t-menor: 0.8rem;
+  --t-base: 0.92rem;
+  --t-mayor: 1.05rem;
+  --cifra-sm: 1.15rem;
+  --cifra-md: 1.6rem;
+  --cifra-lg: 2.2rem;
+
+  --transicion: 160ms cubic-bezier(0.2, 0, 0.2, 1);
 
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
   -webkit-text-size-adjust: 100%;
@@ -84,7 +99,9 @@ body {
 }
 
 h1, h2, h3 { line-height: 1.2; margin: 0; }
-h1 { font-size: 1.4rem; }
+/* clamp evita que el nombre del hogar, si es largo, empuje el botón de la
+   cabecera a otra línea en pantallas angostas. */
+h1 { font-size: clamp(1.15rem, 5.2vw, 1.4rem); letter-spacing: -0.02em; }
 h2 { font-size: 1.08rem; }
 h3 { font-size: 0.95rem; }
 
@@ -127,19 +144,21 @@ a { color: var(--series-1); }
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 3px;
   padding: 6px 2px;
-  border-radius: 10px;
-  font-size: 0.68rem;
+  border-radius: var(--radius-sm);
+  font-size: var(--t-micro);
   color: var(--text-muted);
   text-decoration: none;
   /* 44px es el mínimo táctil cómodo en iOS. */
-  min-height: 44px;
+  min-height: 46px;
   justify-content: center;
+  transition: color var(--transicion), background-color var(--transicion);
 }
 
-.tabbar a.active { color: var(--series-1); background: color-mix(in srgb, var(--series-1) 10%, transparent); }
-.tabbar .glyph { font-size: 1.15rem; line-height: 1; }
+.tabbar a.active { color: var(--marca); background: color-mix(in srgb, var(--marca) 10%, transparent); }
+.tabbar a.active svg { stroke-width: 2.1; }
+.tabbar a:active { transform: scale(0.94); }
 
 /* ------------------------------- Piezas -------------------------------- */
 
@@ -163,9 +182,68 @@ a { color: var(--series-1); }
 }
 
 .hero {
-  font-size: 2rem;
+  font-size: var(--cifra-lg);
   font-weight: 650;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.025em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+/* La tarjeta que responde "¿cómo vamos?" de un vistazo. Es la única con este
+   peso visual en la pantalla: si todo destaca, nada destaca. */
+.card.principal {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--marca) 7%, var(--surface-1)), var(--surface-1));
+  border-color: color-mix(in srgb, var(--marca) 22%, transparent);
+}
+
+.cifra-md { font-size: var(--cifra-md); font-weight: 640; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.cifra-sm { font-size: var(--cifra-sm); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* -------------------------- Estados vacíos y carga ------------------------ */
+
+.vacio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+  padding: 26px 16px;
+}
+
+.vacio-icono {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--marca) 12%, transparent);
+  color: var(--marca);
+  margin-bottom: 4px;
+}
+
+.vacio strong { font-size: var(--t-mayor); }
+.vacio p { margin: 0; color: var(--text-secondary); font-size: var(--t-menor); max-width: 34ch; }
+.vacio button { margin-top: 6px; }
+
+.hueso {
+  display: block;
+  background: linear-gradient(90deg, var(--grid) 25%, color-mix(in srgb, var(--grid) 45%, var(--surface-1)) 50%, var(--grid) 75%);
+  background-size: 200% 100%;
+  animation: brillo 1.4s ease-in-out infinite;
+}
+
+@keyframes brillo {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+/* Nadie debería marearse por una animación decorativa. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 .label { font-size: 0.78rem; color: var(--text-secondary); }
@@ -224,14 +302,24 @@ label.field > span { display: block; font-size: 0.78rem; color: var(--text-secon
 
 button {
   padding: 10px 14px;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--surface-1);
   cursor: pointer;
   min-height: 44px;
+  transition: transform var(--transicion), background-color var(--transicion), opacity var(--transicion);
 }
 
-button.primary { background: var(--series-1); border-color: transparent; color: #fff; font-weight: 560; }
+/* Respuesta al toque: en el teléfono no hay hover, así que el feedback tiene
+   que estar al presionar. */
+button:active:not(:disabled) { transform: scale(0.97); }
+
+@media (hover: hover) {
+  button:hover:not(:disabled) { background: color-mix(in srgb, var(--text-primary) 5%, var(--surface-1)); }
+  button.primary:hover:not(:disabled) { background: color-mix(in srgb, #000 8%, var(--marca)); }
+}
+
+button.primary { background: var(--marca); border-color: transparent; color: #fff; font-weight: 560; }
 button.ghost { background: transparent; }
 button.danger { color: var(--critical); }
 button.small { min-height: 34px; padding: 5px 10px; font-size: 0.82rem; }
@@ -278,7 +366,12 @@ button:disabled { opacity: 0.55; cursor: default; }
 .item .meta {
   font-size: 0.75rem;
   color: var(--text-muted);
-  /* Consultas de Gmail y notas largas se recortan en vez de empujar los botones. */
+}
+
+/* Recorte a una línea, sólo donde el texto es un dato técnico —una consulta de
+   Gmail, por ejemplo— y alargarse empujaría los botones. En texto que el
+   usuario lee, cortar a mitad de frase es peor que ocupar dos líneas. */
+.item .meta.una-linea {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

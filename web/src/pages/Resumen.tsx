@@ -6,6 +6,8 @@ import { currentMonth, dayLabel, money, monthLabel, percent } from '../lib/forma
 import { CategoryBars, SplitBar, type CategorySlice } from '../components/Charts';
 import MonthNav from '../components/MonthNav';
 import NuevoMovimiento from '../components/NuevoMovimiento';
+import { IconoAlerta, IconoBolsillo, IconoMas } from '../components/Icons';
+import { TarjetaCargando, Vacio } from '../components/Estados';
 
 export default function Resumen() {
   const { user, household } = useSession();
@@ -52,37 +54,51 @@ export default function Resumen() {
           <h1>{household?.name}</h1>
           <div className="sub">{monthLabel(month)}</div>
         </div>
-        <button className="primary small" onClick={() => setAdding(true)}>+ Movimiento</button>
+        <button
+          className="primary small"
+          onClick={() => setAdding(true)}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}
+        >
+          <IconoMas size={16} /> Movimiento
+        </button>
       </div>
 
       <MonthNav month={month} onChange={setMonth} />
 
       {error && <div className="error">{error}</div>}
 
-      {pending > 0 && (
-        <div className="card" style={{ borderColor: 'color-mix(in srgb, var(--warning) 55%, transparent)' }}>
-          <div className="row">
-            <div>
-              <strong>⚠ {pending} movimiento{pending === 1 ? '' : 's'} por revisar</strong>
-              <div className="muted">Importados desde Gmail. Conviene confirmar categoría y si son comunes.</div>
-            </div>
-            <Link to="/movimientos?pendientes=1"><button className="small">Revisar</button></Link>
-          </div>
-        </div>
-      )}
+      {!settlement && <TarjetaCargando conCifra filas={2} />}
 
-      <div className="card">
-        <div className="label">Gastos comunes del mes</div>
-        <div className="hero num">{money(settlement?.totalSharedExpenses ?? 0, currency)}</div>
-        {settlement && settlement.totalPersonalExpenses > 0 && (
-          <div className="muted">
-            + {money(settlement.totalPersonalExpenses, currency)} en gastos personales (no se reparten)
-          </div>
+      {/* La pregunta que uno viene a responder: ¿estoy al día o debo? Va primero
+          y es la única tarjeta con este peso visual. */}
+      <div className="card principal">
+        {me ? (
+          <>
+            <div className="label">{me.deviation < -0.5 ? 'Te falta poner' : 'Vas al día'}</div>
+            <div
+              className="hero"
+              style={{ color: me.deviation < -0.5 ? 'var(--critical)' : 'var(--good-text)' }}
+            >
+              {money(Math.abs(me.deviation), currency)}
+            </div>
+            <div className="muted">
+              {me.deviation < -0.5
+                ? `De los ${money(me.fairShare, currency)} que te tocan este mes, llevas ${money(me.contributed, currency)}.`
+                : `Pusiste ${money(me.contributed, currency)} de los ${money(me.fairShare, currency)} que te tocaban.`}
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="label">Gastos comunes del mes</div>
+            <div className="hero">{money(settlement?.totalSharedExpenses ?? 0, currency)}</div>
+          </>
         )}
 
         {settlement && settlement.members.length > 0 && (
-          <div style={{ marginTop: 14 }}>
-            <div className="label" style={{ marginBottom: 6 }}>Reparto según sueldo</div>
+          <div style={{ marginTop: 16 }}>
+            <div className="label" style={{ marginBottom: 6 }}>
+              Reparto según sueldo · {money(settlement.totalSharedExpenses, currency)} en gastos comunes
+            </div>
             <SplitBar
               parts={settlement.members.map((m, i) => ({
                 name: m.name,
@@ -92,7 +108,28 @@ export default function Resumen() {
             />
           </div>
         )}
+
+        {settlement && settlement.totalPersonalExpenses > 0 && (
+          <div className="muted" style={{ marginTop: 10 }}>
+            Aparte, {money(settlement.totalPersonalExpenses, currency)} en gastos personales, que no se reparten.
+          </div>
+        )}
       </div>
+
+      {pending > 0 && (
+        <div className="card" style={{ borderColor: 'color-mix(in srgb, var(--warning) 55%, transparent)' }}>
+          <div className="row">
+            <span style={{ display: 'flex', gap: 10, alignItems: 'flex-start', minWidth: 0 }}>
+              <span style={{ color: 'var(--warning)', flex: 'none' }}><IconoAlerta size={20} /></span>
+              <span>
+                <strong>{pending} movimiento{pending === 1 ? '' : 's'} por revisar</strong>
+                <div className="muted">Importados desde Gmail. Conviene confirmar categoría y si son comunes.</div>
+              </span>
+            </span>
+            <Link to="/movimientos?pendientes=1"><button className="small">Revisar</button></Link>
+          </div>
+        </div>
+      )}
 
       {settlement && (
         <div className="card">
@@ -123,11 +160,9 @@ export default function Resumen() {
             })}
           </div>
 
-          {me && (
+          {settlement.transfer == null && settlement.members.length > 1 && (
             <p className="muted" style={{ marginBottom: 0, marginTop: 10 }}>
-              {me.deviation < -0.5
-                ? `Te falta poner ${money(-me.deviation, currency)} este mes.`
-                : `Vas al día: pusiste ${money(me.deviation, currency)} de más.`}
+              {settlement.note}
             </p>
           )}
         </div>
@@ -178,21 +213,35 @@ export default function Resumen() {
         </div>
       )}
 
-      <div className="card">
-        <div className="card-head">
-          <h2>En qué se fue</h2>
-          <Link to="/reportes" className="muted">Análisis →</Link>
+      {categories.length > 0 && (
+        <div className="card">
+          <div className="card-head">
+            <h2>En qué se fue</h2>
+            <Link to="/reportes" className="muted">Análisis →</Link>
+          </div>
+          <CategoryBars data={categories} currency={currency} limit={6} />
         </div>
-        <CategoryBars data={categories} currency={currency} limit={6} />
-      </div>
+      )}
 
       <div className="card">
         <div className="card-head">
           <h2>Últimos movimientos</h2>
           <Link to="/movimientos" className="muted">Ver todos →</Link>
         </div>
+        {recent.length === 0 && (
+          <Vacio
+            icono={<IconoBolsillo size={26} />}
+            titulo="Todavía no hay movimientos"
+            detalle="Anota el primer gasto común del mes, o conecta el correo del banco para que entren solos."
+            accion={
+              <button className="primary" onClick={() => setAdding(true)}>
+                Anotar un gasto
+              </button>
+            }
+          />
+        )}
+
         <div className="list">
-          {recent.length === 0 && <p className="muted">Sin movimientos este mes.</p>}
           {recent.map((t) => (
             <div className="item" key={t.id}>
               <i className="dot" style={{ background: t.categoryColor ?? 'var(--text-muted)' }} />

@@ -57,12 +57,24 @@ function encodePng(size, pixel) {
   ]);
 }
 
-/** Casa partida por la mitad: dos personas, un mismo hogar. */
+/**
+ * La marca: un techo y, debajo, dos columnas de distinta altura. Un hogar y dos
+ * aportes proporcionales, que es exactamente lo que hace la app.
+ * Debe coincidir con el componente Logo de src/components/Icons.tsx.
+ */
 function house(u, v) {
-  const roof = v >= 0.2 && v <= 0.47 && Math.abs(u - 0.5) <= (v - 0.2) * 1.28 + 0.02;
-  const body = v > 0.45 && v <= 0.8 && u >= 0.25 && u <= 0.75;
-  const split = Math.abs(u - 0.5) < 0.022 && v >= 0.2 && v <= 0.8;
-  return (roof || body) && !split;
+  // Techo: banda diagonal de grosor constante formando una uve invertida.
+  const distanciaAlTecho = Math.abs(v - (0.24 + Math.abs(u - 0.5) * 0.82));
+  const techo = distanciaAlTecho < 0.038 && u > 0.17 && u < 0.83 && v > 0.19 && v < 0.5;
+
+  // Columna izquierda, más baja.
+  const izquierda = u >= 0.33 && u <= 0.455 && v >= 0.56 && v <= 0.79;
+  // Columna derecha, más alta.
+  const derecha = u >= 0.545 && u <= 0.67 && v >= 0.47 && v <= 0.79;
+  // Suelo.
+  const suelo = v >= 0.79 && v <= 0.825 && u >= 0.25 && u <= 0.75;
+
+  return techo || izquierda || derecha || suelo;
 }
 
 function render(size, { rounded }) {

@@ -76,7 +76,7 @@ export default function AjustesReglas() {
             <div className="item" key={rule.id}>
               <div className="body">
                 <div className="title">{rule.name}</div>
-                <div className="meta" style={{ fontFamily: 'ui-monospace, monospace' }}>{rule.gmailQuery}</div>
+                <div className="meta una-linea" style={{ fontFamily: 'ui-monospace, monospace' }}>{rule.gmailQuery}</div>
                 <div className="meta">
                   {rule.type === 'aporte' ? 'crea aportes' : 'crea gastos'} · {rule.scope === 'comun' ? 'comunes' : 'personales'}
                 </div>

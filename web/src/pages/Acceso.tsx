@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useSession } from '../lib/session';
+import { Logo } from '../components/Icons';
 
 export default function Acceso() {
   const { refresh } = useSession();
@@ -63,11 +64,13 @@ export default function Acceso() {
 
   return (
     <div className="app">
-      <div style={{ height: 24 }} />
-      <h1>Cuentas del Hogar</h1>
-      <p className="muted" style={{ marginTop: 6, marginBottom: 18 }}>
-        Los gastos comunes repartidos según lo que gana cada uno.
-      </p>
+      <div style={{ display: 'grid', placeItems: 'center', gap: 12, padding: '32px 0 20px' }}>
+        <Logo size={68} />
+        <h1 style={{ textAlign: 'center' }}>Cuentas del Hogar</h1>
+        <p className="muted" style={{ margin: 0, textAlign: 'center', maxWidth: '30ch' }}>
+          Los gastos de la casa repartidos según lo que gana cada uno.
+        </p>
+      </div>
 
       {invite && (
         <div className="ok">

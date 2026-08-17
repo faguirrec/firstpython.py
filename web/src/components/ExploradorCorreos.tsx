@@ -97,8 +97,8 @@ export default function ExploradorCorreos({
               <div className="item" key={m.id}>
                 <div className="body">
                   <div className="title">{m.subject || '(sin asunto)'}</div>
-                  <div className="meta">{m.from}</div>
-                  <div className="meta">{m.snippet}</div>
+                  <div className="meta una-linea">{m.from}</div>
+                  <div className="meta una-linea">{m.snippet}</div>
                   {m.alreadyImported && <span className="pill good">ya importado</span>}
                 </div>
                 <div className="actions">
