@@ -1,0 +1,81 @@
+# Operaciones sobre la app publicada, sin necesidad de terminal propia.
+#
+# GitHub -> Actions -> "Operar la app" -> Run workflow -> elige la acción.
+
+name: Operar la app
+
+on:
+  workflow_dispatch:
+    inputs:
+      accion:
+        description: 'Qué hacer'
+        required: true
+        type: choice
+        options:
+          - ver-registros
+          - ver-estado
+          - cerrar-registro-de-cuentas
+          - abrir-registro-con-invitacion
+          - respaldar-base-de-datos
+          - reiniciar
+
+jobs:
+  operar:
+    runs-on: ubuntu-latest
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Leer el nombre de la app
+        id: app
+        run: |
+          APP=$(grep -m1 '^app = ' fly.toml | sed 's/app = "\(.*\)"/\1/')
+          if [ -z "$APP" ] || [ "$APP" = "cuentas-hogar" ]; then
+            echo "::error::fly.toml todavía no tiene tu app. Ejecuta primero 'Publicar por primera vez'."
+            exit 1
+          fi
+          echo "nombre=$APP" >> "$GITHUB_OUTPUT"
+
+      - name: Ejecutar
+        env:
+          APP: ${{ steps.app.outputs.nombre }}
+        run: |
+          case "${{ inputs.accion }}" in
+            ver-registros)
+              # Los registros son un flujo continuo: se corta tras unos segundos.
+              timeout 45 flyctl logs --app "$APP" --no-tail || true
+              ;;
+            ver-estado)
+              flyctl status --app "$APP"
+              echo ""
+              flyctl volumes list --app "$APP"
+              echo ""
+              flyctl secrets list --app "$APP"
+              ;;
+            cerrar-registro-de-cuentas)
+              flyctl secrets set ALLOW_SIGNUP=closed --app "$APP"
+              echo "Listo: nadie más puede crear una cuenta."
+              ;;
+            abrir-registro-con-invitacion)
+              flyctl secrets set ALLOW_SIGNUP=invite --app "$APP"
+              echo "Listo: se puede crear cuenta sólo con un código de invitación."
+              ;;
+            respaldar-base-de-datos)
+              flyctl ssh console --app "$APP" -C "cat /data/hogar.db" > hogar.db
+              ls -la hogar.db
+              ;;
+            reiniciar)
+              flyctl apps restart "$APP"
+              ;;
+          esac
+
+      - name: Guardar el respaldo
+        if: inputs.accion == 'respaldar-base-de-datos'
+        uses: actions/upload-artifact@v4
+        with:
+          name: respaldo-hogar
+          path: hogar.db
+          retention-days: 30

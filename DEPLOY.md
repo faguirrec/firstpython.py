@@ -34,7 +34,65 @@ cuando confirmen que la usan. Migrar es copiar un archivo.
 
 ## Opción A — Fly.io
 
-### El camino corto: un comando
+### Sin terminal, todo desde el navegador
+
+Si tu computador tiene bloqueada la instalación de programas —típico en equipos
+de empresa— no necesitas terminal. El despliegue corre en los servidores de
+GitHub. Son cuatro pasos, todos con el mouse.
+
+**1. Crea tu cuenta en Fly.io**
+
+En [fly.io](https://fly.io). Pide una tarjeta para verificar la cuenta.
+
+**2. Crea un token de acceso**
+
+En [fly.io/dashboard](https://fly.io/dashboard) → tu organización → **Tokens** →
+crea uno de despliegue. Copia el valor completo, que empieza con `FlyV1 `.
+
+**3. Guarda el token en GitHub**
+
+En tu repositorio → **Settings** → **Secrets and variables** → **Actions** →
+**New repository secret**.
+
+- Nombre: `FLY_API_TOKEN`
+- Valor: el token que copiaste
+
+**4. Ejecuta la publicación**
+
+En tu repositorio → pestaña **Actions** → **Publicar por primera vez** → botón
+**Run workflow**. Te va a pedir:
+
+- **nombre_app**: será tu dirección, `https://NOMBRE.fly.dev`. Elige algo poco
+  adivinable, como `cuentas-hogar-a7k2`.
+- **region**: `scl` (Santiago).
+- **cerrar_registro**: déjalo en `no` la primera vez, o no podrás crear tu cuenta.
+
+Dale a **Run workflow** y espera unos minutos. Al terminar, el resumen te muestra
+la dirección de tu app.
+
+Desde ahí, cada cambio que se suba al repositorio se publica solo.
+
+### Operar la app sin terminal
+
+En **Actions** → **Operar la app** hay un flujo para lo del día a día:
+
+| Acción | Para qué |
+|---|---|
+| `ver-registros` | Qué está pasando cuando algo falla |
+| `ver-estado` | Si la máquina, el disco y los secretos están bien |
+| `cerrar-registro-de-cuentas` | Cuando ambos ya tienen cuenta |
+| `abrir-registro-con-invitacion` | Volver a permitir registro con código |
+| `respaldar-base-de-datos` | Descarga la base como archivo adjunto |
+| `reiniciar` | Cuando queda pegada |
+
+### Si prefieres una terminal de verdad
+
+**GitHub Codespaces** te da una máquina Linux completa dentro del navegador, con
+terminal, sin instalar nada en tu computador. En tu repositorio → botón verde
+**Code** → pestaña **Codespaces** → **Create codespace**. Adentro corres los
+comandos de `flyctl` como si fuera tu máquina. Tiene horas gratis al mes.
+
+### El camino corto desde tu propia terminal: un comando
 
 `deploy.ps1` hace todo lo automatizable: instala flyctl, crea la app y el disco,
 genera los secretos, publica y deja una sola máquina corriendo.

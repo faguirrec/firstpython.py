@@ -1,0 +1,143 @@
+# Publica la app por primera vez desde los servidores de GitHub.
+#
+# Pensado para cuando no se puede usar la terminal del computador propio: crea
+# la app y el disco, genera los secretos, publica y comprueba que responda, todo
+# sin instalar nada localmente.
+#
+# Se ejecuta a mano desde: GitHub -> Actions -> "Publicar por primera vez" -> Run workflow
+
+name: Publicar por primera vez
+
+on:
+  workflow_dispatch:
+    inputs:
+      nombre_app:
+        description: 'Nombre de la app (será tu dirección: https://NOMBRE.fly.dev). Sólo minúsculas, números y guiones. Elige algo poco adivinable.'
+        required: true
+      region:
+        description: 'Región del servidor'
+        required: true
+        default: scl
+        type: choice
+        options: [scl, gru, mia, iad, lax]
+      cerrar_registro:
+        description: '¿Cerrar el registro de cuentas nuevas? Déjalo en "no" la primera vez, o no podrás crear la tuya.'
+        required: true
+        default: 'no'
+        type: choice
+        options: ['no', 'si']
+
+# Necesario para guardar el nombre de la app en fly.toml.
+permissions:
+  contents: write
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: despliegue-produccion
+      cancel-in-progress: false
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      APP: ${{ inputs.nombre_app }}
+      REGION: ${{ inputs.region }}
+
+    steps:
+      - name: Revisar que el token esté configurado
+        run: |
+          if [ -z "$FLY_API_TOKEN" ]; then
+            echo "::error::Falta el secreto FLY_API_TOKEN. Créalo en Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+          if ! printf '%s' "$APP" | grep -qE '^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$'; then
+            echo "::error::El nombre '$APP' no sirve. Sólo minúsculas, números y guiones, entre 3 y 30 caracteres, sin empezar ni terminar en guión."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Crear la app
+        run: |
+          if flyctl status --app "$APP" > /dev/null 2>&1; then
+            echo "La app ya existía, se reutiliza."
+          else
+            flyctl apps create "$APP" || {
+              echo "::error::No se pudo crear '$APP'. Lo más probable es que el nombre ya esté tomado: vuelve a ejecutar con otro."
+              exit 1
+            }
+          fi
+
+      - name: Guardar el nombre en fly.toml
+        run: |
+          sed -i "s|^app = .*|app = \"$APP\"|" fly.toml
+          sed -i "s|^primary_region = .*|primary_region = \"$REGION\"|" fly.toml
+          if ! git diff --quiet fly.toml; then
+            git config user.name 'github-actions[bot]'
+            git config user.email 'github-actions[bot]@users.noreply.github.com'
+            git add fly.toml
+            # [skip ci] evita que este commit dispare otro despliegue en cadena.
+            git commit -m "Fijar la app de Fly.io en fly.toml [skip ci]"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
+
+      - name: Crear el disco de datos
+        run: |
+          # Sin volumen, cada despliegue borraría todos los movimientos.
+          if flyctl volumes list --app "$APP" 2>/dev/null | grep -q datos; then
+            echo "El volumen ya existía, se conserva con sus datos."
+          else
+            flyctl volumes create datos --size 1 --region "$REGION" --app "$APP" --yes
+          fi
+
+      - name: Configurar los secretos
+        run: |
+          if flyctl secrets list --app "$APP" 2>/dev/null | grep -q JWT_SECRET; then
+            echo "JWT_SECRET ya existía; no se toca, cambiarlo cerraría las sesiones abiertas."
+          else
+            flyctl secrets set "JWT_SECRET=$(openssl rand -hex 32)" --app "$APP" --stage
+          fi
+          flyctl secrets set "WEB_ORIGIN=https://$APP.fly.dev" --app "$APP" --stage
+          if [ "${{ inputs.cerrar_registro }}" = "si" ]; then
+            flyctl secrets set "ALLOW_SIGNUP=closed" --app "$APP" --stage
+          fi
+
+      - name: Publicar
+        run: flyctl deploy --remote-only --app "$APP"
+
+      - name: Dejar una sola máquina
+        # Con SQLite, dos máquinas serían dos copias distintas de los datos.
+        run: flyctl scale count 1 --app "$APP" --yes
+
+      - name: Comprobar que responde
+        run: |
+          for intento in $(seq 1 15); do
+            sleep 5
+            if curl -sf "https://$APP.fly.dev/api/health"; then
+              echo ""
+              echo "La app responde."
+              exit 0
+            fi
+            echo "Intento $intento..."
+          done
+          echo "::error::Quedó publicada pero no respondió. Revisa los registros con el flujo 'Ver registros'."
+          exit 1
+
+      - name: Resumen
+        if: success()
+        run: |
+          {
+            echo "## Tu app está online"
+            echo ""
+            echo "### https://$APP.fly.dev"
+            echo ""
+            echo "Qué sigue, en orden:"
+            echo ""
+            echo "1. Abre esa dirección y **crea tu cuenta** (la primera no necesita código), y después el hogar."
+            echo "2. En **Ajustes → Hogar**, comparte el QR con la otra persona."
+            echo "3. Cuando ambos estén adentro, vuelve a ejecutar este flujo con **cerrar_registro = si**."
+            echo "4. En el iPhone: abre la dirección en Safari, toca Compartir y luego «Agregar a pantalla de inicio»."
+            echo ""
+            echo "De aquí en adelante, cada cambio en el repositorio se publica solo."
+          } >> "$GITHUB_STEP_SUMMARY"
