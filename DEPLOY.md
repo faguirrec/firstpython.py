@@ -399,6 +399,26 @@ un dominio propio en Cloudflare) o directamente la opción A o B.
 
 ---
 
+## Si el correo de verificación "no registra" tu clic
+
+Pasa con cualquiera de estos servicios cuando te registras con un correo
+corporativo. Los filtros de seguridad de la empresa (Defender, Proofpoint y
+similares) **abren cada enlace de cada correo entrante** para revisarlo. Los
+enlaces de verificación son de un solo uso, así que el escáner los quema antes
+de que llegues tú: haces clic y la plataforma no registra nada.
+
+La salida es no pasar por el correo de la empresa:
+
+1. Regístrate con un **correo personal** (Gmail, por ejemplo).
+2. Mejor todavía, hazlo **desde tu teléfono con datos móviles**, no desde el
+   computador de la empresa: así evitas de una el correo corporativo y la red
+   corporativa.
+3. Si la cuenta anterior quedó a medias, crea una nueva en vez de intentar
+   recuperarla.
+
+Vale la pena resolverlo en vez de cambiar de proveedor: el problema viaja
+contigo a cualquier plataforma que verifique por correo.
+
 ## Usar tu propio dominio .cl
 
 Se puede, y queda mejor que la dirección `.fly.dev`: `https://casa.tudominio.cl`.
