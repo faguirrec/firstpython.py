@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { api, type CambiosHogar, type Household, type Member } from '../lib/api';
 import { useSession } from '../lib/session';
 import Categorias from '../components/AjustesCategorias';
-import GmailPanel from '../components/AjustesGmail';
+import CorreoPanel from '../components/AjustesCorreo';
 import ReglasCorreo from '../components/AjustesReglas';
 import Invitacion from '../components/Invitacion';
 import Cabecera from '../components/Cabecera';
@@ -11,7 +11,7 @@ import Cabecera from '../components/Cabecera';
 const TABS = [
   { key: 'hogar', label: 'Hogar' },
   { key: 'categorias', label: 'Categorías' },
-  { key: 'gmail', label: 'Gmail' },
+  { key: 'gmail', label: 'Correo' },
   { key: 'reglas', label: 'Reglas de correo' },
 ] as const;
 
@@ -42,7 +42,7 @@ export default function Ajustes() {
 
       {tab === 'hogar' && <PanelHogar />}
       {tab === 'categorias' && <Categorias />}
-      {tab === 'gmail' && <GmailPanel />}
+      {tab === 'gmail' && <CorreoPanel />}
       {tab === 'reglas' && <ReglasCorreo />}
     </>
   );

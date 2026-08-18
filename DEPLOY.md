@@ -570,11 +570,13 @@ put server/data/hogar.db /data/hogar.db
 Si todavía no cargaste casi nada, es más simple partir de cero en producción y
 dejar la base local como estaba.
 
-## Gmail en producción
+## Leer el correo del banco en producción
 
-El paso a paso completo —con la consola de Google pantalla por pantalla, los
-errores típicos y qué hacer con ellos— está en **[GMAIL.md](GMAIL.md)**. Lo
-esencial:
+El paso a paso completo está en **[CORREO.md](CORREO.md)**, que cubre las dos
+formas de conectar el buzón. La recomendada —IMAP con una contraseña de
+aplicación— se configura entera desde la app y no necesita nada acá.
+
+Lo que sigue es para la otra, el permiso de Google:
 
 1. En [Google Cloud Console](https://console.cloud.google.com/) → Credenciales →
    tu ID de cliente OAuth.

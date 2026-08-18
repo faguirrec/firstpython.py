@@ -12,10 +12,11 @@ de código, sin App Store y sin cuenta de desarrollador de Apple.
 │ (navegador  │  /api  │  Express     │        │  hogar.db   │
 │  e iPhone)  │        │              │        └─────────────┘
 └─────────────┘        └──────┬───────┘
-                              │ OAuth2 sólo lectura
+                              │ IMAP (conexión abierta) u OAuth2
                               ▼
                        ┌──────────────┐
-                       │  Gmail API   │  avisos del banco → movimientos
+                       │ buzón del    │  avisos del banco → movimientos
+                       │ banco        │
                        └──────────────┘
 ```
 
@@ -54,10 +55,10 @@ del mes anterior y del promedio, ordenado por impacto.
 > cada uno gasta por su cuenta queda registrado pero fuera del análisis del
 > hogar.
 
-**Lectura de Gmail.** Conectas la cuenta donde llegan los avisos del banco y la
+**Lectura del correo del banco.** Conectas la cuenta donde llegan los avisos y la
 app los convierte en movimientos: monto, comercio, fecha y últimos 4 dígitos de
-la tarjeta. El acceso es de **sólo lectura** y sólo toca los correos que calzan
-con las reglas que definas.
+la tarjeta. Con la conexión abierta al buzón, entran **apenas llegan**. La app
+sólo lee, y sólo toca los correos que calzan con las reglas que definas.
 
 **Categorías y trazabilidad.** Cada movimiento entra categorizado según reglas
 por comercio ("jumbo|lider|unimarc" → Supermercado), y los reportes muestran la
@@ -135,11 +136,20 @@ Para producción, `npm run build` en `web/` deja los archivos en `web/dist` y el
 servidor los sirve solo: con `npm run build && npm start` en `server/` queda todo
 publicado en un único puerto.
 
-## Conectar Gmail
+## Leer el correo del banco
 
-Sin esto la app funciona igual, cargando los gastos a mano. El paso a paso
-detallado, con los errores típicos, está en **[GMAIL.md](GMAIL.md)**; acá va el
-resumen.
+Sin esto la app funciona igual, cargando los gastos a mano.
+
+Hay dos formas de darle acceso al buzón, y **[CORREO.md](CORREO.md)** las
+explica en detalle:
+
+- **IMAP con una contraseña de aplicación** — la recomendada. Se configura
+  entera desde la app, la credencial no caduca, y la app queda escuchando el
+  buzón: los gastos entran apenas llega el aviso.
+- **El permiso de Google (OAuth)** — sólo lectura de verdad, pero mientras la
+  app no esté verificada por Google el permiso caduca cada 7 días.
+
+El resto de esta sección es el resumen de la segunda.
 
 1. Entra a [Google Cloud Console](https://console.cloud.google.com/) y crea un
    proyecto.

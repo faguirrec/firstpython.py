@@ -133,6 +133,23 @@ CREATE TABLE IF NOT EXISTS gmail_accounts (
   UNIQUE (household_id, email)
 );
 
+-- Cuentas leídas por IMAP con una contraseña de aplicación. Van aparte de
+-- gmail_accounts porque no comparten nada: aquélla guarda un token de OAuth que
+-- caduca, ésta una credencial permanente que se guarda cifrada.
+CREATE TABLE IF NOT EXISTS imap_accounts (
+  id            TEXT PRIMARY KEY,
+  household_id  TEXT NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+  user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  email         TEXT NOT NULL,
+  -- Cifrada con AES-256-GCM (ver lib/cripto.ts). Nunca en claro.
+  secreto       TEXT NOT NULL,
+  host          TEXT NOT NULL DEFAULT 'imap.gmail.com',
+  port          INTEGER NOT NULL DEFAULT 993,
+  carpeta       TEXT NOT NULL DEFAULT 'INBOX',
+  last_sync_at  TEXT,
+  UNIQUE (household_id, email)
+);
+
 -- Presupuesto por categoría. month NULL = presupuesto base, vale todos los meses;
 -- una fila con mes concreto lo reemplaza sólo para ese mes.
 CREATE TABLE IF NOT EXISTS budgets (

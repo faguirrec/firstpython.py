@@ -41,7 +41,12 @@ function inviteCode(): string {
   return Array.from({ length: 6 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
 }
 
-function seedHousehold(householdId: string): void {
+/**
+ * Categorías, reglas de comercio y plantillas de banco de un hogar recién
+ * creado. Se exporta para poder ejercitar el mismo camino desde las pruebas: un
+ * hogar armado a mano no categoriza igual que uno real.
+ */
+export function seedHousehold(householdId: string): void {
   const insertCategory = db.prepare(
     'INSERT INTO categories (id, household_id, name, kind, color, emoji) VALUES (?, ?, ?, ?, ?, ?)',
   );

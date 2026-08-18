@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api, type MessagePreview } from '../lib/api';
 import Sheet from './Sheet';
 
@@ -19,6 +19,19 @@ export default function ExploradorCorreos({
   const [busy, setBusy] = useState(false);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * Por dónde se lee el buzón. Si hay una cuenta conectada por IMAP se usa ésa:
+   * es la vía recomendada, y sería raro que el explorador buscara en un lado
+   * distinto del que después va a sincronizar.
+   */
+  const [fuente, setFuente] = useState<'imap' | 'gmail'>('gmail');
+
+  useEffect(() => {
+    void api
+      .imapStatus()
+      .then((s) => setFuente(s.accounts.length > 0 ? 'imap' : 'gmail'))
+      .catch(() => undefined);
+  }, []);
 
   const SUGGESTIONS = [
     { label: 'Últimos 30 días con montos', q: 'newer_than:30d (compra OR cargo OR transferencia)' },
@@ -33,7 +46,7 @@ export default function ExploradorCorreos({
     setBusy(true);
     setError(null);
     try {
-      const result = await api.gmailSearch(query, 15);
+      const result = fuente === 'imap' ? await api.imapSearch(query, 15) : await api.gmailSearch(query, 15);
       setMessages(result.messages);
       if (result.errors.length > 0) setError(result.errors.join(' · '));
     } catch (err) {
@@ -47,7 +60,7 @@ export default function ExploradorCorreos({
     setLoadingId(message.id);
     setError(null);
     try {
-      const full = await api.gmailMessage(message.id);
+      const full = fuente === 'imap' ? await api.imapMessage(message.id) : await api.gmailMessage(message.id);
       onUseMessage(full.body, full.subject);
     } catch (err) {
       setError((err as Error).message);

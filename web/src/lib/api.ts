@@ -118,6 +118,17 @@ export type SyncResult = {
   }[];
 };
 
+export type CuentaImap = {
+  id: string;
+  email: string;
+  host: string;
+  port: number;
+  carpeta: string;
+  lastSyncAt: string | null;
+  /** Si hay una conexión abierta escuchando el buzón en este momento. */
+  escuchando: boolean;
+};
+
 export type MessagePreview = {
   id: string;
   from: string;
@@ -364,4 +375,22 @@ export const api = {
     ),
   gmailMessage: (id: string) => get<{ subject: string; from: string; body: string }>(`/gmail/messages/${id}`),
   disconnectGmail: (id: string) => del<{ ok: true }>(`/gmail/accounts/${id}`),
+
+  imapStatus: () =>
+    get<{
+      accounts: CuentaImap[];
+      tiempoReal: boolean;
+      sondeoMinutos: number;
+      porDefecto: { host: string; port: number; carpeta: string };
+    }>('/imap/status'),
+  conectarImap: (body: { email: string; secreto: string; host?: string; port?: number; carpeta?: string }) =>
+    post<{ ok: true; carpeta: string; mensajes: number }>('/imap/accounts', body),
+  desconectarImap: (id: string) => del<{ ok: true }>(`/imap/accounts/${id}`),
+  imapSync: (dryRun = false) => post<SyncResult>('/imap/sync', { dryRun }),
+  imapSearch: (q: string, limit = 10) =>
+    get<{ messages: MessagePreview[]; errors: string[] }>(
+      `/imap/messages?q=${encodeURIComponent(q)}&limit=${limit}`,
+    ),
+  imapMessage: (id: string) =>
+    get<{ subject: string; from: string; body: string }>(`/imap/message?id=${encodeURIComponent(id)}`),
 };

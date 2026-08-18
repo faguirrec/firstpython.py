@@ -289,6 +289,9 @@ a { color: var(--series-1); }
   border: 1px solid var(--border);
   background: var(--plane);
   color: var(--text-secondary);
+  /* Una píldora es una etiqueta: partida en dos líneas deja de leerse como tal
+     y empuja el título de al lado. */
+  white-space: nowrap;
 }
 
 .pill.good { color: var(--good-text); border-color: color-mix(in srgb, var(--good) 45%, transparent); }
@@ -425,6 +428,12 @@ table.data th { color: var(--text-secondary); font-weight: 500; }
 table.data td.num { font-variant-numeric: tabular-nums; }
 
 details.table-view summary { font-size: 0.8rem; color: var(--text-secondary); cursor: pointer; margin-top: 8px; }
+
+/* Sección replegada: se ofrece, pero no compite con la opción recomendada. */
+details.plegable > summary { cursor: pointer; list-style-position: outside; }
+details.plegable > summary strong { display: block; }
+details.plegable > summary .muted { display: block; margin-top: 4px; font-size: 0.9rem; }
+details.plegable[open] > summary { margin-bottom: 4px; }
 
 /* --------------------------------- Modal -------------------------------- */
 

@@ -73,6 +73,19 @@ export const env = {
   cronSecret: process.env.CRON_SECRET ?? '',
 
   /**
+   * Lectura del correo por IMAP.
+   *
+   * `tiempoReal` mantiene una conexión abierta con el buzón para que los gastos
+   * entren apenas llega el aviso del banco. Se puede apagar (CORREO_TIEMPO_REAL=0)
+   * si el proveedor cobra por conexiones largas o suspende la máquina al rato;
+   * en ese caso queda sólo el sondeo.
+   */
+  correo: {
+    tiempoReal: process.env.CORREO_TIEMPO_REAL !== '0',
+    sondeoMinutos: Number(process.env.CORREO_SONDEO_MINUTOS ?? 15),
+  },
+
+  /**
    * Dominio definitivo de la app, si hay uno propio.
    *
    * Cuando se agrega un dominio, la dirección del proveedor sigue funcionando.

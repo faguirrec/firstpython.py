@@ -12,3 +12,10 @@ server/data/
 # Secretos
 .env
 .env.local
+
+# Lo que generan las pruebas: certificados de un servidor de mentira y bases
+# temporales. Los scripts sí se versionan.
+server/pruebas/tls/
+server/pruebas/*.db
+server/pruebas/*.log
+server/pruebas/galletas.txt
