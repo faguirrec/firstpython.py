@@ -18,4 +18,4 @@ server/data/
 server/pruebas/tls/
 server/pruebas/*.db
 server/pruebas/*.log
-server/pruebas/galletas.txt
+server/pruebas/*.txt
