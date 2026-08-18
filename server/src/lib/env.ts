@@ -73,6 +73,17 @@ export const env = {
   cronSecret: process.env.CRON_SECRET ?? '',
 
   /**
+   * Dominio definitivo de la app, si hay uno propio.
+   *
+   * Cuando se agrega un dominio, la dirección del proveedor sigue funcionando.
+   * Con dos direcciones vivas, la app se puede instalar dos veces en el
+   * teléfono, cada copia con su sesión, y uno termina sin saber cuál es la
+   * buena. Definiendo esto, todo lo que llegue por otra dirección se redirige a
+   * la definitiva.
+   */
+  canonicalHost: (process.env.CANONICAL_HOST ?? '').replace(/^https?:\/\//, '').replace(/\/$/, ''),
+
+  /**
    * Identificador de la versión desplegada. Render expone el commit en
    * RENDER_GIT_COMMIT; Fly, en FLY_MACHINE_VERSION. Sin ninguno, es local.
    */

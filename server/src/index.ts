@@ -21,6 +21,17 @@ const app = express();
 // la del proxy y req.protocol siempre 'http', y las cookies seguras se rompen.
 if (env.trustProxy) app.set('trust proxy', 1);
 
+// Todo lo que llegue por una dirección distinta a la definitiva se redirige,
+// para que exista una sola app instalable y una sola sesión. La API queda
+// fuera: el chequeo de salud del proveedor entra por el nombre interno.
+if (env.canonicalHost) {
+  app.use((req, res, next) => {
+    const host = req.get('host');
+    if (!host || host === env.canonicalHost || req.path.startsWith('/api/')) return next();
+    res.redirect(301, `https://${env.canonicalHost}${req.originalUrl}`);
+  });
+}
+
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
 app.use(cors({ origin: env.webOrigin, credentials: true }));
