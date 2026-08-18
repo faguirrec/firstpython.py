@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, type BankTemplate, type EmailRule } from '../lib/api';
+import { api, type BankTemplate, type EmailRule, type Member } from '../lib/api';
 import { useSession } from '../lib/session';
 import { money } from '../lib/format';
 import Sheet from './Sheet';
@@ -14,9 +14,11 @@ const EMPTY: Omit<EmailRule, 'id'> = {
   dateRegex: '(\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4})',
   accountRegex: null,
   cardFilter: null,
+  mustContain: null,
   type: 'gasto',
   scope: 'comun',
   accountLabel: null,
+  userId: null,
   priority: 100,
 };
 
@@ -52,6 +54,7 @@ export default function AjustesReglas() {
       merchantRegex: template.merchant_regex,
       dateRegex: template.date_regex,
       accountRegex: template.account_regex,
+      mustContain: template.must_contain ?? null,
       type: template.type,
       scope: template.scope,
     });
@@ -141,11 +144,17 @@ function EditorRegla({
   onError: (message: string) => void;
 }) {
   const [form, setForm] = useState(rule);
+  // Los integrantes del hogar, para poder decir de quién es un aporte.
+  const [miembros, setMiembros] = useState<Member[]>([]);
   const [sample, setSample] = useState('');
   const [isHtml, setIsHtml] = useState(false);
   const [test, setTest] = useState<Awaited<ReturnType<typeof api.testEmailRule>> | null>(null);
   const [busy, setBusy] = useState(false);
   const [explorer, setExplorer] = useState(false);
+
+  useEffect(() => {
+    void api.household().then((h) => setMiembros(h.members)).catch(() => undefined);
+  }, []);
 
   function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -160,9 +169,11 @@ function EditorRegla({
     dateRegex: form.dateRegex || null,
     accountRegex: form.accountRegex || null,
     cardFilter: form.cardFilter || null,
+    mustContain: form.mustContain || null,
     type: form.type,
     scope: form.scope,
     accountLabel: form.accountLabel || null,
+    userId: form.userId || null,
     priority: form.priority,
   };
 
@@ -245,6 +256,39 @@ function EditorRegla({
           placeholder="1234, 5678"
         />
         <em className="muted">Sirve para ignorar las tarjetas personales que no entran al reparto.</em>
+      </label>
+
+      <label className="field">
+        <span>Sólo si el correo dice (uno por línea, tienen que estar todos)</span>
+        <textarea
+          rows={2}
+          value={form.mustContain ?? ''}
+          onChange={(e) => set('mustContain', e.target.value)}
+          placeholder={'Mercado Pago\nFrancisco Javier Aguirre'}
+        />
+        <em className="muted">
+          Para separar correos del mismo banco con el mismo formato: a qué cuenta llegó la plata, o quién la
+          envió.
+        </em>
+      </label>
+
+      <label className="field">
+        <span>Atribuir a</span>
+        <select value={form.userId ?? ''} onChange={(e) => set('userId', e.target.value || null)}>
+          <option value="">Nadie en particular</option>
+          {miembros.map((m) => (
+            <option key={m.id} value={m.id}>{m.name}</option>
+          ))}
+        </select>
+        {form.type === 'aporte' && !form.userId ? (
+          <em className="alerta">
+            Un aporte sin dueño no le cuenta a nadie en la liquidación. Elige de quién es.
+          </em>
+        ) : (
+          <em className="muted">
+            Obligatorio en los aportes: la liquidación suma lo que puso cada uno por su nombre.
+          </em>
+        )}
       </label>
 
       <div className="card" style={{ background: 'var(--plane)', boxShadow: 'none' }}>

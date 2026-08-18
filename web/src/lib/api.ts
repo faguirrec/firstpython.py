@@ -82,9 +82,12 @@ export type EmailRule = {
   dateRegex: string | null;
   accountRegex: string | null;
   cardFilter: string | null;
+  mustContain: string | null;
   type: 'gasto' | 'aporte';
   scope: 'comun' | 'personal';
   accountLabel: string | null;
+  /** A quién se le atribuye lo que importe esta regla. */
+  userId: string | null;
   priority: number;
 };
 
@@ -96,6 +99,7 @@ export type BankTemplate = {
   merchant_regex: string | null;
   date_regex: string | null;
   account_regex: string | null;
+  must_contain?: string | null;
   type: 'gasto' | 'aporte';
   scope: 'comun' | 'personal';
 };

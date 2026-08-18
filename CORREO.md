@@ -202,6 +202,37 @@ cada cierto tiempo.
 Para ajustarla: **Traer un correo real** busca en tu buzón y carga el texto en
 el probador, que muestra qué extrajo. Si algo sale mal, se ve ahí.
 
+## La plata que entra: de quién es
+
+Un gasto sólo necesita saber cuánto y dónde. Un **aporte** necesita además saber
+**de quién**: la liquidación suma lo que puso cada persona por su nombre, así
+que un aporte sin dueño no le cuenta a nadie y el mes cierra mal.
+
+Por eso cada regla tiene un campo **Atribuir a**. En las reglas de tipo aporte es
+obligatorio en la práctica, y la app lo advierte si queda vacío.
+
+### Cuando la cuenta del hogar no avisa los abonos
+
+Algunas billeteras —Mercado Pago entre ellas— mandan correo cuando sale plata,
+pero no cuando entra. Ahí el único rastro de un aporte es el **comprobante que
+emite el banco de quien transfirió**, que llega al correo del destinatario.
+
+La plantilla *Banco de Chile — transferencia recibida (aporte)* está hecha para
+eso. Tiene dos detalles que importan:
+
+- **Sólo si el correo dice**: por defecto trae el nombre de la cuenta del hogar
+  (`Mercado Pago`). Sin ese filtro, la regla también tomaría como aporte al
+  hogar la plata que recibas en tus cuentas personales.
+- **Atribuir a**: quién transfirió.
+
+Si los dos aportan desde el mismo banco, van **dos copias de la regla**, cada una
+con el nombre de una persona agregado en *Sólo si el correo dice* y atribuida a
+esa persona.
+
+Y una limitación que conviene tener clara: esto sólo funciona si el banco de
+quien envía manda el comprobante a esa casilla. Si uno de los dos transfiere
+desde un banco que no lo hace, ese aporte hay que anotarlo a mano.
+
 > **Manda uno o dos correos de aviso de compra reales** —puedes tapar el número
 > de tarjeta, lo que importa es la estructura del texto— y la regla se puede
 > ajustar al formato exacto de tu banco.

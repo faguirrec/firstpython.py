@@ -201,9 +201,11 @@ const emailRuleInput = z.object({
   dateRegex: z.string().max(300).nullable().optional(),
   accountRegex: z.string().max(300).nullable().optional(),
   cardFilter: z.string().max(120).nullable().optional(),
+  mustContain: z.string().max(400).nullable().optional(),
   type: z.enum(['gasto', 'aporte']).default('gasto'),
   scope: z.enum(['comun', 'personal']).default('comun'),
   accountLabel: z.string().max(80).nullable().optional(),
+  userId: z.string().nullable().optional(),
   priority: z.number().int().default(100),
 });
 
@@ -252,12 +254,12 @@ settingsRouter.post('/email-rules', (req, res) => {
   db.prepare(
     `INSERT INTO email_rules
        (id, household_id, name, enabled, gmail_query, amount_regex, merchant_regex, date_regex,
-        account_regex, card_filter, type, scope, account_label, priority)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        account_regex, card_filter, must_contain, type, scope, account_label, user_id, priority)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     id, req.household!.id, r.name, r.enabled ? 1 : 0, r.gmailQuery, r.amountRegex,
     r.merchantRegex ?? null, r.dateRegex ?? null, r.accountRegex ?? null, r.cardFilter ?? null,
-    r.type, r.scope, r.accountLabel ?? null, r.priority,
+    r.mustContain ?? null, r.type, r.scope, r.accountLabel ?? null, r.userId ?? null, r.priority,
   );
   res.status(201).json({ id });
 });
@@ -279,13 +281,16 @@ settingsRouter.patch('/email-rules/:id', (req, res) => {
         name = COALESCE(?, name), enabled = COALESCE(?, enabled), gmail_query = COALESCE(?, gmail_query),
         amount_regex = COALESCE(?, amount_regex), merchant_regex = COALESCE(?, merchant_regex),
         date_regex = COALESCE(?, date_regex), account_regex = COALESCE(?, account_regex),
-        card_filter = COALESCE(?, card_filter), type = COALESCE(?, type), scope = COALESCE(?, scope),
-        account_label = COALESCE(?, account_label), priority = COALESCE(?, priority)
+        card_filter = COALESCE(?, card_filter), must_contain = COALESCE(?, must_contain),
+        type = COALESCE(?, type), scope = COALESCE(?, scope),
+        account_label = COALESCE(?, account_label), user_id = COALESCE(?, user_id),
+        priority = COALESCE(?, priority)
       WHERE id = ? AND household_id = ?`,
   ).run(
     r.name ?? null, r.enabled === undefined ? null : r.enabled ? 1 : 0, r.gmailQuery ?? null,
     r.amountRegex ?? null, r.merchantRegex ?? null, r.dateRegex ?? null, r.accountRegex ?? null,
-    r.cardFilter ?? null, r.type ?? null, r.scope ?? null, r.accountLabel ?? null, r.priority ?? null,
+    r.cardFilter ?? null, r.mustContain ?? null, r.type ?? null, r.scope ?? null,
+    r.accountLabel ?? null, r.userId ?? null, r.priority ?? null,
     req.params.id, req.household!.id,
   );
   res.json({ ok: true });
@@ -323,9 +328,11 @@ settingsRouter.post('/email-rules/test', (req, res) => {
     date_regex: r.dateRegex ?? null,
     account_regex: r.accountRegex ?? null,
     card_filter: r.cardFilter ?? null,
+    must_contain: r.mustContain ?? null,
     type: r.type ?? 'gasto',
     scope: r.scope ?? 'comun',
     account_label: r.accountLabel ?? null,
+    user_id: r.userId ?? null,
   };
 
   const body = parsed.data.isHtml ? htmlToText(parsed.data.sample) : parsed.data.sample;

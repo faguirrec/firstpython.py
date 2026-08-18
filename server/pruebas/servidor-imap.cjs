@@ -62,6 +62,29 @@ const mensajes = [
     }),
   },
   {
+    // Comprobante de Banco de Chile por plata que ENTRA a la cuenta del hogar.
+    // Mercado Pago no avisa los abonos, así que éste es el único rastro.
+    raw: correo({
+      id: 'chile-abono@bancochile.cl',
+      de: 'Banco de Chile <enviodigital@bancochile.cl>',
+      asunto: 'Comprobante de transferencia electronica de fondos',
+      fecha: haceDias(1),
+      cuerpo: [
+        'Te informamos que nuestro(a) cliente Francisco Javier Aguirre ha efectuado una',
+        'transferencia de fondos a tu cuenta con el siguiente detalle:',
+        'Fecha',
+        '18/08/2026',
+        'Banco',
+        'Mercado Pago',
+        'Cuenta destino',
+        'Cuenta Vista',
+        '00-105-05465-00',
+        'Monto',
+        '$14.000',
+      ].join('\n'),
+    }),
+  },
+  {
     // Viejo: fuera del rango de newer_than.
     raw: correo({
       id: 'chile-viejo@bancochile.cl',

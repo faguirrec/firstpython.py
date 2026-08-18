@@ -63,6 +63,8 @@ async function main() {
   ok('el correo de otro banco no entra', !/Notificacion de compra/.test(asuntos), asuntos);
   ok('el correo sin monto no entra', !/estado de cuenta/i.test(asuntos), asuntos);
   ok('el correo de hace 200 días queda fuera del rango', !/TIENDA VIEJA/.test(asuntos), asuntos);
+  ok('el comprobante de transferencia NO entra como compra',
+     !/Comprobante de transferencia/i.test(asuntos), asuntos);
 
   // --- 3. Sincronización de verdad ---
   const real = await sincronizarImap(hogar, 100, false);
@@ -92,6 +94,8 @@ async function main() {
   // --- 5. Explorador de correos ---
   const buscados = await buscarMensajesImap(hogar, 'from:(enviodigital@bancochile.cl) newer_than:60d', 10);
   ok('el explorador encuentra correos', buscados.messages.length >= 3, buscados);
+  // El explorador busca por la consulta, no aplica las reglas: el comprobante
+  // aparece igual, y eso está bien.
   ok('marca los ya importados', buscados.messages.filter((m) => m.alreadyImported).length === 2,
      buscados.messages.map((m) => [m.subject, m.alreadyImported]));
 

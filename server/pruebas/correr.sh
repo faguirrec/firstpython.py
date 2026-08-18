@@ -40,16 +40,18 @@ fallas=0
 correr() {
   echo ""
   echo "── $1 ──"
-  rm -f prueba.db
+  rm -f prueba.db ap.db vig.db
   if ! DB_PATH=prueba.db npx tsx "$1"; then fallas=$((fallas + 1)); fi
 }
 
 # Éstas no tocan la red.
 correr t-cripto.ts
 correr t-consulta.ts
+correr t-reglas-reales.ts
 
 # Éstas sí: cada una con el buzón recién levantado.
 levantar_buzon && correr t-imap.ts
+levantar_buzon && correr t-aporte.ts
 levantar_buzon && correr t-vigilante.ts
 
 echo ""

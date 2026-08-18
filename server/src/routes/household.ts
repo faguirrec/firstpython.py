@@ -69,13 +69,13 @@ export function seedHousehold(householdId: string): void {
   const insertEmailRule = db.prepare(
     `INSERT INTO email_rules
        (id, household_id, name, enabled, gmail_query, amount_regex, merchant_regex, date_regex,
-        account_regex, type, scope, account_label, priority)
-     VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        account_regex, must_contain, type, scope, account_label, priority)
+     VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   BANK_TEMPLATES.forEach((t, i) => {
     insertEmailRule.run(
       uid(), householdId, t.name, t.gmail_query, t.amount_regex, t.merchant_regex,
-      t.date_regex, t.account_regex, t.type, t.scope, t.account_label, i * 10,
+      t.date_regex, t.account_regex, t.must_contain ?? null, t.type, t.scope, t.account_label, i * 10,
     );
   });
 }

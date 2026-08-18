@@ -15,6 +15,8 @@ export type BankTemplate = {
   merchant_regex: string | null;
   date_regex: string | null;
   account_regex: string | null;
+  /** Textos que el correo debe contener, todos. Separados por punto y coma. */
+  must_contain?: string | null;
   type: 'gasto' | 'aporte';
   scope: 'comun' | 'personal';
   account_label: string | null;
@@ -29,9 +31,57 @@ export const BANK_TEMPLATES: BankTemplate[] = [
     merchant_regex: 'en\\s+([A-ZÁÉÍÓÚÑ0-9][^\\n.]{2,60}?)\\s+(?:el|por|con)\\b',
     date_regex: '(\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4})',
     account_regex: '(?:terminada|final)\\s*(?:en)?\\s*\\*{0,4}(\\d{4})',
+    // Sin esto, el comprobante de una transferencia recibida —mismo remitente,
+    // mismo formato de monto— entraría como si fuera una compra.
+    must_contain: 'compra',
     type: 'gasto',
     scope: 'comun',
     account_label: null,
+  },
+  {
+    // Mercado Pago avisa lo que sale, no lo que entra. Lo que entra se captura
+    // con la plantilla del banco que lo envía (más abajo).
+    key: 'mercadopago_enviada',
+    name: 'Mercado Pago — transferencia enviada',
+    gmail_query: 'from:(mercadopago.com) subject:(transferencia) newer_than:60d',
+    amount_regex: 'transferencia de\\s*\\$\\s?([\\d.,]+)',
+    merchant_regex: 'Nombre y apellido:?\\s*([^\\n]{2,60})',
+    // El correo no trae la fecha del movimiento; se usa la del correo.
+    date_regex: null,
+    account_regex: null,
+    type: 'gasto',
+    scope: 'comun',
+    account_label: 'Mercado Pago',
+  },
+  {
+    /**
+     * Plata que entra a la cuenta del hogar.
+     *
+     * Cuando la cuenta del hogar es de una billetera que no avisa los abonos
+     * —Mercado Pago es el caso—, el único correo que existe es el comprobante
+     * que emite el banco de quien envía. Por eso esta regla mira el correo del
+     * banco de origen y se queda sólo con los que llegaron a la cuenta del
+     * hogar, mediante `must_contain`.
+     *
+     * Al activarla hay que elegir **de quién** es el aporte: la liquidación
+     * suma lo que puso cada uno por su usuario, y un aporte sin dueño no le
+     * cuenta a nadie. Si los dos transfieren desde el mismo banco, van dos
+     * copias de esta regla, cada una con el nombre de una persona en
+     * `must_contain`.
+     */
+    key: 'bancochile_transferencia_recibida',
+    name: 'Banco de Chile — transferencia recibida (aporte)',
+    gmail_query: 'from:(bancochile.cl) subject:(transferencia OR comprobante) newer_than:60d',
+    amount_regex: 'Monto[\\s\\S]{0,40}?\\$\\s?([\\d.,]+)',
+    merchant_regex: 'cliente\\s+([^\\n]{2,60}?)\\s+ha efectuado',
+    date_regex: 'Fecha[\\s\\S]{0,40}?(\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4})',
+    account_regex: 'Cuenta destino[\\s\\S]{0,60}?([\\d-]{8,})',
+    // Ajusta esto al nombre de tu cuenta del hogar: sin este filtro, la regla
+    // también tomaría las transferencias que recibas en tus cuentas personales.
+    must_contain: 'Mercado Pago',
+    type: 'aporte',
+    scope: 'comun',
+    account_label: 'Mercado Pago',
   },
   {
     key: 'santander_compra',
@@ -41,6 +91,9 @@ export const BANK_TEMPLATES: BankTemplate[] = [
     merchant_regex: 'en\\s+([^\\n,]{2,60}?)\\s*(?:,|\\.|el\\b)',
     date_regex: '(\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4})',
     account_regex: '\\*{2,}(\\d{4})',
+    // Sin esto, el comprobante de una transferencia recibida —mismo remitente,
+    // mismo formato de monto— entraría como si fuera una compra.
+    must_contain: 'compra',
     type: 'gasto',
     scope: 'comun',
     account_label: null,
@@ -53,6 +106,9 @@ export const BANK_TEMPLATES: BankTemplate[] = [
     merchant_regex: 'comercio\\s*:?\\s*([^\\n]{2,60})',
     date_regex: '(\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4})',
     account_regex: '(?:tarjeta|cuenta)[^\\d]{0,20}(\\d{4})',
+    // Sin esto, el comprobante de una transferencia recibida —mismo remitente,
+    // mismo formato de monto— entraría como si fuera una compra.
+    must_contain: 'compra',
     type: 'gasto',
     scope: 'comun',
     account_label: null,

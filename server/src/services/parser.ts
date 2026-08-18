@@ -21,9 +21,16 @@ export type EmailRule = {
   date_regex: string | null;
   account_regex: string | null;
   card_filter: string | null;
+  /**
+   * Textos que el correo tiene que contener, todos. Separados por punto y coma
+   * o por salto de línea.
+   */
+  must_contain: string | null;
   type: string;
   scope: string;
   account_label: string | null;
+  /** A quién se le atribuye el movimiento. Null = a nadie en particular. */
+  user_id: string | null;
 };
 
 export type ParsedMovement = {
@@ -113,6 +120,15 @@ export function applyRule(email: ParsedEmail, rule: EmailRule): ParsedMovement |
       .map((d) => d.trim())
       .filter(Boolean);
     if (digits.length > 0 && !digits.some((d) => haystack.includes(d))) return null;
+  }
+
+  if (rule.must_contain) {
+    const exigidos = rule.must_contain
+      .split(/[;\n]+/)
+      .map((t) => t.trim().toLowerCase())
+      .filter(Boolean);
+    const enMinuscula = haystack.toLowerCase();
+    if (!exigidos.every((t) => enMinuscula.includes(t))) return null;
   }
 
   const amountRaw = firstGroup(haystack, rule.amount_regex);

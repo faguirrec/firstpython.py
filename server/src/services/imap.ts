@@ -248,7 +248,7 @@ export async function sincronizarImap(
     `INSERT INTO transactions
        (id, household_id, occurred_on, amount, type, scope, funded_by, user_id, category_id,
         merchant, description, account_label, installments, source, source_msg_id, raw_snippet, reviewed)
-     VALUES (@id, @household_id, @occurred_on, @amount, @type, @scope, 'oficial', NULL, @category_id,
+     VALUES (@id, @household_id, @occurred_on, @amount, @type, @scope, 'oficial', @user_id, @category_id,
         @merchant, @description, @account_label, @installments, 'imap', @source_msg_id, @raw_snippet, 0)`,
   );
 
@@ -308,6 +308,10 @@ export async function sincronizarImap(
             insertar.run({
               id: uid(),
               household_id: householdId,
+              // A quién se le atribuye. En un aporte esto no es cosmético: la
+              // liquidación suma lo que puso cada uno por su user_id, y un
+              // aporte sin dueño no le cuenta a nadie.
+              user_id: regla.user_id,
               occurred_on: movimiento.occurredOn,
               amount: movimiento.amount,
               type: regla.type,

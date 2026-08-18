@@ -217,6 +217,14 @@ addColumn('households', 'contingency_pct', 'REAL NOT NULL DEFAULT 10');
 addColumn('invites', 'revoked', 'INTEGER NOT NULL DEFAULT 0');
 addColumn('households', 'send_monthly_report', 'INTEGER NOT NULL DEFAULT 1');
 addColumn('categories', 'emoji', "TEXT NOT NULL DEFAULT '📦'");
+// A quién pertenece lo que importe esta regla. Importa sobre todo para los
+// aportes: la liquidación suma lo que puso cada persona por su user_id, así que
+// un aporte sin dueño no le cuenta a nadie y el saldo del mes queda mal.
+addColumn('email_rules', 'user_id', 'TEXT REFERENCES users(id) ON DELETE SET NULL');
+// Condición extra de texto: la regla sólo se aplica si el correo contiene todos
+// estos textos. Sirve para separar dos correos del mismo banco con el mismo
+// formato —por ejemplo, quién hizo la transferencia o a qué cuenta llegó.
+addColumn('email_rules', 'must_contain', 'TEXT');
 
 /**
  * Los hogares creados antes de que existieran los emoji quedan con el genérico.

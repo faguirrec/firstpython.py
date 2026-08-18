@@ -429,6 +429,15 @@ table.data td.num { font-variant-numeric: tabular-nums; }
 
 details.table-view summary { font-size: 0.8rem; color: var(--text-secondary); cursor: pointer; margin-top: 8px; }
 
+/* Aviso dentro de un campo: algo que hay que corregir antes de guardar. */
+.alerta {
+  display: block;
+  margin-top: 4px;
+  color: var(--critical);
+  font-size: 0.84rem;
+  font-style: normal;
+}
+
 /* Sección replegada: se ofrece, pero no compite con la opción recomendada. */
 details.plegable > summary { cursor: pointer; list-style-position: outside; }
 details.plegable > summary strong { display: block; }
