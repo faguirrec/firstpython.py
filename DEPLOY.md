@@ -486,73 +486,17 @@ dispare varias veces nadie recibe el correo repetido.
 
 ## Usar tu propio dominio .cl
 
-Los pasos concretos, con `www.myhaus.cl` como ejemplo.
+Ese tema se movió a **[HOSTING.md](HOSTING.md)**, porque además del dominio hay
+que decidir dónde vive el sitio público y dónde la app. En resumen: el sitio en
+`www.myhaus.cl` y la app en `app.myhaus.cl`, en direcciones distintas y por una
+razón concreta —la app se instala en el teléfono y su alcance es todo el dominio
+donde vive, así que con el sitio en la misma dirección la página de marketing
+quedaría dentro de la app instalada.
 
-### 1. Comprar el dominio
+Allá están los pasos: el DNS, los dominios en Render, las dos variables de
+entorno y el ajuste en Google Cloud.
 
-En [nic.cl](https://www.nic.cl), el registrador oficial de los `.cl`. Del orden
-de 10.000 pesos al año, y cualquiera puede registrar uno.
-
-### 2. Agregarlo en Render
-
-Panel del servicio → **Settings** → **Custom Domains** → **Add Custom Domain**.
-Agrega los dos:
-
-- `www.myhaus.cl`
-- `myhaus.cl`
-
-Render te muestra, para cada uno, el registro DNS que hay que crear. Anótalos:
-el del subdominio es un CNAME y el del dominio pelado un registro A con una
-dirección IP que Render indica.
-
-### 3. Crear los registros en NIC Chile
-
-En el panel de nic.cl, sección DNS de tu dominio:
-
-| Tipo | Nombre | Valor |
-|---|---|---|
-| CNAME | `www` | el que muestra Render (termina en `.onrender.com`) |
-| A | `@` | la IP que muestra Render |
-
-La propagación demora entre unos minutos y algunas horas. Render marca cada
-dominio como verificado cuando lo detecta, y emite el certificado HTTPS solo.
-
-> Si nic.cl no te deja crear alguno de esos registros, puedes delegar el DNS a
-> Cloudflare —es gratis— y crearlos allá. Es lo habitual en Chile.
-
-### 4. Avisarle a la app cuál es su dirección
-
-Panel de Render → **Environment** → agrega dos variables:
-
-```
-WEB_ORIGIN=https://www.myhaus.cl
-CANONICAL_HOST=www.myhaus.cl
-```
-
-La segunda hace que todo lo que llegue por `myhaus.cl` o por la dirección de
-`.onrender.com` se redirija al dominio definitivo. Sin eso quedan tres
-direcciones vivas, la app se puede instalar tres veces en el teléfono y cada
-copia lleva su propia sesión.
-
-### 5. Actualizar Google, si ya conectaste Gmail
-
-La URI de redirección cambia junto con el dominio. En Google Cloud →
-Credenciales → tu ID de cliente, agrega:
-
-```
-https://www.myhaus.cl/api/gmail/callback
-```
-
-Deja también la anterior mientras pruebas; sobran las que no se usan. La app
-muestra la que espera en **Ajustes → Gmail**.
-
-### 6. Comprobar
-
-Abre `https://www.myhaus.cl/api/health`. Si responde, ya está. Y en el iPhone
-conviene borrar la app de la pantalla de inicio y agregarla de nuevo desde la
-dirección nueva, para que quede una sola.
-
-## Notas sobre el dominio
+## Un dominio propio en Fly.io
 
 Se puede, y queda mejor que la dirección `.fly.dev`: `https://casa.tudominio.cl`.
 
