@@ -7,6 +7,7 @@ import { CategoryBars, SplitBar, type CategorySlice } from '../components/Charts
 import Cabecera from '../components/Cabecera';
 import NuevoMovimiento from '../components/NuevoMovimiento';
 import { IconoAlerta, IconoBolsillo, IconoMas } from '../components/Icons';
+import { Avatar, FichaCategoria } from '../components/Fichas';
 import { TarjetaCargando, Vacio } from '../components/Estados';
 
 export default function Resumen() {
@@ -139,10 +140,11 @@ export default function Resumen() {
           </div>
 
           <div className="list">
-            {settlement.members.map((m) => {
+            {settlement.members.map((m, i) => {
               const debe = m.deviation < -0.5;
               return (
                 <div className="item" key={m.userId}>
+                  <Avatar nombre={m.name} indice={i} />
                   <div className="body">
                     <div className="title">
                       {m.name} {m.userId === user?.id && <span className="muted">· tú</span>}
@@ -244,7 +246,7 @@ export default function Resumen() {
         <div className="list">
           {recent.map((t) => (
             <div className="item" key={t.id}>
-              <i className="dot" style={{ background: t.categoryColor ?? 'var(--text-muted)' }} />
+              <FichaCategoria emoji={t.categoryEmoji} color={t.categoryColor} />
               <div className="body">
                 <div className="title">{t.merchant ?? t.description ?? 'Movimiento'}</div>
                 <div className="meta">

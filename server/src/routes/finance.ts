@@ -329,12 +329,13 @@ financeRouter.get('/reports/by-category', (req, res) => {
     .prepare(
       `SELECT COALESCE(c.name, 'Sin categoría') AS category,
               COALESCE(c.color, '#9ca3af') AS color,
+              COALESCE(c.emoji, '❓') AS emoji,
               SUM(t.amount) AS total,
               COUNT(*) AS count
          FROM transactions t
          LEFT JOIN categories c ON c.id = t.category_id
         WHERE t.household_id = ? AND t.type = 'gasto' ${filter}
-        GROUP BY category, color
+        GROUP BY category, color, emoji
         ORDER BY total DESC`,
     )
     .all(...params);

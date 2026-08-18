@@ -7,6 +7,7 @@ import Cabecera from '../components/Cabecera';
 import { IconoMas } from '../components/Icons';
 import NuevoMovimiento from '../components/NuevoMovimiento';
 import Sheet from '../components/Sheet';
+import { FichaCategoria } from '../components/Fichas';
 
 export default function Movimientos() {
   const { household } = useSession();
@@ -150,7 +151,7 @@ export default function Movimientos() {
               onClick={() => setDetail(t)}
               style={{ textAlign: 'left', border: 'none', borderBottom: '1px solid var(--grid)', borderRadius: 0, width: '100%' }}
             >
-              <i className="dot" style={{ background: t.categoryColor ?? 'var(--text-muted)' }} />
+              <FichaCategoria emoji={t.categoryEmoji} color={t.categoryColor} />
               <div className="body">
                 <div className="title">
                   {t.merchant ?? t.description ?? 'Movimiento'}

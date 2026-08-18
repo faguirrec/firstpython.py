@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { DEFAULT_CATEGORIES } from '../services/bankTemplates.js';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -66,6 +67,7 @@ CREATE TABLE IF NOT EXISTS categories (
   name         TEXT NOT NULL,
   kind         TEXT NOT NULL DEFAULT 'necesidad',
   color        TEXT NOT NULL DEFAULT '#6b7280',
+  emoji        TEXT NOT NULL DEFAULT '📦',
   archived     INTEGER NOT NULL DEFAULT 0,
   UNIQUE (household_id, name)
 );
@@ -197,6 +199,25 @@ function addColumn(table: string, column: string, definition: string): void {
 addColumn('households', 'contingency_pct', 'REAL NOT NULL DEFAULT 10');
 addColumn('invites', 'revoked', 'INTEGER NOT NULL DEFAULT 0');
 addColumn('households', 'send_monthly_report', 'INTEGER NOT NULL DEFAULT 1');
+addColumn('categories', 'emoji', "TEXT NOT NULL DEFAULT '📦'");
+
+/**
+ * Los hogares creados antes de que existieran los emoji quedan con el genérico.
+ * Se les asigna el que corresponde por nombre, para que no haya que editarlos a
+ * mano uno por uno.
+ */
+function asignarEmojiPorNombre(): void {
+  const pendientes = db
+    .prepare("SELECT COUNT(*) AS n FROM categories WHERE emoji = '📦'")
+    .get() as { n: number };
+  if (pendientes.n === 0) return;
+
+  const actualizar = db.prepare("UPDATE categories SET emoji = ? WHERE name = ? AND emoji = '📦'");
+  for (const categoria of DEFAULT_CATEGORIES) {
+    if (categoria.emoji !== '📦') actualizar.run(categoria.emoji, categoria.name);
+  }
+}
+asignarEmojiPorNombre();
 
 export function uid(): string {
   return crypto.randomUUID();

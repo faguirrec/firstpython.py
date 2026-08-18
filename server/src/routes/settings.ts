@@ -83,7 +83,13 @@ settingsRouter.post('/email/reporte-de-prueba', async (req, res) => {
 
 settingsRouter.get('/categories', (req, res) => {
   const categories = db
-    .prepare('SELECT id, name, kind, color, archived FROM categories WHERE household_id = ? ORDER BY name')
+    .prepare(
+      // El conteo de uso permite mostrar primero las categorías que el hogar
+      // realmente usa, en vez de un orden alfabético que deja arriba las raras.
+      `SELECT c.id, c.name, c.kind, c.color, c.emoji, c.archived,
+              (SELECT COUNT(*) FROM transactions t WHERE t.category_id = c.id) AS usos
+         FROM categories c WHERE c.household_id = ? ORDER BY c.name`,
+    )
     .all(req.household!.id);
   res.json({ categories });
 });
@@ -94,6 +100,7 @@ settingsRouter.post('/categories', (req, res) => {
       name: z.string().min(1).max(60),
       kind: z.enum(['necesidad', 'gusto', 'ahorro']).default('gusto'),
       color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#6b7280'),
+      emoji: z.string().min(1).max(8).default('📦'),
     })
     .safeParse(req.body);
   if (!parsed.success) {
@@ -102,8 +109,8 @@ settingsRouter.post('/categories', (req, res) => {
   }
   const id = uid();
   try {
-    db.prepare('INSERT INTO categories (id, household_id, name, kind, color) VALUES (?, ?, ?, ?, ?)').run(
-      id, req.household!.id, parsed.data.name, parsed.data.kind, parsed.data.color,
+    db.prepare('INSERT INTO categories (id, household_id, name, kind, color, emoji) VALUES (?, ?, ?, ?, ?, ?)').run(
+      id, req.household!.id, parsed.data.name, parsed.data.kind, parsed.data.color, parsed.data.emoji,
     );
   } catch {
     res.status(409).json({ error: 'Ya existe una categoría con ese nombre' });
@@ -118,6 +125,7 @@ settingsRouter.patch('/categories/:id', (req, res) => {
       name: z.string().min(1).max(60).optional(),
       kind: z.enum(['necesidad', 'gusto', 'ahorro']).optional(),
       color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+      emoji: z.string().min(1).max(8).optional(),
       archived: z.boolean().optional(),
     })
     .safeParse(req.body);
@@ -128,10 +136,10 @@ settingsRouter.patch('/categories/:id', (req, res) => {
   const p = parsed.data;
   db.prepare(
     `UPDATE categories SET name = COALESCE(?, name), kind = COALESCE(?, kind),
-            color = COALESCE(?, color), archived = COALESCE(?, archived)
+            color = COALESCE(?, color), emoji = COALESCE(?, emoji), archived = COALESCE(?, archived)
       WHERE id = ? AND household_id = ?`,
   ).run(
-    p.name ?? null, p.kind ?? null, p.color ?? null,
+    p.name ?? null, p.kind ?? null, p.color ?? null, p.emoji ?? null,
     p.archived === undefined ? null : p.archived ? 1 : 0,
     req.params.id, req.household!.id,
   );

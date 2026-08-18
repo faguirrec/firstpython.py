@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { money, moneyShort, monthLabel } from '../lib/format';
+import { FichaCategoria } from './Fichas';
 
 /** Rectángulo con las esquinas superiores redondeadas, anclado a la línea base. */
 function barPath(x: number, y: number, w: number, h: number, r = 4): string {
@@ -135,7 +136,7 @@ export function TrendChart({ data, currency }: { data: TrendPoint[]; currency: s
   );
 }
 
-export type CategorySlice = { category: string; color: string; total: number; count: number };
+export type CategorySlice = { category: string; color: string; emoji?: string; total: number; count: number };
 
 /**
  * Desglose por categoría: barras horizontales ordenadas por monto y etiquetadas
@@ -157,7 +158,7 @@ export function CategoryBars({
   const head = sorted.slice(0, limit);
   const rest = sorted.slice(limit);
   const rows = rest.length
-    ? [...head, { category: 'Otras', color: '#898781', total: rest.reduce((a, b) => a + b.total, 0), count: rest.length }]
+    ? [...head, { category: 'Otras', color: '#898781', emoji: '📦', total: rest.reduce((a, b) => a + b.total, 0), count: rest.length }]
     : head;
 
   const max = Math.max(...rows.map((r) => r.total), 1);
@@ -168,8 +169,8 @@ export function CategoryBars({
       {rows.map((row) => (
         <div key={row.category}>
           <div className="row" style={{ marginBottom: 3 }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
-              <i className="dot" style={{ background: row.color }} />
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+              <FichaCategoria emoji={row.emoji ?? null} color={row.color} size={26} />
               <span style={{ fontSize: '0.86rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {row.category}
               </span>

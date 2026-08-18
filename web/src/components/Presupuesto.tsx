@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, type BudgetStatus, type CategoryBudget } from '../lib/api';
 import { useSession } from '../lib/session';
 import { money, monthLabel } from '../lib/format';
+import { FichaCategoria } from './Fichas';
 
 const STATUS: Record<CategoryBudget['status'], { label: string; glyph: string; color: string }> = {
   ok: { label: 'en rango', glyph: '✓', color: 'var(--good)' },
@@ -155,7 +156,7 @@ export default function Presupuesto({ month }: { month: string }) {
           <div className="list">
             {[...status.overBudget, ...status.nearLimit].map((c) => (
               <div className="item" key={c.categoryId}>
-                <i className="dot" style={{ background: c.color }} />
+                <FichaCategoria emoji={c.emoji} color={c.color} />
                 <div className="body">
                   <div className="title">{c.category}</div>
                   <div className="meta">
@@ -183,8 +184,8 @@ export default function Presupuesto({ month }: { month: string }) {
           {(editing ? status.categories : conPresupuesto).map((c) => (
             <div key={c.categoryId}>
               <div className="row" style={{ marginBottom: 4 }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
-                  <i className="dot" style={{ background: c.color }} />
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                  <FichaCategoria emoji={c.emoji} color={c.color} size={26} />
                   <span style={{ fontSize: '0.88rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {c.category}
                   </span>

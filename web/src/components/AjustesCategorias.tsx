@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, type Category, type CategoryRule } from '../lib/api';
+import { FichaCategoria } from './Fichas';
 
 const PRESET_COLORS = ['#4f46e5', '#0891b2', '#0d9488', '#16a34a', '#ca8a04', '#dc2626', '#ea580c', '#db2777', '#7c3aed', '#6b7280'];
 
@@ -59,7 +60,7 @@ export default function AjustesCategorias() {
         <div className="list">
           {categories.map((c) => (
             <div className="item" key={c.id}>
-              <i className="dot" style={{ background: c.color }} />
+              <FichaCategoria emoji={c.emoji} color={c.color} />
               <div className="body">
                 <div className="title">{c.name}</div>
                 <div className="meta">{c.kind}</div>

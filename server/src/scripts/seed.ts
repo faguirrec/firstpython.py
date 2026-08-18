@@ -53,8 +53,8 @@ db.prepare('INSERT INTO household_members (household_id, user_id, role) VALUES (
 const categoryIds = new Map<string, string>();
 for (const c of DEFAULT_CATEGORIES) {
   const id = uid();
-  db.prepare('INSERT INTO categories (id, household_id, name, kind, color) VALUES (?, ?, ?, ?, ?)').run(
-    id, householdId, c.name, c.kind, c.color,
+  db.prepare('INSERT INTO categories (id, household_id, name, kind, color, emoji) VALUES (?, ?, ?, ?, ?, ?)').run(
+    id, householdId, c.name, c.kind, c.color, c.emoji,
   );
   categoryIds.set(c.name, id);
 }

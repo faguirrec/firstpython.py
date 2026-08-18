@@ -95,19 +95,24 @@ export const BANK_TEMPLATES: BankTemplate[] = [
   },
 ];
 
-export const DEFAULT_CATEGORIES: { name: string; kind: string; color: string }[] = [
-  { name: 'Arriendo / Dividendo', kind: 'necesidad', color: '#4f46e5' },
-  { name: 'Cuentas (luz, agua, gas)', kind: 'necesidad', color: '#0891b2' },
-  { name: 'Internet y telefonía', kind: 'necesidad', color: '#0d9488' },
-  { name: 'Supermercado', kind: 'necesidad', color: '#16a34a' },
-  { name: 'Transporte y bencina', kind: 'necesidad', color: '#ca8a04' },
-  { name: 'Salud y farmacia', kind: 'necesidad', color: '#dc2626' },
-  { name: 'Restaurantes y delivery', kind: 'gusto', color: '#ea580c' },
-  { name: 'Entretención', kind: 'gusto', color: '#db2777' },
-  { name: 'Hogar y mantención', kind: 'necesidad', color: '#7c3aed' },
-  { name: 'Mascotas', kind: 'necesidad', color: '#65a30d' },
-  { name: 'Ahorro e inversión', kind: 'ahorro', color: '#0369a1' },
-  { name: 'Otros', kind: 'gusto', color: '#6b7280' },
+/**
+ * El emoji hace que una lista de categorías se lea de un vistazo, sin tener que
+ * leer cada nombre. Es la misma idea de las apps de gastos conocidas, y sale
+ * gratis: no son imágenes que haya que cargar.
+ */
+export const DEFAULT_CATEGORIES: { name: string; kind: string; color: string; emoji: string }[] = [
+  { name: 'Arriendo / Dividendo', kind: 'necesidad', color: '#4f46e5', emoji: '🏠' },
+  { name: 'Cuentas (luz, agua, gas)', kind: 'necesidad', color: '#0891b2', emoji: '💡' },
+  { name: 'Internet y telefonía', kind: 'necesidad', color: '#0d9488', emoji: '📶' },
+  { name: 'Supermercado', kind: 'necesidad', color: '#16a34a', emoji: '🛒' },
+  { name: 'Transporte y bencina', kind: 'necesidad', color: '#ca8a04', emoji: '⛽' },
+  { name: 'Salud y farmacia', kind: 'necesidad', color: '#dc2626', emoji: '💊' },
+  { name: 'Restaurantes y delivery', kind: 'gusto', color: '#ea580c', emoji: '🍔' },
+  { name: 'Entretención', kind: 'gusto', color: '#db2777', emoji: '🎬' },
+  { name: 'Hogar y mantención', kind: 'necesidad', color: '#7c3aed', emoji: '🔧' },
+  { name: 'Mascotas', kind: 'necesidad', color: '#65a30d', emoji: '🐾' },
+  { name: 'Ahorro e inversión', kind: 'ahorro', color: '#0369a1', emoji: '🐷' },
+  { name: 'Otros', kind: 'gusto', color: '#6b7280', emoji: '📦' },
 ];
 
 /** Reglas de categorización automática por nombre de comercio. */

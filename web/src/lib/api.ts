@@ -25,6 +25,7 @@ export type Transaction = {
   categoryId: string | null;
   categoryName: string | null;
   categoryColor: string | null;
+  categoryEmoji: string | null;
   merchant: string | null;
   description: string | null;
   accountLabel: string | null;
@@ -60,7 +61,15 @@ export type Settlement = {
   settledAt: string | null;
 };
 
-export type Category = { id: string; name: string; kind: string; color: string; archived: number };
+export type Category = {
+  id: string;
+  name: string;
+  kind: string;
+  color: string;
+  emoji: string;
+  archived: number;
+  usos: number;
+};
 export type CategoryRule = { id: string; pattern: string; priority: number; categoryId: string; categoryName: string };
 
 export type EmailRule = {
@@ -131,6 +140,7 @@ export type CategoryBudget = {
   categoryId: string;
   category: string;
   color: string;
+  emoji: string;
   budget: number;
   fromBase: boolean;
   spent: number;
@@ -170,6 +180,7 @@ export type GoalsView = { reserve: number; goals: Goal[]; unassigned: number };
 export type CategoryChange = {
   category: string;
   color: string;
+  emoji: string;
   current: number;
   previous: number;
   average: number;
@@ -299,7 +310,7 @@ export const api = {
     const query = new URLSearchParams();
     if (month) query.set('month', month);
     if (scope) query.set('scope', scope);
-    return get<{ categories: { category: string; color: string; total: number; count: number }[] }>(
+    return get<{ categories: { category: string; color: string; emoji: string; total: number; count: number }[] }>(
       `/finance/reports/by-category?${query.toString()}`,
     );
   },

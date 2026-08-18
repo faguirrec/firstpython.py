@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api, type CategoryChange, type Comparison } from '../lib/api';
 import { useSession } from '../lib/session';
 import { money, monthLabel } from '../lib/format';
+import { FichaCategoria } from './Fichas';
 
 function Delta({ value, pct, currency }: { value: number; pct: number | null; currency: string }) {
   if (Math.abs(value) < 0.005) return <span className="muted">sin cambio</span>;
@@ -17,7 +18,7 @@ function Delta({ value, pct, currency }: { value: number; pct: number | null; cu
 function Fila({ row, currency }: { row: CategoryChange; currency: string }) {
   return (
     <div className="item">
-      <i className="dot" style={{ background: row.color }} />
+      <FichaCategoria emoji={row.emoji} color={row.color} />
       <div className="body">
         <div className="title">{row.category}</div>
         <div className="meta">

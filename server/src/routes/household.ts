@@ -42,11 +42,13 @@ function inviteCode(): string {
 }
 
 function seedHousehold(householdId: string): void {
-  const insertCategory = db.prepare('INSERT INTO categories (id, household_id, name, kind, color) VALUES (?, ?, ?, ?, ?)');
+  const insertCategory = db.prepare(
+    'INSERT INTO categories (id, household_id, name, kind, color, emoji) VALUES (?, ?, ?, ?, ?, ?)',
+  );
   const byName = new Map<string, string>();
   for (const category of DEFAULT_CATEGORIES) {
     const id = uid();
-    insertCategory.run(id, householdId, category.name, category.kind, category.color);
+    insertCategory.run(id, householdId, category.name, category.kind, category.color, category.emoji);
     byName.set(category.name, id);
   }
 

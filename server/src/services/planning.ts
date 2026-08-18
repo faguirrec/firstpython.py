@@ -14,6 +14,7 @@ export type CategoryBudget = {
   categoryId: string;
   category: string;
   color: string;
+  emoji: string;
   budget: number;
   /** true si el monto viene del presupuesto base y no de uno propio del mes. */
   fromBase: boolean;
@@ -56,7 +57,7 @@ function monthProgress(month: string): number {
 export function computeBudgetStatus(householdId: string, month: string): BudgetStatus {
   const rows = db
     .prepare(
-      `SELECT c.id AS categoryId, c.name AS category, c.color,
+      `SELECT c.id AS categoryId, c.name AS category, c.color, c.emoji,
               COALESCE(bm.amount, bb.amount) AS budget,
               CASE WHEN bm.amount IS NULL AND bb.amount IS NOT NULL THEN 1 ELSE 0 END AS fromBase,
               COALESCE((
@@ -76,6 +77,7 @@ export function computeBudgetStatus(householdId: string, month: string): BudgetS
     categoryId: string;
     category: string;
     color: string;
+    emoji: string;
     budget: number | null;
     fromBase: number;
     spent: number;
@@ -94,6 +96,7 @@ export function computeBudgetStatus(householdId: string, month: string): BudgetS
       categoryId: r.categoryId,
       category: r.category,
       color: r.color,
+      emoji: r.emoji,
       budget: round2(budget),
       fromBase: r.fromBase === 1,
       spent: round2(r.spent),
@@ -219,6 +222,7 @@ export function computeGoals(householdId: string): GoalsView {
 export type CategoryChange = {
   category: string;
   color: string;
+  emoji: string;
   current: number;
   previous: number;
   /** Promedio de los meses anteriores considerados, sin contar el actual. */
@@ -255,6 +259,7 @@ export function compareMonths(householdId: string, month: string, lookback = 3):
     .prepare(
       `SELECT COALESCE(c.name, 'Sin categoría') AS category,
               COALESCE(c.color, '#898781') AS color,
+              COALESCE(c.emoji, '❓') AS emoji,
               substr(t.occurred_on, 1, 7) AS month,
               SUM(t.amount) AS total
          FROM transactions t
@@ -263,18 +268,21 @@ export function compareMonths(householdId: string, month: string, lookback = 3):
           AND t.type = 'gasto' AND t.scope = 'comun'
           AND substr(t.occurred_on, 1, 7) >= ?
           AND substr(t.occurred_on, 1, 7) <= ?
-        GROUP BY category, color, month`,
+        GROUP BY category, color, emoji, month`,
     )
     .all(householdId, since, month) as {
     category: string;
     color: string;
+    emoji: string;
     month: string;
     total: number;
   }[];
 
-  const byCategory = new Map<string, { color: string; months: Map<string, number> }>();
+  const byCategory = new Map<string, { color: string; emoji: string; months: Map<string, number> }>();
   for (const row of rows) {
-    if (!byCategory.has(row.category)) byCategory.set(row.category, { color: row.color, months: new Map() });
+    if (!byCategory.has(row.category)) {
+      byCategory.set(row.category, { color: row.color, emoji: row.emoji, months: new Map() });
+    }
     byCategory.get(row.category)!.months.set(row.month, row.total);
   }
 
@@ -290,6 +298,7 @@ export function compareMonths(householdId: string, month: string, lookback = 3):
     return {
       category,
       color: data.color,
+      emoji: data.emoji,
       current: round2(current),
       previous: round2(previous),
       average: round2(average),

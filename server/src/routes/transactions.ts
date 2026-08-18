@@ -9,7 +9,7 @@ transactionsRouter.use(requireAuth, requireHousehold);
 
 const SELECT = `
   SELECT t.id, t.occurred_on AS occurredOn, t.amount, t.type, t.scope, t.funded_by AS fundedBy,
-         t.user_id AS userId, t.category_id AS categoryId, c.name AS categoryName, c.color AS categoryColor,
+         t.user_id AS userId, t.category_id AS categoryId, c.name AS categoryName, c.color AS categoryColor, c.emoji AS categoryEmoji,
          t.merchant, t.description, t.account_label AS accountLabel, t.installments,
          t.source, t.raw_snippet AS rawSnippet, t.reviewed, u.name AS userName
     FROM transactions t
