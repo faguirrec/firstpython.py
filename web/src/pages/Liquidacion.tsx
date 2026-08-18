@@ -5,6 +5,8 @@ import { currentMonth, money, monthLabel, percent } from '../lib/format';
 import Cabecera from '../components/Cabecera';
 import { SplitBar } from '../components/Charts';
 import Metas from '../components/Metas';
+import { IconoOculto, IconoVer } from '../components/Icons';
+import { alternarPrivacidad, usePrivacidad } from '../lib/privacidad';
 
 export default function Liquidacion() {
   const { user, household } = useSession();
@@ -16,6 +18,7 @@ export default function Liquidacion() {
   const [projection, setProjection] = useState<Projection | null>(null);
   const [reserve, setReserve] = useState<Reserve | null>(null);
   const [budget, setBudget] = useState('');
+  const privado = usePrivacidad();
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -63,7 +66,23 @@ export default function Liquidacion() {
 
   return (
     <>
-      <Cabecera hogar="Reparto" month={month} onMonthChange={setMonth} />
+      <Cabecera
+        hogar="Reparto"
+        month={month}
+        onMonthChange={setMonth}
+        accion={
+          <button
+            className="small ghost"
+            onClick={alternarPrivacidad}
+            aria-pressed={privado}
+            title={privado ? 'Mostrar los sueldos' : 'Ocultar los sueldos'}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flex: 'none' }}
+          >
+            {privado ? <IconoOculto size={17} /> : <IconoVer size={17} />}
+            {privado ? 'Ocultos' : 'Ocultar'}
+          </button>
+        }
+      />
 
       {error && <div className="error">{error}</div>}
       {message && <div className="ok">{message}</div>}
@@ -76,15 +95,28 @@ export default function Liquidacion() {
         {members.map((m) => (
           <label className="field" key={m.id}>
             <span>{m.name}{m.id === user?.id && ' (tú)'}</span>
-            <input
-              inputMode="decimal"
-              value={incomes[m.id] ?? ''}
-              placeholder="1450000"
-              onChange={(e) => setIncomes((prev) => ({ ...prev, [m.id]: e.target.value }))}
-              onBlur={(e) => void saveIncome(m.id, e.target.value)}
-            />
+            {privado ? (
+              // Enmascarado y no editable: escribir a ciegas en un campo que se
+              // guarda al salir es una receta para cargar un sueldo equivocado.
+              <div className="campo-oculto" aria-label={`Sueldo de ${m.name}, oculto`}>
+                {'•'.repeat(7)}
+              </div>
+            ) : (
+              <input
+                inputMode="decimal"
+                value={incomes[m.id] ?? ''}
+                placeholder="1450000"
+                onChange={(e) => setIncomes((prev) => ({ ...prev, [m.id]: e.target.value }))}
+                onBlur={(e) => void saveIncome(m.id, e.target.value)}
+              />
+            )}
           </label>
         ))}
+        {privado && (
+          <p className="muted" style={{ marginBottom: 0 }}>
+            Los sueldos están ocultos en este dispositivo. Toca «Ocultos» arriba para verlos y poder editarlos.
+          </p>
+        )}
         {members.length < 2 && (
           <p className="muted">Falta que la otra persona se una al hogar (Ajustes → Hogar → código de invitación).</p>
         )}

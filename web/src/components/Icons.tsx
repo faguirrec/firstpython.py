@@ -95,6 +95,22 @@ export const IconoBolsillo = (p: IconProps) => (
   </Icon>
 );
 
+export const IconoVer = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z" />
+    <circle cx="12" cy="12" r="3" />
+  </Icon>
+);
+
+export const IconoOculto = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M9.9 5.7A11 11 0 0 1 12 5.5c6.4 0 10 6.5 10 6.5a19 19 0 0 1-3.3 4.2" />
+    <path d="M6.4 6.9A18.6 18.6 0 0 0 2 12s3.6 6.5 10 6.5c1.6 0 3-.4 4.2-1" />
+    <path d="M10 10a2.8 2.8 0 0 0 4 4" />
+    <path d="m3.5 3.5 17 17" />
+  </Icon>
+);
+
 export const IconoBuscar = (p: IconProps) => (
   <Icon {...p}>
     <circle cx="11" cy="11" r="7" />

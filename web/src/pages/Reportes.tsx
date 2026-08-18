@@ -6,6 +6,7 @@ import { CategoryBars, TrendChart, type CategorySlice, type TrendPoint } from '.
 import Cabecera from '../components/Cabecera';
 import Presupuesto from '../components/Presupuesto';
 import Comparacion from '../components/Comparacion';
+import { usePrivacidad } from '../lib/privacidad';
 
 const VISTAS = [
   { key: 'presupuesto', label: 'Presupuesto' },
@@ -45,6 +46,7 @@ export default function Reportes() {
 function Tendencia() {
   const { household } = useSession();
   const currency = household?.currency ?? 'CLP';
+  const privado = usePrivacidad();
   const [range, setRange] = useState(12);
   const [months, setMonths] = useState<(TrendPoint & { income: number; personal: number })[]>([]);
   const [categories, setCategories] = useState<CategorySlice[]>([]);
@@ -123,7 +125,9 @@ function Tendencia() {
                 <td>{monthLabel(m.month)}</td>
                 <td className="num">{money(m.shared, currency)}</td>
                 <td className="num">{money(m.personal, currency)}</td>
-                <td className="num">{m.income ? money(m.income, currency) : '—'}</td>
+                <td className="num">
+                  {m.income ? (privado ? '•••••' : money(m.income, currency)) : '—'}
+                </td>
               </tr>
             ))}
           </tbody>

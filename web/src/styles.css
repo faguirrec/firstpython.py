@@ -561,3 +561,18 @@ details.table-view summary { font-size: 0.8rem; color: var(--text-secondary); cu
    desbordar la tarjeta, que es peor. Lo que no deben hacer es competir con una
    cifra dentro de la misma fila; en esos casos la cifra va debajo. */
 .label { text-wrap: balance; }
+
+/* Sueldo enmascarado: conserva la forma del campo para que la pantalla no
+   salte al activar o desactivar el modo privado. */
+.campo-oculto {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--border);
+  background: var(--plane);
+  color: var(--text-muted);
+  font-size: 16px;
+  letter-spacing: 0.3em;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
