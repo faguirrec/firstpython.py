@@ -347,9 +347,12 @@ export const api = {
     ),
 
   gmailStatus: () =>
-    get<{ configured: boolean; accounts: { id: string; email: string; lastSyncAt: string | null }[]; pendingReview: number }>(
-      '/gmail/status',
-    ),
+    get<{
+      configured: boolean;
+      accounts: { id: string; email: string; lastSyncAt: string | null }[];
+      pendingReview: number;
+      redirectUri: string;
+    }>('/gmail/status'),
   // El origen viaja explícito para que Google devuelva a la misma dirección
   // desde la que se abrió la app (localhost, IP de la casa o túnel HTTPS).
   gmailAuthUrl: () =>

@@ -8,11 +8,8 @@ export default function AjustesGmail() {
   const currency = useSession().household?.currency ?? 'CLP';
   const [params] = useSearchParams();
   const justConnected = params.get('conectado');
-  const [status, setStatus] = useState<{
-    configured: boolean;
-    accounts: { id: string; email: string; lastSyncAt: string | null }[];
-    pendingReview: number;
-  } | null>(null);
+  const [status, setStatus] = useState<Awaited<ReturnType<typeof api.gmailStatus>> | null>(null);
+  const [copiada, setCopiada] = useState(false);
   const [result, setResult] = useState<SyncResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,10 +63,39 @@ export default function AjustesGmail() {
         </p>
 
         {status && !status.configured && (
-          <div className="error">
-            El servidor no tiene credenciales de Google configuradas. Hay que definir <code>GOOGLE_CLIENT_ID</code> y{' '}
-            <code>GOOGLE_CLIENT_SECRET</code> en <code>server/.env</code> (los pasos están en el README).
-          </div>
+          <>
+            <div className="error">
+              Todavía no están las credenciales de Google. Se configuran en el servidor: si la app está publicada, en
+              el panel del proveedor (en Render: pestaña <strong>Environment</strong>); si corre en tu computador, en{' '}
+              <code>server/.env</code>. El paso a paso está en <code>DEPLOY.md</code>.
+            </div>
+
+            <div className="card" style={{ background: 'var(--plane)', boxShadow: 'none' }}>
+              <div className="label" style={{ marginBottom: 6 }}>URI de redirección</div>
+              <p className="muted" style={{ marginTop: 0 }}>
+                Pega exactamente esto en Google Cloud, en «URI de redirección autorizados». Un carácter distinto y
+                Google rechaza la autorización.
+              </p>
+              <div className="row" style={{ gap: 8 }}>
+                <code style={{ fontSize: '0.76rem', wordBreak: 'break-all', flex: 1 }}>{status.redirectUri}</code>
+                <button
+                  className="small"
+                  style={{ flex: 'none' }}
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(status.redirectUri);
+                      setCopiada(true);
+                      setTimeout(() => setCopiada(false), 2000);
+                    } catch {
+                      window.prompt('Copia esta dirección:', status.redirectUri);
+                    }
+                  }}
+                >
+                  {copiada ? '✓' : 'Copiar'}
+                </button>
+              </div>
+            </div>
+          </>
         )}
 
         <div className="list">

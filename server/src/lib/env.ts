@@ -44,7 +44,17 @@ export const env = {
   google: {
     clientId: process.env.GOOGLE_CLIENT_ID ?? '',
     clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
-    redirectUri: process.env.GOOGLE_REDIRECT_URI ?? 'http://localhost:4000/api/gmail/callback',
+    /**
+     * A dónde vuelve Google tras autorizar. Si no se define, se deduce de la
+     * dirección pública de la app: es una variable menos que configurar, y una
+     * menos donde equivocarse — un carácter distinto y Google responde
+     * redirect_uri_mismatch.
+     */
+    get redirectUri(): string {
+      if (process.env.GOOGLE_REDIRECT_URI) return process.env.GOOGLE_REDIRECT_URI;
+      const base = process.env.WEB_ORIGIN ?? process.env.RENDER_EXTERNAL_URL ?? 'http://localhost:4000';
+      return `${base.replace(/\/$/, '')}/api/gmail/callback`;
+    },
   },
 
   /** SMTP para invitaciones y reportes. Sin SMTP_HOST, el correo queda apagado. */

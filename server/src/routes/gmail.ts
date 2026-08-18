@@ -33,7 +33,14 @@ gmailRouter.get('/status', requireAuth, requireHousehold, (req, res) => {
   const pending = db
     .prepare('SELECT COUNT(*) AS n FROM transactions WHERE household_id = ? AND reviewed = 0')
     .get(req.household!.id) as { n: number };
-  res.json({ configured: env.gmailEnabled, accounts, pendingReview: pending.n });
+  res.json({
+    configured: env.gmailEnabled,
+    accounts,
+    pendingReview: pending.n,
+    // Se muestra en la pantalla para copiarla tal cual a Google Cloud: si no
+    // coincide carácter por carácter, la autorización falla.
+    redirectUri: env.google.redirectUri,
+  });
 });
 
 gmailRouter.get('/auth-url', requireAuth, requireHousehold, (req, res) => {

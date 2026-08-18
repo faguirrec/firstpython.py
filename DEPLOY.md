@@ -566,7 +566,13 @@ Cuando la app tenga su dirección definitiva, hay que decírselo a Google:
    tu ID de cliente OAuth.
 2. En *URI de redirección autorizados* agrega:
    `https://TU-DIRECCION/api/gmail/callback`
-3. En Fly: `fly secrets set GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=... GOOGLE_REDIRECT_URI=https://TU-DIRECCION/api/gmail/callback`
+3. En el servidor sólo hacen falta dos variables: `GOOGLE_CLIENT_ID` y
+   `GOOGLE_CLIENT_SECRET`. La URI de redirección la deduce la app de su propia
+   dirección; si necesitas forzar otra, define `GOOGLE_REDIRECT_URI`.
+
+La app muestra la URI exacta que espera en **Ajustes → Gmail**, con un botón
+para copiarla. Pégala tal cual en Google Cloud: la causa número uno de que esto
+falle es que difieran en un carácter.
 
 Recuerda que mientras la pantalla de consentimiento esté en modo *Prueba*, Google
 caduca el permiso cada 7 días y hay que reconectar la cuenta. Para dejarlo
