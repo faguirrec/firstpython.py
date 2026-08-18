@@ -572,7 +572,9 @@ dejar la base local como estaba.
 
 ## Gmail en producción
 
-Cuando la app tenga su dirección definitiva, hay que decírselo a Google:
+El paso a paso completo —con la consola de Google pantalla por pantalla, los
+errores típicos y qué hacer con ellos— está en **[GMAIL.md](GMAIL.md)**. Lo
+esencial:
 
 1. En [Google Cloud Console](https://console.cloud.google.com/) → Credenciales →
    tu ID de cliente OAuth.

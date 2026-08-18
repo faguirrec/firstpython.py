@@ -137,7 +137,9 @@ publicado en un único puerto.
 
 ## Conectar Gmail
 
-Sin esto la app funciona igual, cargando los gastos a mano.
+Sin esto la app funciona igual, cargando los gastos a mano. El paso a paso
+detallado, con los errores típicos, está en **[GMAIL.md](GMAIL.md)**; acá va el
+resumen.
 
 1. Entra a [Google Cloud Console](https://console.cloud.google.com/) y crea un
    proyecto.

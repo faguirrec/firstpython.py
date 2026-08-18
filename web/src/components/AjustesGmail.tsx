@@ -67,7 +67,7 @@ export default function AjustesGmail() {
             <div className="error">
               Todavía no están las credenciales de Google. Se configuran en el servidor: si la app está publicada, en
               el panel del proveedor (en Render: pestaña <strong>Environment</strong>); si corre en tu computador, en{' '}
-              <code>server/.env</code>. El paso a paso está en <code>DEPLOY.md</code>.
+              <code>server/.env</code>. El paso a paso está en <code>GMAIL.md</code>.
             </div>
 
             <div className="card" style={{ background: 'var(--plane)', boxShadow: 'none' }}>
