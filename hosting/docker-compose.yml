@@ -1,0 +1,60 @@
+# MyHaus en un servidor propio.
+#
+# Dos contenedores: la app, y Caddy adelante haciendo de portero. Caddy sirve el
+# sitio público, redirige el dominio sin www, y pasa app.myhaus.cl a la app.
+# El certificado HTTPS lo pide y lo renueva solo.
+#
+#   docker compose up -d --build
+#
+# Las variables van en un archivo `.env` al lado de este (ver env.ejemplo).
+
+# Sin esto el proyecto se llamaría como la carpeta ("hosting") y los volúmenes
+# quedarían con nombres que no dicen nada.
+name: myhaus
+
+services:
+  app:
+    build:
+      # El Dockerfile vive en la raíz del repositorio, un nivel más arriba.
+      context: ..
+      dockerfile: Dockerfile
+    image: myhaus-app
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DB_PATH: /data/hogar.db
+      PORT: "8080"
+      # Caddy está delante, así que el protocolo y la IP reales llegan en
+      # cabeceras. Sin esto las cookies seguras y el límite de intentos fallan.
+      TRUST_PROXY: "1"
+    volumes:
+      # Acá vive la base. Es lo único que hay que respaldar.
+      - datos:/data
+    # Sin `ports`: la app no se asoma a internet, sólo Caddy la alcanza.
+    expose:
+      - "8080"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # El sitio público se sirve directo desde el repositorio: publicar un
+      # cambio de la página es `git pull` y nada más.
+      - ../landing:/sitio:ro
+      # Los certificados viven acá. Si se pierden, Let's Encrypt tiene un límite
+      # de emisiones por semana, así que conviene no borrar este volumen.
+      - caddy-datos:/data
+      - caddy-config:/config
+    depends_on:
+      - app
+
+volumes:
+  datos:
+  caddy-datos:
+  caddy-config:

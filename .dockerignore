@@ -10,3 +10,9 @@
 .gitignore
 *.md
 start.ps1
+
+# El sitio público y los archivos del servidor propio no entran en la imagen:
+# Caddy los sirve o los usa desde el disco, y así el contexto de build no
+# carga imágenes que nunca se copian.
+landing
+hosting

@@ -203,9 +203,18 @@ En la red de la casa basta con apuntar a la IP del computador. Para usarla
 desde cualquier lado hace falta HTTPS: los pasos están en **[DEPLOY.md](DEPLOY.md)**,
 con `Dockerfile` y `fly.toml` ya incluidos en el repositorio.
 
+## Dominio propio y sitio público
+
+El sitio de `www.myhaus.cl` está en `landing/`: HTML y CSS planos, sin compilar.
+Dónde publicarlo, cómo dejar la app en `app.myhaus.cl` y cómo mudarse después a
+un servidor propio están en **[HOSTING.md](HOSTING.md)**, con el
+`docker-compose.yml` y el script de respaldo ya listos en `hosting/`.
+
 ## Estructura
 
 ```
+landing/                   sitio público de www.myhaus.cl (sin compilar)
+hosting/                   docker-compose, Caddy y respaldos para servidor propio
 server/
   src/
     lib/db.ts              esquema SQLite y conexión

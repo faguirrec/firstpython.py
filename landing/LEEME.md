@@ -32,54 +32,16 @@ Y abres `http://localhost:8080`.
 
 ## Dónde publicarlo
 
-Es un sitio estático, así que hay opciones gratis y buenas. Recomendación:
-**Cloudflare Pages**.
+Los pasos completos —dónde subirlo, cómo queda el DNS y qué variables hay que
+tocar en la app— están en **[HOSTING.md](../HOSTING.md)**, en la raíz del
+repositorio. En resumen: **Cloudflare Pages**, gratis, arrastrando esta carpeta.
 
-### Cloudflare Pages (gratis, recomendado)
-
-1. Crea una cuenta en [dash.cloudflare.com](https://dash.cloudflare.com).
-2. **Workers & Pages** → **Create** → **Pages** → **Upload assets**.
-3. Arrastra la carpeta `landing` completa.
-4. En **Custom domains**, agrega `www.myhaus.cl` y `myhaus.cl`.
-
-Cloudflare te pide apuntar los nameservers del dominio hacia ellos: eso se hace
-una vez en el panel de nic.cl, y de paso te deja administrar todo el DNS —
-incluido el subdominio de la app— desde un solo lugar.
-
-El certificado HTTPS lo emite y renueva Cloudflare solo.
-
-### Alternativas equivalentes
+Alternativas equivalentes, por si acaso:
 
 - **Netlify**: arrastras la carpeta en [app.netlify.com/drop](https://app.netlify.com/drop).
 - **GitHub Pages**: gratis, sirviendo desde este mismo repositorio.
-- **El mismo servidor de la app**: si más adelante todo queda en un VPS, el
-  sitio puede vivir junto a la app y ahorrarse un servicio.
-
-## Cómo quedan las direcciones
-
-| Dirección | Qué hay |
-|---|---|
-| `www.myhaus.cl` | este sitio |
-| `myhaus.cl` | redirige a `www` |
-| `app.myhaus.cl` | la aplicación |
-
-Mantener el sitio y la app en direcciones distintas es lo que hacen Fintoc,
-Kuanto y compañía, y hay una razón práctica: la app se instala en el teléfono y
-su alcance es todo el dominio donde vive. Con el sitio en la misma dirección, la
-página de marketing quedaría dentro de la app instalada.
-
-## Al configurar el subdominio de la app
-
-Cuando `app.myhaus.cl` apunte al servidor, hay que decirle a la app cuál es su
-dirección. En el panel del proveedor, dos variables:
-
-```
-WEB_ORIGIN=https://app.myhaus.cl
-CANONICAL_HOST=app.myhaus.cl
-```
-
-Y si ya conectaste Gmail, agregar en Google Cloud la URI
-`https://app.myhaus.cl/api/gmail/callback`.
+- **El mismo servidor de la app**: `hosting/docker-compose.yml` ya sirve esta
+  carpeta con Caddy, así que en un VPS el sitio no cuesta un servicio aparte.
 
 ## Qué falta, cuando haya tiempo
 
