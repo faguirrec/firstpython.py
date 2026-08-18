@@ -429,6 +429,37 @@ table.data td.num { font-variant-numeric: tabular-nums; }
 
 details.table-view summary { font-size: 0.8rem; color: var(--text-secondary); cursor: pointer; margin-top: 8px; }
 
+/* Cambio entre las cuentas del hogar y las propias. Vive en la cabecera y se
+   parece al selector de mes a propósito: las dos cosas dicen dónde estás
+   parado, no configuran nada. */
+.cambio-modo {
+  display: inline-flex;
+  gap: 2px;
+  margin-top: 8px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--plane);
+  border: 1px solid var(--border);
+}
+
+.cambio-modo button {
+  min-height: 30px;
+  padding: 4px 16px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.86rem;
+  font-weight: 560;
+  box-shadow: none;
+}
+
+.cambio-modo button.activo {
+  background: var(--surface-1);
+  color: var(--text-primary);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.12);
+}
+
 /* Aviso dentro de un campo: algo que hay que corregir antes de guardar. */
 .alerta {
   display: block;

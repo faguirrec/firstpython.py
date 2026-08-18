@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, type BudgetStatus, type CategoryBudget } from '../lib/api';
+import { useModo } from '../lib/modo';
 import { useSession } from '../lib/session';
 import { money, monthLabel } from '../lib/format';
 import { FichaCategoria } from './Fichas';
@@ -64,10 +65,11 @@ export default function Presupuesto({ month }: { month: string }) {
   const [editing, setEditing] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
+  const modo = useModo();
 
   const load = useCallback(async () => {
     try {
-      const data = await api.budgets(month);
+      const data = await api.budgets(month, modo);
       setStatus(data);
       const next: Record<string, string> = {};
       for (const c of data.categories) next[c.categoryId] = c.budget > 0 ? String(c.budget) : '';
@@ -75,7 +77,7 @@ export default function Presupuesto({ month }: { month: string }) {
     } catch (err) {
       setError((err as Error).message);
     }
-  }, [month]);
+  }, [month, modo]);
 
   useEffect(() => {
     void load();
@@ -85,7 +87,7 @@ export default function Presupuesto({ month }: { month: string }) {
     const amount = Number(raw.replace(/[^\d.,-]/g, '').replace(',', '.')) || 0;
     setError(null);
     try {
-      await api.saveBudget({ categoryId, amount });
+      await api.saveBudget({ categoryId, amount, modo });
       await load();
     } catch (err) {
       setError((err as Error).message);

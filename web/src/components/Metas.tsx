@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, type GoalsView } from '../lib/api';
+import { useModo } from '../lib/modo';
 import { useSession } from '../lib/session';
 import { money } from '../lib/format';
 import Sheet from './Sheet';
@@ -15,14 +16,15 @@ export default function Metas() {
   const [view, setView] = useState<GoalsView | null>(null);
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const modo = useModo();
 
   const load = useCallback(async () => {
     try {
-      setView(await api.goals());
+      setView(await api.goals(modo));
     } catch (err) {
       setError((err as Error).message);
     }
-  }, []);
+  }, [modo]);
 
   useEffect(() => {
     void load();
@@ -131,6 +133,8 @@ export default function Metas() {
 
 function NuevaMeta({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
   const currency = useSession().household?.currency ?? 'CLP';
+  // La meta nace en el bolsillo que se está mirando.
+  const modo = useModo();
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState('');
@@ -146,7 +150,7 @@ function NuevaMeta({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
     setBusy(true);
     setError(null);
     try {
-      await api.createGoal({ name: name.trim(), targetAmount: target, targetDate: date || null });
+      await api.createGoal({ name: name.trim(), targetAmount: target, targetDate: date || null, modo });
       onSaved();
     } catch (err) {
       setError((err as Error).message);

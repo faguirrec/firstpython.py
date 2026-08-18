@@ -30,7 +30,7 @@ export default function Ajustes() {
 
   return (
     <>
-      <Cabecera hogar="Ajustes" />
+      <Cabecera hogar="Ajustes" conModo={false} />
 
       <div className="tabs">
         {TABS.map((t) => (

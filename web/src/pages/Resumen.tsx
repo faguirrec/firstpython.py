@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, type BudgetStatus, type Settlement, type Transaction } from '../lib/api';
+import { api, type BudgetStatus, type ResumenPersonal, type Settlement, type Transaction } from '../lib/api';
 import { useSession } from '../lib/session';
+import { useModo } from '../lib/modo';
 import { currentMonth, dayLabel, money, percent } from '../lib/format';
 import { CategoryBars, SplitBar, type CategorySlice } from '../components/Charts';
 import Cabecera from '../components/Cabecera';
@@ -19,28 +20,33 @@ export default function Resumen() {
   const [recent, setRecent] = useState<Transaction[]>([]);
   const [pending, setPending] = useState(0);
   const [budget, setBudget] = useState<BudgetStatus | null>(null);
+  const [personal, setPersonal] = useState<ResumenPersonal | null>(null);
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const modo = useModo();
+  const esPersonal = modo === 'personal';
 
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [s, c, t, g, b] = await Promise.all([
+      const [s, c, t, g, b, p] = await Promise.all([
         api.settlement(month),
-        api.byCategory(month, 'comun'),
-        api.transactions({ month, limit: 6 }),
+        api.byCategory(month, esPersonal ? 'personal' : 'comun'),
+        api.transactions({ month, limit: 6, scope: esPersonal ? 'personal' : undefined }),
         api.gmailStatus().catch(() => ({ pendingReview: 0 })),
-        api.budgets(month),
+        api.budgets(month, modo),
+        esPersonal ? api.resumenPersonal(month) : Promise.resolve(null),
       ]);
       setSettlement(s);
       setCategories(c.categories);
       setRecent(t.transactions);
       setPending(g.pendingReview);
       setBudget(b);
+      setPersonal(p);
     } catch (err) {
       setError((err as Error).message);
     }
-  }, [month]);
+  }, [month, modo, esPersonal]);
 
   useEffect(() => {
     void load();
@@ -69,8 +75,62 @@ export default function Resumen() {
 
       {!settlement && <TarjetaCargando conCifra filas={2} />}
 
-      {/* La pregunta que uno viene a responder: ¿estoy al día o debo? Va primero
-          y es la única tarjeta con este peso visual. */}
+      {/* En modo personal la pregunta es otra: no cuánto debo a la casa, sino
+          cuánto me queda después de todo, con el aporte al hogar descontado
+          como el gasto que es. */}
+      {esPersonal ? (
+        <div className="card principal">
+          {personal ? (
+            <>
+              <div className="label">
+                {personal.left >= 0 ? 'Te queda este mes' : 'Vas gastando de más'}
+              </div>
+              <div
+                className="hero"
+                style={{ color: personal.left >= 0 ? 'var(--good-text)' : 'var(--critical)' }}
+              >
+                {money(Math.abs(personal.left), currency)}
+              </div>
+              {personal.income > 0 ? (
+                <div className="muted">
+                  De {money(personal.income, currency)} de sueldo, {money(personal.contributedToHousehold, currency)}{' '}
+                  fueron a la casa y {money(personal.personalExpenses, currency)} a lo tuyo.
+                </div>
+              ) : (
+                <div className="muted">
+                  Falta declarar tu sueldo del mes en <Link to="/reparto">Reparto</Link> para saber cuánto te queda.
+                </div>
+              )}
+
+              <div className="list" style={{ marginTop: 14 }}>
+                <div className="item">
+                  <div className="body"><div className="title">Sueldo</div></div>
+                  <div className="amount">{money(personal.income, currency)}</div>
+                </div>
+                <div className="item">
+                  <div className="body">
+                    <div className="title">A la casa</div>
+                    <div className="meta">Aportes y gastos comunes que pagaste tú</div>
+                  </div>
+                  <div className="amount">−{money(personal.contributedToHousehold, currency)}</div>
+                </div>
+                <div className="item">
+                  <div className="body"><div className="title">Tus gastos</div></div>
+                  <div className="amount">−{money(personal.personalExpenses, currency)}</div>
+                </div>
+              </div>
+
+              {personal.savingsRate != null && (
+                <div className="muted" style={{ marginTop: 10 }}>
+                  Estás guardando el {percent(personal.savingsRate)} de lo que ganas.
+                </div>
+              )}
+            </>
+          ) : (
+            <TarjetaCargando conCifra filas={2} />
+          )}
+        </div>
+      ) : (
       <div className="card principal">
         {me ? (
           <>
@@ -112,10 +172,12 @@ export default function Resumen() {
 
         {settlement && settlement.totalPersonalExpenses > 0 && (
           <div className="muted" style={{ marginTop: 10 }}>
-            Aparte, {money(settlement.totalPersonalExpenses, currency)} en gastos personales, que no se reparten.
+            Aparte, {money(settlement.totalPersonalExpenses, currency)} tuyos en gastos personales, que no se
+            reparten.
           </div>
         )}
       </div>
+      )}
 
       {pending > 0 && (
         <div className="card" style={{ borderColor: 'color-mix(in srgb, var(--warning) 55%, transparent)' }}>
@@ -132,7 +194,9 @@ export default function Resumen() {
         </div>
       )}
 
-      {settlement && (
+      {/* Cómo va cada uno es del hogar: en el bolsillo propio no viene al caso,
+          y mostrar lo del otro acá sería justo lo que se acaba de separar. */}
+      {settlement && !esPersonal && (
         <div className="card">
           <div className="card-head">
             <h2>Cómo va cada uno</h2>

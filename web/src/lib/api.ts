@@ -1,3 +1,5 @@
+import { paramModo, type Modo } from './modo';
+
 export type User = { id: string; email: string; name: string };
 export type Household = {
   id: string;
@@ -192,6 +194,17 @@ export type Goal = {
 
 export type GoalsView = { reserve: number; goals: Goal[]; unassigned: number };
 
+export type ResumenPersonal = {
+  month: string;
+  currency: string;
+  income: number;
+  personalExpenses: number;
+  /** Aportes a la cuenta del hogar más gastos comunes pagados de su bolsillo. */
+  contributedToHousehold: number;
+  left: number;
+  savingsRate: number | null;
+};
+
 export type CategoryChange = {
   category: string;
   color: string;
@@ -329,15 +342,24 @@ export const api = {
       `/finance/reports/by-category?${query.toString()}`,
     );
   },
-  comparison: (month: string, lookback = 3) =>
-    get<Comparison>(`/finance/reports/comparison?month=${month}&lookback=${lookback}`),
+  // `modo` decide qué bolsillo se consulta. Va explícito en cada llamada en vez
+  // de leerse del almacenamiento acá dentro: así una pantalla puede mostrar los
+  // dos lados a la vez el día que haga falta.
+  comparison: (month: string, lookback = 3, modo: Modo = 'hogar') =>
+    get<Comparison>(
+      `/finance/reports/comparison?month=${month}&lookback=${lookback}${paramModo(modo)}`,
+    ),
 
-  budgets: (month: string) => get<BudgetStatus>(`/finance/budgets?month=${month}`),
-  saveBudget: (body: { categoryId: string; amount: number; month?: string | null }) =>
+  budgets: (month: string, modo: Modo = 'hogar') =>
+    get<BudgetStatus>(`/finance/budgets?month=${month}${paramModo(modo)}`),
+  saveBudget: (body: { categoryId: string; amount: number; month?: string | null; modo?: Modo }) =>
     put<{ ok: true }>('/finance/budgets', body),
 
-  goals: () => get<GoalsView>('/finance/goals'),
-  createGoal: (body: { name: string; targetAmount: number; targetDate?: string | null }) =>
+  /** Las finanzas de quien está usando la app, con el aporte al hogar incluido. */
+  resumenPersonal: (month: string) => get<ResumenPersonal>(`/finance/personal?month=${month}`),
+
+  goals: (modo: Modo = 'hogar') => get<GoalsView>(`/finance/goals?modo=${modo}`),
+  createGoal: (body: { name: string; targetAmount: number; targetDate?: string | null; modo?: Modo }) =>
     post<{ id: string }>('/finance/goals', body),
   updateGoal: (id: string, body: Record<string, unknown>) => patch<{ ok: true }>(`/finance/goals/${id}`, body),
   deleteGoal: (id: string) => del<{ ok: true }>(`/finance/goals/${id}`),

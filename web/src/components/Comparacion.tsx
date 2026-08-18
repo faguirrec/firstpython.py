@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, type CategoryChange, type Comparison } from '../lib/api';
+import { useModo } from '../lib/modo';
 import { useSession } from '../lib/session';
 import { money, monthLabel } from '../lib/format';
 import { FichaCategoria } from './Fichas';
@@ -38,13 +39,14 @@ export default function Comparacion({ month }: { month: string }) {
   const currency = useSession().household?.currency ?? 'CLP';
   const [data, setData] = useState<Comparison | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const modo = useModo();
 
   useEffect(() => {
     void api
-      .comparison(month)
+      .comparison(month, 3, modo)
       .then(setData)
       .catch((err: Error) => setError(err.message));
-  }, [month]);
+  }, [month, modo]);
 
   if (error) return <div className="error">{error}</div>;
   if (!data) return null;
