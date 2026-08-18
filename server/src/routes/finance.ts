@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { db, uid } from '../lib/db.js';
 import { requireAuth, requireHousehold } from '../lib/auth.js';
+import { soloMisMovimientos } from '../lib/visibilidad.js';
 import { computeReserve, computeSettlement, projectContributions } from '../services/split.js';
 import { compareMonths, computeBudgetStatus, computeGoals } from '../services/planning.js';
 
@@ -69,7 +70,7 @@ financeRouter.get('/settlement', (req, res) => {
     res.status(400).json({ error: month.error.issues[0].message });
     return;
   }
-  res.json(computeSettlement(req.household!.id, month.data, req.household!.currency));
+  res.json(computeSettlement(req.household!.id, month.data, req.household!.currency, req.user!.id));
 });
 
 /** Congela el resultado del mes para dejar registro de lo acordado. */
@@ -283,17 +284,20 @@ financeRouter.get('/reports/monthly', (req, res) => {
   const months = Math.min(Number(req.query.months ?? 12) || 12, 36);
   const rows = db
     .prepare(
-      `SELECT substr(occurred_on, 1, 7) AS month,
-              SUM(CASE WHEN type = 'gasto' AND scope = 'comun'    THEN amount ELSE 0 END) AS shared,
-              SUM(CASE WHEN type = 'gasto' AND scope = 'personal' THEN amount ELSE 0 END) AS personal,
-              SUM(CASE WHEN type = 'aporte'                       THEN amount ELSE 0 END) AS contributions
-         FROM transactions
-        WHERE household_id = ?
+      `SELECT substr(t.occurred_on, 1, 7) AS month,
+              SUM(CASE WHEN t.type = 'gasto' AND t.scope = 'comun'    THEN t.amount ELSE 0 END) AS shared,
+              -- Sólo lo personal de quien pregunta: el gasto personal del otro
+              -- no es asunto de este reporte.
+              SUM(CASE WHEN t.type = 'gasto' AND t.scope = 'personal' THEN t.amount ELSE 0 END) AS personal,
+              SUM(CASE WHEN t.type = 'aporte'                         THEN t.amount ELSE 0 END) AS contributions
+         FROM transactions t
+        WHERE t.household_id = @hogar AND ${soloMisMovimientos()}
         GROUP BY month
         ORDER BY month DESC
-        LIMIT ?`,
+        LIMIT @limite`,
     )
-    .all(req.household!.id, months) as { month: string; shared: number; personal: number; contributions: number }[];
+    .all({ hogar: req.household!.id, yo: req.user!.id, limite: months }) as
+      { month: string; shared: number; personal: number; contributions: number }[];
 
   const incomes = db
     .prepare(
@@ -313,16 +317,17 @@ financeRouter.get('/reports/monthly', (req, res) => {
 financeRouter.get('/reports/by-category', (req, res) => {
   const month = req.query.month as string | undefined;
   const scope = req.query.scope as string | undefined;
-  const params: unknown[] = [req.household!.id];
+  const params: Record<string, unknown> = { hogar: req.household!.id, yo: req.user!.id };
   let filter = '';
   if (month) {
-    filter += ' AND t.occurred_on LIKE ?';
-    params.push(`${month}-%`);
+    filter += ' AND t.occurred_on LIKE @mes';
+    params.mes = `${month}-%`;
   }
-  // Sin filtro se ven todos; las vistas del hogar piden explícitamente 'comun'.
+  // Sin filtro se ven todos los que uno puede ver; las vistas del hogar piden
+  // explícitamente 'comun'.
   if (scope === 'comun' || scope === 'personal') {
-    filter += ' AND t.scope = ?';
-    params.push(scope);
+    filter += ' AND t.scope = @ambito';
+    params.ambito = scope;
   }
 
   const rows = db
@@ -334,11 +339,12 @@ financeRouter.get('/reports/by-category', (req, res) => {
               COUNT(*) AS count
          FROM transactions t
          LEFT JOIN categories c ON c.id = t.category_id
-        WHERE t.household_id = ? AND t.type = 'gasto' ${filter}
+        WHERE t.household_id = @hogar AND t.type = 'gasto'
+          AND ${soloMisMovimientos()} ${filter}
         GROUP BY category, color, emoji
         ORDER BY total DESC`,
     )
-    .all(...params);
+    .all(params);
   res.json({ categories: rows });
 });
 
@@ -352,12 +358,13 @@ financeRouter.get('/reports/category-trend', (req, res) => {
               SUM(t.amount) AS total
          FROM transactions t
          LEFT JOIN categories c ON c.id = t.category_id
-        WHERE t.household_id = ? AND t.type = 'gasto'
-          AND substr(t.occurred_on, 1, 7) >= ?
+        WHERE t.household_id = @hogar AND t.type = 'gasto'
+          AND ${soloMisMovimientos()}
+          AND substr(t.occurred_on, 1, 7) >= @desde
         GROUP BY month, category
         ORDER BY month`,
     )
-    .all(req.household!.id, sinceMonth(months));
+    .all({ hogar: req.household!.id, yo: req.user!.id, desde: sinceMonth(months) });
   res.json({ rows });
 });
 

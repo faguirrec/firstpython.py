@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { db, uid } from '../lib/db.js';
 import { requireAuth, requireHousehold } from '../lib/auth.js';
 import { categorize, recategorizeUncategorized } from '../services/categorizer.js';
+import { soloMisMovimientos } from '../lib/visibilidad.js';
 
 export const transactionsRouter = Router();
 transactionsRouter.use(requireAuth, requireHousehold);
@@ -51,24 +52,33 @@ transactionsRouter.get('/', (req, res) => {
   }
   const q = query.data;
 
-  const where: string[] = ['t.household_id = ?'];
-  const params: unknown[] = [req.household!.id];
+  // Parámetros por nombre: el filtro de visibilidad usa @yo y mezclarlo con
+  // posicionales haría que el orden importara en una lista que se arma sola.
+  const where: string[] = ['t.household_id = @hogar', soloMisMovimientos()];
+  const params: Record<string, unknown> = {
+    hogar: req.household!.id,
+    yo: req.user!.id,
+    limite: q.limit,
+  };
 
-  if (q.month) { where.push('t.occurred_on LIKE ?'); params.push(`${q.month}-%`); }
-  if (q.from) { where.push('t.occurred_on >= ?'); params.push(q.from); }
-  if (q.to) { where.push('t.occurred_on <= ?'); params.push(q.to); }
-  if (q.type) { where.push('t.type = ?'); params.push(q.type); }
-  if (q.scope) { where.push('t.scope = ?'); params.push(q.scope); }
-  if (q.categoryId) { where.push('t.category_id = ?'); params.push(q.categoryId); }
+  if (q.month) { where.push('t.occurred_on LIKE @mes'); params.mes = `${q.month}-%`; }
+  if (q.from) { where.push('t.occurred_on >= @desde'); params.desde = q.from; }
+  if (q.to) { where.push('t.occurred_on <= @hasta'); params.hasta = q.to; }
+  if (q.type) { where.push('t.type = @tipo'); params.tipo = q.type; }
+  if (q.scope) { where.push('t.scope = @ambito'); params.ambito = q.scope; }
+  if (q.categoryId) { where.push('t.category_id = @categoria'); params.categoria = q.categoryId; }
   if (q.pending === '1') where.push('t.reviewed = 0');
   if (q.search) {
-    where.push('(t.merchant LIKE ? OR t.description LIKE ?)');
-    params.push(`%${q.search}%`, `%${q.search}%`);
+    where.push('(t.merchant LIKE @busca OR t.description LIKE @busca)');
+    params.busca = `%${q.search}%`;
   }
 
   const rows = db
-    .prepare(`${SELECT} WHERE ${where.join(' AND ')} ORDER BY t.occurred_on DESC, t.created_at DESC LIMIT ?`)
-    .all(...params, q.limit);
+    .prepare(
+      `${SELECT} WHERE ${where.join(' AND ')}
+        ORDER BY t.occurred_on DESC, t.created_at DESC LIMIT @limite`,
+    )
+    .all(params);
 
   res.json({ transactions: rows });
 });
@@ -81,8 +91,11 @@ transactionsRouter.post('/', (req, res) => {
   }
   const t = parsed.data;
 
-  // Un aporte a la cuenta del hogar siempre pertenece a quien lo hizo.
-  const userId = t.type === 'aporte' ? t.userId ?? req.user!.id : t.userId ?? null;
+  // Un aporte a la cuenta del hogar siempre pertenece a quien lo hizo, y un
+  // gasto personal también: sin dueño no sería de nadie, y lo personal es
+  // justamente lo que le pertenece a una persona.
+  const userId =
+    t.type === 'aporte' || t.scope === 'personal' ? (t.userId ?? req.user!.id) : (t.userId ?? null);
   const categoryId = t.categoryId ?? categorize(req.household!.id, t.merchant ?? t.description ?? null);
   const id = uid();
 
@@ -106,8 +119,11 @@ transactionsRouter.patch('/:id', (req, res) => {
     return;
   }
   const owned = db
-    .prepare('SELECT 1 FROM transactions WHERE id = ? AND household_id = ?')
-    .get(req.params.id, req.household!.id);
+    .prepare(
+      `SELECT 1 FROM transactions t
+        WHERE t.id = @id AND t.household_id = @hogar AND ${soloMisMovimientos()}`,
+    )
+    .get({ id: req.params.id, hogar: req.household!.id, yo: req.user!.id });
   if (!owned) {
     res.status(404).json({ error: 'Movimiento no encontrado' });
     return;
@@ -142,8 +158,11 @@ transactionsRouter.patch('/:id', (req, res) => {
 
 transactionsRouter.delete('/:id', (req, res) => {
   const info = db
-    .prepare('DELETE FROM transactions WHERE id = ? AND household_id = ?')
-    .run(req.params.id, req.household!.id);
+    .prepare(
+      `DELETE FROM transactions
+        WHERE id = @id AND household_id = @hogar AND ${soloMisMovimientos('')}`,
+    )
+    .run({ id: req.params.id, hogar: req.household!.id, yo: req.user!.id });
   if (info.changes === 0) {
     res.status(404).json({ error: 'Movimiento no encontrado' });
     return;
@@ -154,8 +173,11 @@ transactionsRouter.delete('/:id', (req, res) => {
 /** Marca como revisados todos los movimientos importados desde Gmail. */
 transactionsRouter.post('/review-all', (req, res) => {
   const info = db
-    .prepare('UPDATE transactions SET reviewed = 1 WHERE household_id = ? AND reviewed = 0')
-    .run(req.household!.id);
+    .prepare(
+      `UPDATE transactions SET reviewed = 1
+        WHERE household_id = @hogar AND reviewed = 0 AND ${soloMisMovimientos('')}`,
+    )
+    .run({ hogar: req.household!.id, yo: req.user!.id });
   res.json({ reviewed: info.changes });
 });
 

@@ -24,6 +24,10 @@ export type Settlement = {
   currency: string;
   totalIncome: number;
   totalSharedExpenses: number;
+  /**
+   * Gastos personales **de quien pregunta**, no del hogar. Lo personal es
+   * privado: sumar los de los dos diría cuánto gastó el otro por su cuenta.
+   */
   totalPersonalExpenses: number;
   members: MemberBreakdown[];
   /** Saldo de la cuenta oficial del mes: aportes - gastos pagados desde ella. */
@@ -66,7 +70,18 @@ export function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-export function computeSettlement(householdId: string, month: string, currency: string): Settlement {
+/**
+ * @param viewerId quién está mirando. Determina de quién son los gastos
+ *   personales que se informan. `null` los deja fuera por completo, que es lo
+ *   que corresponde cuando el resultado no es para una persona en particular
+ *   —el reporte mensual, que llega igual a los dos—.
+ */
+export function computeSettlement(
+  householdId: string,
+  month: string,
+  currency: string,
+  viewerId: string | null = null,
+): Settlement {
   const members = db
     .prepare(
       `SELECT u.id AS userId, u.name AS name
@@ -87,14 +102,17 @@ export function computeSettlement(householdId: string, month: string, currency: 
       .get(householdId, like) as { total: number }
   ).total;
 
-  const totalPersonal = (
-    db
-      .prepare(
-        `SELECT COALESCE(SUM(amount), 0) AS total FROM transactions
-          WHERE household_id = ? AND occurred_on LIKE ? AND type = 'gasto' AND scope = 'personal'`,
-      )
-      .get(householdId, like) as { total: number }
-  ).total;
+  const totalPersonal = viewerId
+    ? (
+        db
+          .prepare(
+            `SELECT COALESCE(SUM(amount), 0) AS total FROM transactions
+              WHERE household_id = ? AND occurred_on LIKE ?
+                AND type = 'gasto' AND scope = 'personal' AND user_id = ?`,
+          )
+          .get(householdId, like, viewerId) as { total: number }
+      ).total
+    : 0;
 
   const rawIncomes = members.map((m) => incomeForMonth(householdId, m.userId, month));
   const totalIncome = rawIncomes.reduce((a, b) => a + b, 0);

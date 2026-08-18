@@ -40,7 +40,7 @@ fallas=0
 correr() {
   echo ""
   echo "── $1 ──"
-  rm -f prueba.db ap.db vig.db
+  rm -f prueba.db ap.db vig.db privacidad.db
   if ! DB_PATH=prueba.db npx tsx "$1"; then fallas=$((fallas + 1)); fi
 }
 
@@ -48,6 +48,10 @@ correr() {
 correr t-cripto.ts
 correr t-consulta.ts
 correr t-reglas-reales.ts
+
+# Ésta levanta su propio servidor y habla con la API como dos personas distintas.
+rm -f privacidad.db
+correr t-privacidad.ts
 
 # Éstas sí: cada una con el buzón recién levantado.
 levantar_buzon && correr t-imap.ts
