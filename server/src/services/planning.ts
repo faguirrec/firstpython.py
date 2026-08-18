@@ -1,14 +1,15 @@
 import { db } from '../lib/db.js';
-import { computeReserve, round2 } from './split.js';
+import { computePersonalSavings, computeReserve, round2 } from './split.js';
+import { HOGAR, filtroDuenio, filtroGastos, paramsAmbito, type Ambito } from '../lib/visibilidad.js';
 
 /**
  * Presupuestos, metas de ahorro y comparación entre meses.
  *
- * Todo acá mira **sólo los gastos comunes**: lo que cada uno gasta por su cuenta
- * queda registrado en la app pero no entra en el análisis del hogar.
+ * Las tres funcionan igual para los dos bolsillos —el del hogar y el de cada
+ * persona— y lo único que cambia es qué movimientos se cuentan y de quién son
+ * los topes y las metas. Por eso todas reciben un ámbito en vez de existir dos
+ * veces.
  */
-
-const SHARED = "type = 'gasto' AND scope = 'comun'";
 
 export type CategoryBudget = {
   categoryId: string;
@@ -54,7 +55,7 @@ function monthProgress(month: string): number {
   return now.getDate() / daysInMonth;
 }
 
-export function computeBudgetStatus(householdId: string, month: string): BudgetStatus {
+export function computeBudgetStatus(householdId: string, month: string, ambito: Ambito = HOGAR): BudgetStatus {
   const rows = db
     .prepare(
       `SELECT c.id AS categoryId, c.name AS category, c.color, c.emoji,
@@ -64,16 +65,18 @@ export function computeBudgetStatus(householdId: string, month: string): BudgetS
                 SELECT SUM(t.amount) FROM transactions t
                  WHERE t.household_id = c.household_id
                    AND t.category_id = c.id
-                   AND t.occurred_on LIKE ?
-                   AND ${SHARED}
+                   AND t.occurred_on LIKE @mes
+                   AND ${filtroGastos(ambito)}
               ), 0) AS spent
          FROM categories c
          LEFT JOIN budgets bb ON bb.category_id = c.id AND bb.month IS NULL
-         LEFT JOIN budgets bm ON bm.category_id = c.id AND bm.month = ?
-        WHERE c.household_id = ? AND c.archived = 0
+              AND ${filtroDuenio(ambito, 'bb')}
+         LEFT JOIN budgets bm ON bm.category_id = c.id AND bm.month = @mesExacto
+              AND ${filtroDuenio(ambito, 'bm')}
+        WHERE c.household_id = @hogar AND c.archived = 0
         ORDER BY c.name`,
     )
-    .all(`${month}-%`, month, householdId) as {
+    .all({ mes: `${month}-%`, mesExacto: month, hogar: householdId, ...paramsAmbito(ambito) }) as {
     categoryId: string;
     category: string;
     color: string;
@@ -111,10 +114,11 @@ export function computeBudgetStatus(householdId: string, month: string): BudgetS
   const totalSpentShared = (
     db
       .prepare(
-        `SELECT COALESCE(SUM(amount), 0) AS total FROM transactions
-          WHERE household_id = ? AND occurred_on LIKE ? AND ${SHARED}`,
+        `SELECT COALESCE(SUM(t.amount), 0) AS total FROM transactions t
+          WHERE t.household_id = @hogar AND t.occurred_on LIKE @mes
+            AND ${filtroGastos(ambito)}`,
       )
-      .get(householdId, `${month}-%`) as { total: number }
+      .get({ hogar: householdId, mes: `${month}-%`, ...paramsAmbito(ambito) }) as { total: number }
   ).total;
 
   const budgetedSpent = withBudget.reduce((a, b) => a + b.spent, 0);
@@ -172,14 +176,22 @@ function monthsUntil(date: string): number {
  * orden de prioridad: la primera meta se completa antes de que la siguiente
  * reciba un peso.
  */
-export function computeGoals(householdId: string): GoalsView {
-  const reserve = computeReserve(householdId).balance;
+export function computeGoals(householdId: string, ambito: Ambito = HOGAR): GoalsView {
+  // Las metas del hogar se financian con el fondo de reserva; las de una
+  // persona, con lo que a esa persona le ha sobrado.
+  const reserve =
+    ambito.tipo === 'hogar'
+      ? computeReserve(householdId).balance
+      : computePersonalSavings(householdId, ambito.userId);
+
   const rows = db
     .prepare(
       `SELECT id, name, target_amount AS targetAmount, target_date AS targetDate, priority
-         FROM savings_goals WHERE household_id = ? ORDER BY priority, created_at`,
+         FROM savings_goals
+        WHERE household_id = @hogar AND ${filtroDuenio(ambito)}
+        ORDER BY priority, created_at`,
     )
-    .all(householdId) as {
+    .all({ hogar: householdId, ...paramsAmbito(ambito) }) as {
     id: string;
     name: string;
     targetAmount: number;
@@ -251,7 +263,12 @@ function shiftMonth(month: string, delta: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-export function compareMonths(householdId: string, month: string, lookback = 3): Comparison {
+export function compareMonths(
+  householdId: string,
+  month: string,
+  lookback = 3,
+  ambito: Ambito = HOGAR,
+): Comparison {
   const previousMonth = shiftMonth(month, -1);
   const since = shiftMonth(month, -lookback);
 
@@ -264,13 +281,13 @@ export function compareMonths(householdId: string, month: string, lookback = 3):
               SUM(t.amount) AS total
          FROM transactions t
          LEFT JOIN categories c ON c.id = t.category_id
-        WHERE t.household_id = ?
-          AND t.type = 'gasto' AND t.scope = 'comun'
-          AND substr(t.occurred_on, 1, 7) >= ?
-          AND substr(t.occurred_on, 1, 7) <= ?
+        WHERE t.household_id = @hogar
+          AND ${filtroGastos(ambito)}
+          AND substr(t.occurred_on, 1, 7) >= @desde
+          AND substr(t.occurred_on, 1, 7) <= @hasta
         GROUP BY category, color, emoji, month`,
     )
-    .all(householdId, since, month) as {
+    .all({ hogar: householdId, desde: since, hasta: month, ...paramsAmbito(ambito) }) as {
     category: string;
     color: string;
     emoji: string;

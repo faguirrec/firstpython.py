@@ -310,6 +310,107 @@ export type Reserve = {
  * Fondo de reserva: lo que se ha ido acumulando en la cuenta del hogar por
  * encima de los gastos, mes a mes. Es donde termina la contingencia.
  */
+/**
+ * Las finanzas personales de una persona en un mes.
+ *
+ * El número que importa es `aporteAlHogar`: lo que puso en la casa es plata que
+ * salió de su bolsillo igual que cualquier otro gasto, y es el gasto más grande
+ * del mes de casi cualquiera que comparte casa. Una app de finanzas personales
+ * aparte tendría que preguntarlo a mano, y quedaría desactualizada apenas
+ * cambien los sueldos y con ellos el porcentaje de cada uno.
+ */
+export type ResumenPersonal = {
+  month: string;
+  currency: string;
+  income: number;
+  personalExpenses: number;
+  /** Aportes a la cuenta del hogar más gastos comunes pagados de su bolsillo. */
+  contributedToHousehold: number;
+  /** Lo que queda: ingreso menos lo personal menos lo que puso en la casa. */
+  left: number;
+  /** Proporción del ingreso que no se gastó. Null si no declaró sueldo. */
+  savingsRate: number | null;
+};
+
+export function computePersonalSummary(
+  householdId: string,
+  userId: string,
+  month: string,
+  currency: string,
+): ResumenPersonal {
+  const like = `${month}-%`;
+  const uno = (sql: string, params: unknown[]): number =>
+    (db.prepare(sql).get(...params) as { total: number }).total;
+
+  const income = incomeForMonth(householdId, userId, month);
+
+  const personalExpenses = uno(
+    `SELECT COALESCE(SUM(amount), 0) AS total FROM transactions
+      WHERE household_id = ? AND occurred_on LIKE ?
+        AND type = 'gasto' AND scope = 'personal' AND user_id = ?`,
+    [householdId, like, userId],
+  );
+
+  const aportes = uno(
+    `SELECT COALESCE(SUM(amount), 0) AS total FROM transactions
+      WHERE household_id = ? AND occurred_on LIKE ? AND type = 'aporte' AND user_id = ?`,
+    [householdId, like, userId],
+  );
+
+  // Un gasto común que pagó de su bolsillo es aporte igual: la plata salió de
+  // su cuenta, no de la del hogar.
+  const deSuBolsillo = uno(
+    `SELECT COALESCE(SUM(amount), 0) AS total FROM transactions
+      WHERE household_id = ? AND occurred_on LIKE ?
+        AND type = 'gasto' AND scope = 'comun' AND funded_by = ?`,
+    [householdId, like, userId],
+  );
+
+  const contributedToHousehold = aportes + deSuBolsillo;
+  const left = income - personalExpenses - contributedToHousehold;
+
+  return {
+    month,
+    currency,
+    income: round2(income),
+    personalExpenses: round2(personalExpenses),
+    contributedToHousehold: round2(contributedToHousehold),
+    left: round2(left),
+    savingsRate: income > 0 ? left / income : null,
+  };
+}
+
+/**
+ * Lo que una persona lleva ahorrado, según lo que la app sabe: todo lo que
+ * entró menos lo que gastó en lo suyo y lo que puso en la casa.
+ *
+ * Es una estimación y no un saldo bancario: sólo cuenta los meses en que
+ * declaró su sueldo. Sirve para financiar metas personales de la misma forma en
+ * que el fondo de reserva financia las del hogar.
+ */
+export function computePersonalSavings(householdId: string, userId: string): number {
+  const ingresos = (
+    db
+      .prepare('SELECT COALESCE(SUM(amount), 0) AS total FROM incomes WHERE household_id = ? AND user_id = ?')
+      .get(householdId, userId) as { total: number }
+  ).total;
+
+  const salidas = (
+    db
+      .prepare(
+        `SELECT COALESCE(SUM(amount), 0) AS total FROM transactions
+          WHERE household_id = ? AND (
+                (type = 'gasto' AND scope = 'personal' AND user_id = ?)
+             OR (type = 'aporte' AND user_id = ?)
+             OR (type = 'gasto' AND scope = 'comun' AND funded_by = ?)
+          )`,
+      )
+      .get(householdId, userId, userId, userId) as { total: number }
+  ).total;
+
+  return round2(ingresos - salidas);
+}
+
 export function computeReserve(householdId: string): Reserve {
   const rows = db
     .prepare(

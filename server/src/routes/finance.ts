@@ -3,11 +3,27 @@ import { z } from 'zod';
 import { db, uid } from '../lib/db.js';
 import { requireAuth, requireHousehold } from '../lib/auth.js';
 import { soloMisMovimientos } from '../lib/visibilidad.js';
-import { computeReserve, computeSettlement, projectContributions } from '../services/split.js';
+import {
+  computePersonalSummary,
+  computeReserve,
+  computeSettlement,
+  projectContributions,
+} from '../services/split.js';
+import { HOGAR, personal, type Ambito } from '../lib/visibilidad.js';
 import { compareMonths, computeBudgetStatus, computeGoals } from '../services/planning.js';
 
 export const financeRouter = Router();
 financeRouter.use(requireAuth, requireHousehold);
+
+/**
+ * Qué bolsillo está mirando la app: el del hogar o el de quien pregunta.
+ *
+ * Viaja como `?modo=personal` porque es una elección de la pantalla, no de la
+ * cuenta: la misma persona cambia de un lado al otro varias veces al día.
+ */
+function ambitoDe(req: { query: Record<string, unknown>; user?: { id: string } }): Ambito {
+  return req.query.modo === 'personal' ? personal(req.user!.id) : HOGAR;
+}
 
 const monthSchema = z.string().regex(/^\d{4}-\d{2}$/, 'Mes inválido (YYYY-MM)');
 
@@ -142,7 +158,7 @@ financeRouter.get('/budgets', (req, res) => {
     res.status(400).json({ error: month.error.issues[0].message });
     return;
   }
-  res.json(computeBudgetStatus(req.household!.id, month.data));
+  res.json(computeBudgetStatus(req.household!.id, month.data, ambitoDe(req)));
 });
 
 /**
@@ -155,6 +171,7 @@ financeRouter.put('/budgets', (req, res) => {
       categoryId: z.string(),
       amount: z.number().min(0),
       month: monthSchema.nullable().optional(),
+      modo: z.enum(['hogar', 'personal']).optional(),
     })
     .safeParse(req.body);
   if (!parsed.success) {
@@ -171,13 +188,15 @@ financeRouter.put('/budgets', (req, res) => {
   }
 
   const month = parsed.data.month ?? null;
+  // Sin dueño es del hogar; con dueño, de quien lo está poniendo.
+  const duenio = parsed.data.modo === 'personal' ? req.user!.id : null;
 
   // Poner el presupuesto en cero equivale a quitarlo.
   if (parsed.data.amount === 0) {
     db.prepare(
       `DELETE FROM budgets WHERE household_id = ? AND category_id = ?
-        AND (month IS ? OR month = ?)`,
-    ).run(req.household!.id, parsed.data.categoryId, month, month);
+        AND (user_id IS ? OR user_id = ?) AND (month IS ? OR month = ?)`,
+    ).run(req.household!.id, parsed.data.categoryId, duenio, duenio, month, month);
     res.json({ ok: true, removed: true });
     return;
   }
@@ -185,16 +204,18 @@ financeRouter.put('/budgets', (req, res) => {
   const existing = db
     .prepare(
       `SELECT id FROM budgets WHERE household_id = ? AND category_id = ?
-        AND (month IS ? OR month = ?)`,
+        AND (user_id IS ? OR user_id = ?) AND (month IS ? OR month = ?)`,
     )
-    .get(req.household!.id, parsed.data.categoryId, month, month) as { id: string } | undefined;
+    .get(req.household!.id, parsed.data.categoryId, duenio, duenio, month, month) as
+    | { id: string }
+    | undefined;
 
   if (existing) {
     db.prepare('UPDATE budgets SET amount = ? WHERE id = ?').run(parsed.data.amount, existing.id);
   } else {
-    db.prepare('INSERT INTO budgets (id, household_id, category_id, month, amount) VALUES (?, ?, ?, ?, ?)').run(
-      uid(), req.household!.id, parsed.data.categoryId, month, parsed.data.amount,
-    );
+    db.prepare(
+      'INSERT INTO budgets (id, household_id, user_id, category_id, month, amount) VALUES (?, ?, ?, ?, ?, ?)',
+    ).run(uid(), req.household!.id, duenio, parsed.data.categoryId, month, parsed.data.amount);
   }
   res.json({ ok: true });
 });
@@ -202,7 +223,22 @@ financeRouter.put('/budgets', (req, res) => {
 /* ---------------------------- Metas de ahorro ---------------------------- */
 
 financeRouter.get('/goals', (req, res) => {
-  res.json(computeGoals(req.household!.id));
+  res.json(computeGoals(req.household!.id, ambitoDe(req)));
+});
+
+/**
+ * Las finanzas de quien pregunta: sueldo, lo que gastó en lo suyo, y lo que
+ * puso en la casa —que es un gasto suyo como cualquier otro—.
+ */
+financeRouter.get('/personal', (req, res) => {
+  const month = monthSchema.safeParse(req.query.month ?? currentMonth());
+  if (!month.success) {
+    res.status(400).json({ error: month.error.issues[0].message });
+    return;
+  }
+  res.json(
+    computePersonalSummary(req.household!.id, req.user!.id, month.data, req.household!.currency),
+  );
 });
 
 financeRouter.post('/goals', (req, res) => {
@@ -212,6 +248,7 @@ financeRouter.post('/goals', (req, res) => {
       targetAmount: z.number().positive('La meta debe ser mayor que cero'),
       targetDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
       priority: z.number().int().optional(),
+      modo: z.enum(['hogar', 'personal']).optional(),
     })
     .safeParse(req.body);
   if (!parsed.success) {
@@ -219,16 +256,23 @@ financeRouter.post('/goals', (req, res) => {
     return;
   }
 
+  const duenio = parsed.data.modo === 'personal' ? req.user!.id : null;
+
+  // La prioridad ordena dentro de su propia bolsa: las del hogar entre ellas y
+  // las de cada persona entre las suyas.
   const next = db
-    .prepare('SELECT COALESCE(MAX(priority), 0) + 10 AS next FROM savings_goals WHERE household_id = ?')
-    .get(req.household!.id) as { next: number };
+    .prepare(
+      `SELECT COALESCE(MAX(priority), 0) + 10 AS next FROM savings_goals
+        WHERE household_id = ? AND (user_id IS ? OR user_id = ?)`,
+    )
+    .get(req.household!.id, duenio, duenio) as { next: number };
 
   const id = uid();
   db.prepare(
-    `INSERT INTO savings_goals (id, household_id, name, target_amount, target_date, priority)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO savings_goals (id, household_id, user_id, name, target_amount, target_date, priority)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
   ).run(
-    id, req.household!.id, parsed.data.name, parsed.data.targetAmount,
+    id, req.household!.id, duenio, parsed.data.name, parsed.data.targetAmount,
     parsed.data.targetDate ?? null, parsed.data.priority ?? next.next,
   );
   res.status(201).json({ id });
@@ -254,16 +298,18 @@ financeRouter.patch('/goals/:id', (req, res) => {
         target_amount = COALESCE(?, target_amount),
         target_date = COALESCE(?, target_date),
         priority = COALESCE(?, priority)
-      WHERE id = ? AND household_id = ?`,
+      WHERE id = ? AND household_id = ? AND (user_id IS NULL OR user_id = ?)`,
   ).run(
     p.name ?? null, p.targetAmount ?? null, p.targetDate ?? null, p.priority ?? null,
-    req.params.id, req.household!.id,
+    req.params.id, req.household!.id, req.user!.id,
   );
   res.json({ ok: true });
 });
 
 financeRouter.delete('/goals/:id', (req, res) => {
-  db.prepare('DELETE FROM savings_goals WHERE id = ? AND household_id = ?').run(req.params.id, req.household!.id);
+  db.prepare(
+    'DELETE FROM savings_goals WHERE id = ? AND household_id = ? AND (user_id IS NULL OR user_id = ?)',
+  ).run(req.params.id, req.household!.id, req.user!.id);
   res.json({ ok: true });
 });
 
@@ -277,7 +323,7 @@ financeRouter.get('/reports/comparison', (req, res) => {
     return;
   }
   const lookback = Math.min(Math.max(Number(req.query.lookback ?? 3) || 3, 1), 12);
-  res.json(compareMonths(req.household!.id, month.data, lookback));
+  res.json(compareMonths(req.household!.id, month.data, lookback, ambitoDe(req)));
 });
 
 financeRouter.get('/reports/monthly', (req, res) => {

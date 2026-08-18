@@ -160,10 +160,9 @@ CREATE TABLE IF NOT EXISTS budgets (
   amount       REAL NOT NULL
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_budget_base
-  ON budgets (household_id, category_id) WHERE month IS NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS idx_budget_month
-  ON budgets (household_id, category_id, month) WHERE month IS NOT NULL;
+-- Los índices únicos de presupuestos se crean más abajo, junto a la migración
+-- que les agregó el dueño: definirlos acá también significaría crearlos en cada
+-- arranque para borrarlos dos líneas después.
 
 -- Metas de ahorro. Se financian desde el fondo de reserva por orden de prioridad.
 CREATE TABLE IF NOT EXISTS savings_goals (
@@ -225,6 +224,27 @@ addColumn('email_rules', 'user_id', 'TEXT REFERENCES users(id) ON DELETE SET NUL
 // estos textos. Sirve para separar dos correos del mismo banco con el mismo
 // formato —por ejemplo, quién hizo la transferencia o a qué cuenta llegó.
 addColumn('email_rules', 'must_contain', 'TEXT');
+
+// Presupuestos y metas dejan de ser sólo del hogar: sin dueño son del hogar,
+// con dueño son de esa persona. Así la misma pantalla sirve para las dos cosas.
+addColumn('budgets', 'user_id', 'TEXT REFERENCES users(id) ON DELETE CASCADE');
+addColumn('savings_goals', 'user_id', 'TEXT REFERENCES users(id) ON DELETE CASCADE');
+
+/*
+ * Los índices únicos de presupuestos tienen que incluir al dueño, y no basta
+ * con agregar la columna: en SQLite dos NULL se consideran distintos, así que
+ * un índice sobre user_id dejaría entrar varios presupuestos del hogar para la
+ * misma categoría. Con COALESCE el hogar queda representado por una cadena
+ * vacía, que sí compara igual.
+ */
+db.exec(`
+  DROP INDEX IF EXISTS idx_budget_base;
+  DROP INDEX IF EXISTS idx_budget_month;
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_budget_base_duenio
+    ON budgets (household_id, COALESCE(user_id, ''), category_id) WHERE month IS NULL;
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_budget_month_duenio
+    ON budgets (household_id, COALESCE(user_id, ''), category_id, month) WHERE month IS NOT NULL;
+`);
 
 /**
  * Los hogares creados antes de que existieran los emoji quedan con el genérico.

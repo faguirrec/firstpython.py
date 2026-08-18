@@ -31,14 +31,38 @@ export function soloMisMovimientos(alias = 't'): string {
 }
 
 /**
- * Predicado para las consultas que además distinguen el ámbito de análisis:
- * las cuentas del hogar (lo común) o las de una persona (lo suyo).
+ * Ámbito de análisis: las cuentas del hogar, o las de una persona.
+ *
+ * Es la misma app mirando dos bolsillos distintos. Presupuestos, metas y
+ * comparaciones existen en los dos, y lo único que cambia entre uno y otro es
+ * qué movimientos se cuentan.
  */
-export type Ambito = 'hogar' | 'personal';
+export type Ambito = { tipo: 'hogar' } | { tipo: 'personal'; userId: string };
 
-export function filtroAmbito(ambito: Ambito, alias = 't'): string {
+export const HOGAR: Ambito = { tipo: 'hogar' };
+
+export function personal(userId: string): Ambito {
+  return { tipo: 'personal', userId };
+}
+
+/** Predicado sobre gastos, según el ámbito. Usa el parámetro nombrado @duenio. */
+export function filtroGastos(ambito: Ambito, alias = 't'): string {
   const p = alias ? `${alias}.` : '';
-  return ambito === 'hogar'
-    ? `${p}scope = 'comun'`
-    : `(${p}scope = 'personal' AND ${p}user_id = @yo)`;
+  return ambito.tipo === 'hogar'
+    ? `${p}type = 'gasto' AND ${p}scope = 'comun'`
+    : `${p}type = 'gasto' AND ${p}scope = 'personal' AND ${p}user_id = @duenio`;
+}
+
+/** Los parámetros nombrados que exige el predicado de arriba. */
+export function paramsAmbito(ambito: Ambito): Record<string, unknown> {
+  return ambito.tipo === 'hogar' ? {} : { duenio: ambito.userId };
+}
+
+/**
+ * Columna por la que filtrar presupuestos y metas: los del hogar no tienen
+ * dueño, los personales sí.
+ */
+export function filtroDuenio(ambito: Ambito, alias = ''): string {
+  const p = alias ? `${alias}.` : '';
+  return ambito.tipo === 'hogar' ? `${p}user_id IS NULL` : `${p}user_id = @duenio`;
 }
