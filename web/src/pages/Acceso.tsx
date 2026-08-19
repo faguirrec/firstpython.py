@@ -66,7 +66,7 @@ export default function Acceso() {
     <div className="app">
       <div style={{ display: 'grid', placeItems: 'center', gap: 12, padding: '32px 0 20px' }}>
         <Logo size={68} />
-        <h1 style={{ textAlign: 'center' }}>Cuentas del Hogar</h1>
+        <h1 style={{ textAlign: 'center' }}>MyHaus</h1>
         <p className="muted" style={{ margin: 0, textAlign: 'center', maxWidth: '30ch' }}>
           Los gastos de la casa repartidos según lo que gana cada uno.
         </p>

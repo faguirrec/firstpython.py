@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Publica Cuentas del Hogar en Fly.io.
+  Publica MyHaus en Fly.io.
 
 .DESCRIPTION
   Hace todo lo que se puede hacer sin intervención: instala flyctl, crea la app
@@ -53,7 +53,7 @@ function Invoke-Fly {
   if ($LASTEXITCODE -ne 0) { Fail $What }
 }
 
-Write-Host "Publicar Cuentas del Hogar" -ForegroundColor Green
+Write-Host "Publicar MyHaus" -ForegroundColor Green
 
 # --------------------------------------------------------------------------
 Write-Step "Instalando flyctl"

@@ -102,7 +102,7 @@ export function envoltorio(titulo: string, contenido: string): string {
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
              style="max-width:560px;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e1e0d9;">
         <tr><td style="background:#2a78d6;padding:18px 22px;">
-          <span style="color:#fff;font-size:17px;font-weight:600;${ESTILO_BASE}">Cuentas del Hogar</span>
+          <span style="color:#fff;font-size:17px;font-weight:600;${ESTILO_BASE}">MyHaus</span>
         </td></tr>
         <tr><td style="padding:22px;${ESTILO_BASE}">
           <h1 style="margin:0 0 14px;font-size:19px;">${titulo}</h1>

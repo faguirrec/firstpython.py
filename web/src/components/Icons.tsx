@@ -131,7 +131,7 @@ export function Logo({ size = 40, ...rest }: SVGProps<SVGSVGElement> & { size?: 
       viewBox="0 0 48 48"
       fill="none"
       role="img"
-      aria-label="Cuentas del Hogar"
+      aria-label="MyHaus"
       {...rest}
     >
       <rect width="48" height="48" rx="11" fill="var(--marca, #2a78d6)" />
@@ -159,7 +159,7 @@ export function Marca({ size = 34 }: { size?: number }) {
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
       <Logo size={size} />
       <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1 }}>
-        <strong style={{ fontSize: '1.02rem', letterSpacing: '-0.01em' }}>Cuentas del Hogar</strong>
+        <strong style={{ fontSize: '1.02rem', letterSpacing: '-0.01em' }}>MyHaus</strong>
         <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>según lo que gana cada uno</span>
       </span>
     </span>

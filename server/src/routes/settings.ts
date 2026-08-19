@@ -27,7 +27,7 @@ settingsRouter.post('/email/test', async (req, res) => {
 
   const envio = await enviarCorreo({
     para: req.user!.email,
-    asunto: 'Prueba de correo — Cuentas del Hogar',
+    asunto: 'Prueba de correo — MyHaus',
     html: envoltorio(
       'El correo está funcionando',
       `<p style="color:#52514e;margin:0;">

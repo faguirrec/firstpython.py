@@ -32,7 +32,9 @@ export default function Cabecera({
   const modo = useModo();
   const { user } = useSession();
   // En modo personal la cabecera dice de quién son las cuentas que se ven: si
-  // siguiera diciendo el nombre del hogar, los dos lados se verían iguales.
+  // siguiera diciendo el nombre del hogar, los dos lados se verían iguales. La
+  // marca se queda abajo en los dos casos —es la misma app—; de decir en cuál
+  // de los dos lados estás se encargan los botones de acá abajo.
   const enPersonal = conModo && modo === 'personal';
 
   return (
@@ -42,7 +44,7 @@ export default function Cabecera({
           <Logo size={32} />
           <span className="cabecera-nombre">
             <strong>{enPersonal ? (user?.name ?? 'Mis cuentas') : hogar}</strong>
-            <span>{enPersonal ? 'Tus finanzas' : 'Cuentas del Hogar'}</span>
+            <span>MyHaus</span>
           </span>
         </span>
         {accion}

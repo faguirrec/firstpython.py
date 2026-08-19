@@ -73,7 +73,7 @@ export default function Invitacion({ code, onChanged }: { code: string; onChange
   async function share() {
     if (navigator.share) {
       try {
-        await navigator.share({ title: 'Cuentas del Hogar', text: message, url: link });
+        await navigator.share({ title: 'MyHaus', text: message, url: link });
         return;
       } catch {
         // El usuario canceló la hoja de compartir: no es un error.

@@ -1,6 +1,6 @@
 {
-  "name": "Cuentas del Hogar",
-  "short_name": "Hogar",
+  "name": "MyHaus",
+  "short_name": "MyHaus",
   "description": "Gastos compartidos repartidos según el sueldo de cada uno.",
   "start_url": "/",
   "scope": "/",

@@ -440,7 +440,7 @@ SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USER=tu@gmail.com
 SMTP_PASS=la-contraseña-de-aplicación
-SMTP_FROM=Cuentas del Hogar <tu@gmail.com>
+SMTP_FROM=MyHaus <tu@gmail.com>
 ```
 
 **Resend** ([resend.com](https://resend.com)), con 100 correos al día gratis:
@@ -450,7 +450,7 @@ SMTP_HOST=smtp.resend.com
 SMTP_PORT=587
 SMTP_USER=resend
 SMTP_PASS=tu-api-key
-SMTP_FROM=Cuentas del Hogar <onboarding@resend.dev>
+SMTP_FROM=MyHaus <onboarding@resend.dev>
 ```
 
 ### 2. Configurarlo en el servidor

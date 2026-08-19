@@ -1,4 +1,4 @@
-# Cuentas del Hogar
+# MyHaus
 
 App para administrar los gastos de una casa entre dos personas, repartiéndolos
 **en proporción a lo que gana cada uno** en vez de mitad y mitad.

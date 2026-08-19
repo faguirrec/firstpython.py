@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Publica Cuentas del Hogar en Fly.io desde Linux o macOS (por ejemplo, desde un
+# Publica MyHaus en Fly.io desde Linux o macOS (por ejemplo, desde un
 # Codespace). Equivalente de deploy.ps1.
 #
 # Hace todo lo automatizable: crea la app y el disco, genera los secretos,
@@ -25,7 +25,7 @@ fallo() {
 
 FLY="${FLY:-fly}"
 
-printf '\033[32mPublicar Cuentas del Hogar\033[0m\n'
+printf '\033[32mPublicar MyHaus\033[0m\n'
 
 # ---------------------------------------------------------------------------
 paso "Comprobando flyctl"
