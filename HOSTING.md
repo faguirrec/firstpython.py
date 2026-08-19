@@ -85,6 +85,13 @@ defecto, la app entra en un ciclo de redirecciones.
 
 ### 4. Decirle a la app cuál es su dirección
 
+> **Este paso va al final, y no antes.** `CANONICAL_HOST` hace que todo lo que
+> llegue por otra dirección se redirija a `app.myhaus.cl`. Si la defines antes de
+> que ese subdominio resuelva, entrar por `xxx.onrender.com` te va a mandar a una
+> dirección que todavía no existe y te quedas sin app. Se arregla borrando la
+> variable en Render, pero es un mal rato evitable: espera a que el paso 3 esté
+> funcionando.
+
 En Render, **Environment**, dos variables:
 
 ```
