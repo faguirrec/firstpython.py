@@ -19,6 +19,13 @@ services:
     plan: starter
     region: ohio
     healthCheckPath: /api/health
+
+    # El dominio propio de la app. Declararlo acá evita tener que buscarlo en el
+    # panel: Render lo agrega al sincronizar el Blueprint. El certificado lo
+    # emite él, pero sólo después de que el DNS resuelva, así que el registro
+    # CNAME en Cloudflare tiene que existir igual —y en nube gris—.
+    domains:
+      - app.myhaus.cl
     # Con SQLite tiene que haber una sola instancia, o serían dos copias
     # distintas de la misma base.
     numInstances: 1
