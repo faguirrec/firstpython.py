@@ -604,6 +604,27 @@ details.plegable[open] > summary { margin-bottom: 4px; }
 
 /* Filas de lista con respuesta al toque. */
 .item { transition: background-color var(--transicion); }
+
+/* Una fila entera puede ser el botón —abre el detalle sin robarle ancho al
+   texto con un botón aparte—, pero entonces hay que quitarle todo lo que la
+   hoja de estilos le da a un botón, o la lista se convierte en una pila de
+   cajas centradas. */
+.list > button.item {
+  width: 100%;
+  padding: 10px 0;
+  min-height: 0;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--grid);
+  border-radius: 0;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.list > button.item:last-child { border-bottom: none; }
 .list > button.item:active { background: color-mix(in srgb, var(--text-primary) 4%, transparent); }
 
 /* Las etiquetas largas se dejan partir: forzarlas a una línea las haría

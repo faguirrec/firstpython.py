@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, type BudgetStatus, type ResumenPersonal, type Settlement, type Transaction } from '../lib/api';
+import {
+  api,
+  type BudgetStatus,
+  type EstadoFijos,
+  type ResumenPersonal,
+  type Settlement,
+  type Transaction,
+} from '../lib/api';
 import { useSession } from '../lib/session';
 import { useModo } from '../lib/modo';
 import { currentMonth, dayLabel, money, percent } from '../lib/format';
@@ -21,6 +28,7 @@ export default function Resumen() {
   const [pending, setPending] = useState(0);
   const [budget, setBudget] = useState<BudgetStatus | null>(null);
   const [personal, setPersonal] = useState<ResumenPersonal | null>(null);
+  const [fijos, setFijos] = useState<EstadoFijos | null>(null);
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const modo = useModo();
@@ -29,13 +37,14 @@ export default function Resumen() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [s, c, t, g, b, p] = await Promise.all([
+      const [s, c, t, g, b, p, f] = await Promise.all([
         api.settlement(month),
         api.byCategory(month, esPersonal ? 'personal' : 'comun'),
         api.transactions({ month, limit: 6, scope: esPersonal ? 'personal' : undefined }),
         api.gmailStatus().catch(() => ({ pendingReview: 0 })),
         api.budgets(month, modo),
         esPersonal ? api.resumenPersonal(month) : Promise.resolve(null),
+        esPersonal ? Promise.resolve(null) : api.gastosFijos(month),
       ]);
       setSettlement(s);
       setCategories(c.categories);
@@ -43,6 +52,7 @@ export default function Resumen() {
       setPending(g.pendingReview);
       setBudget(b);
       setPersonal(p);
+      setFijos(f);
     } catch (err) {
       setError((err as Error).message);
     }
@@ -177,6 +187,38 @@ export default function Resumen() {
           </div>
         )}
       </div>
+      )}
+
+      {/* Lo que falta por pagar del mes. Va arriba porque es lo único de esta
+          pantalla sobre lo que se puede actuar hoy mismo. */}
+      {!esPersonal && fijos && fijos.pendientes.length > 0 && (
+        <div className="card">
+          <div className="card-head">
+            <h2>Falta por pagar</h2>
+            <Link to="/ajustes/fijos" className="muted">Gastos fijos →</Link>
+          </div>
+          <div className="list">
+            {fijos.pendientes.map((g) => (
+              <div className="item" key={g.id}>
+                <FichaCategoria emoji={g.categoryEmoji ?? '📌'} color="var(--text-muted)" size={32} />
+                <div className="body">
+                  <div className="title">{g.name}</div>
+                  <div className="meta">
+                    {g.dueDay ? `Vence el ${g.dueDay}` : 'Sin fecha'}
+                    {g.expectedFrom === 'promedio' && ' · estimado'}
+                  </div>
+                </div>
+                <div className="amount">{g.expected > 0 ? money(g.expected, currency) : '—'}</div>
+              </div>
+            ))}
+          </div>
+          {fijos.totalPending > 0 && (
+            <p className="muted" style={{ marginBottom: 0, marginTop: 8 }}>
+              Suman {money(fijos.totalPending, currency)}. Ya pagaron {money(fijos.totalPaid, currency)} de los
+              fijos del mes.
+            </p>
+          )}
+        </div>
       )}
 
       {pending > 0 && (

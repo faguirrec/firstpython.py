@@ -225,6 +225,33 @@ addColumn('email_rules', 'user_id', 'TEXT REFERENCES users(id) ON DELETE SET NUL
 // formato —por ejemplo, quién hizo la transferencia o a qué cuenta llegó.
 addColumn('email_rules', 'must_contain', 'TEXT');
 
+/*
+ * Gastos fijos: lo que se repite todos los meses.
+ *
+ * Son una **expectativa**, no un movimiento. La app nunca inventa un gasto que
+ * quizá no ocurrió: cruza lo declarado con los movimientos reales del mes y con
+ * eso puede decir qué falta por pagar. Si los creara sola, además chocarían con
+ * los que entran por correo y todo quedaría duplicado.
+ */
+db.exec(`
+  CREATE TABLE IF NOT EXISTS fixed_expenses (
+    id           TEXT PRIMARY KEY,
+    household_id TEXT NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+    name         TEXT NOT NULL,
+    -- NULL cuando el monto cambia mes a mes (la luz, el agua). En ese caso se
+    -- estima con el promedio de lo que se pagó antes.
+    amount       REAL,
+    category_id  TEXT REFERENCES categories(id) ON DELETE SET NULL,
+    -- Día aproximado de vencimiento, para ordenar y para avisar a tiempo.
+    due_day      INTEGER,
+    -- Texto que debe aparecer en el comercio o la glosa para dar por pagado un
+    -- movimiento. Sin esto basta con que caiga en la misma categoría.
+    match_text   TEXT,
+    active       INTEGER NOT NULL DEFAULT 1,
+    created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+`);
+
 // Presupuestos y metas dejan de ser sólo del hogar: sin dueño son del hogar,
 // con dueño son de esa persona. Así la misma pantalla sirve para las dos cosas.
 addColumn('budgets', 'user_id', 'TEXT REFERENCES users(id) ON DELETE CASCADE');

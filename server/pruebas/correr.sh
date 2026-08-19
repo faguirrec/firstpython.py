@@ -40,7 +40,7 @@ fallas=0
 correr() {
   echo ""
   echo "── $1 ──"
-  rm -f prueba.db ap.db vig.db mig.db
+  rm -f prueba.db ap.db vig.db mig.db fijos.db
   if ! DB_PATH=prueba.db npx tsx "$1"; then fallas=$((fallas + 1)); fi
 }
 
@@ -55,6 +55,7 @@ correr t-migracion.ts
 rm -f privacidad.db personal.db
 correr t-privacidad.ts
 correr t-personal.ts
+correr t-fijos.ts
 
 # Éstas sí: cada una con el buzón recién levantado.
 levantar_buzon && correr t-imap.ts

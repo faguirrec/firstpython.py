@@ -10,6 +10,14 @@ import {
   projectContributions,
 } from '../services/split.js';
 import { HOGAR, personal, type Ambito } from '../lib/visibilidad.js';
+import {
+  actualizarGastoFijo,
+  borrarGastoFijo,
+  crearGastoFijo,
+  estadoDelMes,
+  gastoEsperadoDelMes,
+  listarGastosFijos,
+} from '../services/gastosFijos.js';
 import { compareMonths, computeBudgetStatus, computeGoals } from '../services/planning.js';
 
 export const financeRouter = Router();
@@ -142,7 +150,16 @@ financeRouter.get('/projection', (req, res) => {
     .prepare('SELECT contingency_pct AS pct FROM households WHERE id = ?')
     .get(req.household!.id) as { pct: number };
 
-  res.json(projectContributions(req.household!.id, month.data, budget, override ?? stored.pct));
+  // Sin presupuesto explícito, los gastos fijos declarados dan una base mejor
+  // que el promedio de meses anteriores: mezcla lo que se sabe con lo que se
+  // supone, en vez de suponerlo todo.
+  const base = budget ?? gastoEsperadoDelMes(req.household!.id, month.data)?.total ?? null;
+
+  const proyeccion = projectContributions(req.household!.id, month.data, base, override ?? stored.pct);
+  if (budget == null && base != null) {
+    proyeccion.basedOn = 'gastos fijos declarados y el promedio de lo variable';
+  }
+  res.json(proyeccion);
 });
 
 /** Fondo de reserva acumulado en la cuenta del hogar. */
@@ -217,6 +234,54 @@ financeRouter.put('/budgets', (req, res) => {
       'INSERT INTO budgets (id, household_id, user_id, category_id, month, amount) VALUES (?, ?, ?, ?, ?, ?)',
     ).run(uid(), req.household!.id, duenio, parsed.data.categoryId, month, parsed.data.amount);
   }
+  res.json({ ok: true });
+});
+
+/* ----------------------------- Gastos fijos ------------------------------ */
+
+/** Lo declarado y, cruzado con los movimientos del mes, qué falta por pagar. */
+financeRouter.get('/fixed', (req, res) => {
+  const month = monthSchema.safeParse(req.query.month ?? currentMonth());
+  if (!month.success) {
+    res.status(400).json({ error: month.error.issues[0].message });
+    return;
+  }
+  res.json({
+    ...estadoDelMes(req.household!.id, month.data),
+    all: listarGastosFijos(req.household!.id),
+  });
+});
+
+const gastoFijoInput = z.object({
+  name: z.string().min(1).max(80),
+  // Null significa "el monto cambia cada mes"; se estima con el histórico.
+  amount: z.number().positive().nullable().optional(),
+  categoryId: z.string().nullable().optional(),
+  dueDay: z.number().int().min(1).max(31).nullable().optional(),
+  matchText: z.string().max(120).nullable().optional(),
+});
+
+financeRouter.post('/fixed', (req, res) => {
+  const parsed = gastoFijoInput.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0].message });
+    return;
+  }
+  res.status(201).json({ id: crearGastoFijo(req.household!.id, parsed.data) });
+});
+
+financeRouter.patch('/fixed/:id', (req, res) => {
+  const parsed = gastoFijoInput.partial().extend({ active: z.boolean().optional() }).safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0].message });
+    return;
+  }
+  actualizarGastoFijo(req.household!.id, req.params.id, parsed.data);
+  res.json({ ok: true });
+});
+
+financeRouter.delete('/fixed/:id', (req, res) => {
+  borrarGastoFijo(req.household!.id, req.params.id);
   res.json({ ok: true });
 });
 

@@ -194,6 +194,37 @@ export type Goal = {
 
 export type GoalsView = { reserve: number; goals: Goal[]; unassigned: number };
 
+export type GastoFijo = {
+  id: string;
+  name: string;
+  /** Null cuando el monto cambia mes a mes. */
+  amount: number | null;
+  categoryId: string | null;
+  categoryName: string | null;
+  categoryEmoji: string | null;
+  dueDay: number | null;
+  matchText: string | null;
+  active: boolean;
+};
+
+export type EstadoGastoFijo = GastoFijo & {
+  expected: number;
+  expectedFrom: 'declarado' | 'promedio' | 'sin-datos';
+  paidWith: { id: string; amount: number; occurredOn: string; merchant: string | null } | null;
+  paid: boolean;
+};
+
+export type EstadoFijos = {
+  month: string;
+  items: EstadoGastoFijo[];
+  totalExpected: number;
+  totalPaid: number;
+  totalPending: number;
+  pendientes: EstadoGastoFijo[];
+  /** Todos los declarados, incluidos los apagados. */
+  all: GastoFijo[];
+};
+
 export type ResumenPersonal = {
   month: string;
   currency: string;
@@ -354,6 +385,15 @@ export const api = {
     get<BudgetStatus>(`/finance/budgets?month=${month}${paramModo(modo)}`),
   saveBudget: (body: { categoryId: string; amount: number; month?: string | null; modo?: Modo }) =>
     put<{ ok: true }>('/finance/budgets', body),
+
+  gastosFijos: (month: string) => get<EstadoFijos>(`/finance/fixed?month=${month}`),
+  crearGastoFijo: (body: {
+    name: string; amount?: number | null; categoryId?: string | null;
+    dueDay?: number | null; matchText?: string | null;
+  }) => post<{ id: string }>('/finance/fixed', body),
+  actualizarGastoFijo: (id: string, body: Record<string, unknown>) =>
+    patch<{ ok: true }>(`/finance/fixed/${id}`, body),
+  borrarGastoFijo: (id: string) => del<{ ok: true }>(`/finance/fixed/${id}`),
 
   /** Las finanzas de quien está usando la app, con el aporte al hogar incluido. */
   resumenPersonal: (month: string) => get<ResumenPersonal>(`/finance/personal?month=${month}`),
