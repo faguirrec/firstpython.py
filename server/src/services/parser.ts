@@ -26,6 +26,8 @@ export type EmailRule = {
    * o por salto de línea.
    */
   must_contain: string | null;
+  /** Textos que, si aparecen, descartan el correo. Mismo separador. */
+  must_not_contain: string | null;
   type: string;
   scope: string;
   account_label: string | null;
@@ -129,6 +131,15 @@ export function applyRule(email: ParsedEmail, rule: EmailRule): ParsedMovement |
       .filter(Boolean);
     const enMinuscula = haystack.toLowerCase();
     if (!exigidos.every((t) => enMinuscula.includes(t))) return null;
+  }
+
+  if (rule.must_not_contain) {
+    const prohibidos = rule.must_not_contain
+      .split(/[;\n]+/)
+      .map((t) => t.trim().toLowerCase())
+      .filter(Boolean);
+    const enMinuscula = haystack.toLowerCase();
+    if (prohibidos.some((t) => enMinuscula.includes(t))) return null;
   }
 
   const amountRaw = firstGroup(haystack, rule.amount_regex);

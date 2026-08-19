@@ -224,6 +224,11 @@ addColumn('email_rules', 'user_id', 'TEXT REFERENCES users(id) ON DELETE SET NUL
 // estos textos. Sirve para separar dos correos del mismo banco con el mismo
 // formato —por ejemplo, quién hizo la transferencia o a qué cuenta llegó.
 addColumn('email_rules', 'must_contain', 'TEXT');
+// Y su opuesto. Hace falta porque hay correos que se reconocen por lo que *no*
+// dicen: un banco avisa la misma transferencia dos veces —como enviada y como
+// recibida—, y la única forma de no contarla dos veces es descartar una de las
+// dos por la cuenta de destino.
+addColumn('email_rules', 'must_not_contain', 'TEXT');
 
 /*
  * Gastos fijos: lo que se repite todos los meses.

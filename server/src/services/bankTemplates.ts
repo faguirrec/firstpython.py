@@ -17,6 +17,7 @@ export type BankTemplate = {
   account_regex: string | null;
   /** Textos que el correo debe contener, todos. Separados por punto y coma. */
   must_contain?: string | null;
+  must_not_contain?: string | null;
   type: 'gasto' | 'aporte';
   scope: 'comun' | 'personal';
   account_label: string | null;
@@ -76,12 +77,39 @@ export const BANK_TEMPLATES: BankTemplate[] = [
     merchant_regex: 'cliente\\s+([^\\n]{2,60}?)\\s+ha efectuado',
     date_regex: 'Fecha[\\s\\S]{0,40}?(\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4})',
     account_regex: 'Cuenta destino[\\s\\S]{0,60}?([\\d-]{8,})',
-    // Ajusta esto al nombre de tu cuenta del hogar: sin este filtro, la regla
-    // también tomaría las transferencias que recibas en tus cuentas personales.
+    // El banco de la cuenta del hogar, tal como aparece en el comprobante.
+    // Sin este filtro, la regla también tomaría como aporte la plata que llegue
+    // a tus cuentas personales, que el mismo correo informa igual.
     must_contain: 'Mercado Pago',
     type: 'aporte',
     scope: 'comun',
     account_label: 'Mercado Pago',
+  },
+  {
+    /**
+     * Plata que sale por transferencia.
+     *
+     * Un banco avisa la misma transferencia dos veces: una a quien la envía
+     * ("Transferencia a terceros") y otra a quien la recibe ("transferencia
+     * electrónica de fondos"). Cuando uno se transfiere a su propia cuenta del
+     * hogar recibe los dos correos, y sin `must_not_contain` esa plata entraría
+     * dos veces —como gasto y como aporte— y el mes no cuadraría.
+     *
+     * Por eso esta regla descarta lo que va a la cuenta del hogar: de eso ya se
+     * encarga la regla de aportes.
+     */
+    key: 'bancochile_transferencia_enviada',
+    name: 'Banco de Chile — transferencia enviada a terceros',
+    gmail_query: 'from:(bancochile.cl) subject:(transferencia OR comprobante) newer_than:60d',
+    amount_regex: 'Monto[\\s\\S]{0,40}?\\$\\s?([\\d.,]+)',
+    merchant_regex: 'Nombre y Apellido\\s*([^\\n]{2,60})',
+    date_regex: null,
+    account_regex: 'Destino[\\s\\S]{0,200}?N[°º] de Cuenta\\s*([\\d-]{8,})',
+    must_contain: 'Transferencia a terceros',
+    must_not_contain: 'Mercado Pago',
+    type: 'gasto',
+    scope: 'comun',
+    account_label: null,
   },
   {
     key: 'santander_compra',

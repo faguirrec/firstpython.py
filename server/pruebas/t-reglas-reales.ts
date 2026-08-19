@@ -24,6 +24,7 @@ function regla(key: string, extra: Partial<EmailRule> = {}): EmailRule {
     amount_regex: t.amount_regex, merchant_regex: t.merchant_regex,
     date_regex: t.date_regex, account_regex: t.account_regex,
     card_filter: null, must_contain: t.must_contain ?? null,
+    must_not_contain: t.must_not_contain ?? null,
     type: t.type, scope: t.scope, account_label: t.account_label,
     user_id: null,
     ...extra,
@@ -109,6 +110,66 @@ ok('la regla de Francisco toma su transferencia',
    applyRule(comprobanteChile('Mercado Pago', '$14.000', 'Francisco Javier Aguirre'), soloFrancisco) !== null);
 ok('la regla de Francisco NO toma la de otra persona',
    applyRule(comprobanteChile('Mercado Pago', '$50.000', 'Carolina Perez'), soloFrancisco) === null);
+
+// ----------------------------- el correo espejo -----------------------------
+/**
+ * El banco avisa la misma transferencia dos veces. Estos son los dos correos
+ * que llegan cuando uno se transfiere a su propia cuenta del hogar: si las dos
+ * reglas los tomaran, la misma plata entraría como gasto y como aporte.
+ */
+function comprobanteEnviado(destinatario: string, banco: string, cuenta: string, monto: string) {
+  return {
+    from: 'Banco de Chile <enviodigital@bancochile.cl>',
+    subject: 'Comprobante de Transferencia a terceros',
+    internalDate: new Date('2026-08-18T10:00:00-04:00').getTime(),
+    body: htmlToText(`
+      <h2>Comprobante de Transferencia a terceros</h2>
+      <p>Estimado(a): <b>Francisco Javier Aguirre</b></p>
+      <p>Te informamos que has realizado una Transferencia a terceros en forma
+      exitosa con el siguiente detalle:</p>
+      <table>
+        <tr><td>Origen</td><td></td></tr>
+        <tr><td>Tipo de Cuenta</td><td>Cuenta Corriente</td></tr>
+        <tr><td>N&ordm; de Cuenta</td><td>00-000-00000-00</td></tr>
+      </table>
+      <table>
+        <tr><td>Destino</td><td></td></tr>
+        <tr><td>Nombre y Apellido</td><td>${destinatario}</td></tr>
+        <tr><td>Tipo de Cuenta</td><td>Cuenta Corriente</td></tr>
+        <tr><td>N&ordm; de Cuenta</td><td>${cuenta}</td></tr>
+        <tr><td>Banco</td><td>${banco}</td></tr>
+      </table>
+      <table><tr><td>Monto</td><td>${monto}</td></tr></table>`),
+  };
+}
+
+const reglaEnviada = regla('bancochile_transferencia_enviada');
+
+// A un tercero: es un gasto de verdad.
+const aTercero = applyRule(
+  comprobanteEnviado('Carolina Perez', 'Banco Chile/Edwards', '00-111-11111-11', '$50.000'),
+  reglaEnviada,
+);
+ok('una transferencia a un tercero entra como gasto', aTercero !== null);
+ok('con el monto correcto', aTercero?.amount === 50000, aTercero?.amount);
+ok('y con el destinatario', /Carolina Perez/.test(aTercero?.merchant ?? ''), aTercero?.merchant);
+
+// A la propia cuenta del hogar: NO, porque ya entra como aporte por el otro correo.
+const aLaCasa = comprobanteEnviado('Francisco Aguirre', 'Mercado Pago', '00-105-00000-00', '$14.000');
+ok('la recarga de la cuenta del hogar NO entra como gasto',
+   applyRule(aLaCasa, reglaEnviada) === null, applyRule(aLaCasa, reglaEnviada));
+
+// Y el correo espejo del mismo movimiento sí entra, una sola vez, como aporte.
+const espejo = comprobanteChile('Mercado Pago', '$14.000', 'Francisco Javier Aguirre');
+ok('el correo espejo entra como aporte',
+   applyRule(espejo, regla('bancochile_transferencia_recibida')) !== null);
+ok('y ese mismo correo no entra como transferencia enviada',
+   applyRule(espejo, reglaEnviada) === null);
+
+// La plata recibida en una cuenta personal tampoco es un gasto enviado.
+ok('un abono recibido no se confunde con una transferencia enviada',
+   applyRule(comprobanteChile('Banco Chile/Edwards', '$21.450', 'Nicolas Esteban Calderon'),
+             reglaEnviada) === null);
 
 console.log(fallas === 0 ? '\nTodo bien.' : `\n${fallas} fallas.`);
 process.exit(fallas === 0 ? 0 : 1);

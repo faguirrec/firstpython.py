@@ -15,6 +15,7 @@ const EMPTY: Omit<EmailRule, 'id'> = {
   accountRegex: null,
   cardFilter: null,
   mustContain: null,
+  mustNotContain: null,
   type: 'gasto',
   scope: 'comun',
   accountLabel: null,
@@ -55,6 +56,7 @@ export default function AjustesReglas() {
       dateRegex: template.date_regex,
       accountRegex: template.account_regex,
       mustContain: template.must_contain ?? null,
+      mustNotContain: template.must_not_contain ?? null,
       type: template.type,
       scope: template.scope,
     });
@@ -170,6 +172,7 @@ function EditorRegla({
     accountRegex: form.accountRegex || null,
     cardFilter: form.cardFilter || null,
     mustContain: form.mustContain || null,
+    mustNotContain: form.mustNotContain || null,
     type: form.type,
     scope: form.scope,
     accountLabel: form.accountLabel || null,
@@ -269,6 +272,20 @@ function EditorRegla({
         <em className="muted">
           Para separar correos del mismo banco con el mismo formato: a qué cuenta llegó la plata, o quién la
           envió.
+        </em>
+      </label>
+
+      <label className="field">
+        <span>Y NO dice (uno por línea, basta con uno para descartarlo)</span>
+        <textarea
+          rows={2}
+          value={form.mustNotContain ?? ''}
+          onChange={(e) => set('mustNotContain', e.target.value)}
+          placeholder={'Mercado Pago'}
+        />
+        <em className="muted">
+          Los bancos avisan la misma transferencia dos veces, como enviada y como recibida. Descartando acá la
+          cuenta del hogar, esa plata entra una sola vez y no como gasto y aporte a la vez.
         </em>
       </label>
 

@@ -85,6 +85,7 @@ export type EmailRule = {
   accountRegex: string | null;
   cardFilter: string | null;
   mustContain: string | null;
+  mustNotContain: string | null;
   type: 'gasto' | 'aporte';
   scope: 'comun' | 'personal';
   accountLabel: string | null;
@@ -102,6 +103,7 @@ export type BankTemplate = {
   date_regex: string | null;
   account_regex: string | null;
   must_contain?: string | null;
+  must_not_contain?: string | null;
   type: 'gasto' | 'aporte';
   scope: 'comun' | 'personal';
 };
