@@ -11,8 +11,12 @@ set -e
 cd "$(dirname "$0")"
 
 # El servidor de mentira habla TLS igual que Gmail, así que necesita un
-# certificado. Se genera una vez y se confía en él sólo dentro de estas pruebas.
-if [ ! -f tls/cert.pem ]; then
+# certificado. Se confía en él sólo dentro de estas pruebas.
+#
+# Se regenera si falta *o si está por vencer*: un certificado vencido hace
+# fallar la conexión, y el síntoma —tres archivos de pruebas en rojo a la vez—
+# no se parece en nada a la causa. `-checkend` da 1 si expira dentro del plazo.
+if [ ! -f tls/cert.pem ] || ! openssl x509 -in tls/cert.pem -noout -checkend 86400 >/dev/null 2>&1; then
   mkdir -p tls
   openssl req -x509 -newkey rsa:2048 -nodes -keyout tls/llave.pem -out tls/cert.pem \
     -days 30 -subj "/CN=localhost" -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" 2>/dev/null
