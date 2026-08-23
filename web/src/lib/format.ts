@@ -47,6 +47,26 @@ export function currentMonth(): string {
   return new Date().toISOString().slice(0, 7);
 }
 
+/**
+ * ¿Es un mes que todavía no empieza?
+ *
+ * Importa para el tono de las pantallas: en un mes que ya pasó, faltar plata es
+ * una deuda; en uno que no ha empezado, es un plan.
+ */
+export function esMesFuturo(month: string): boolean {
+  return month > currentMonth();
+}
+
+/**
+ * Hasta dónde se puede mirar hacia adelante.
+ *
+ * Los sueldos no llegan todos el mismo día —a uno le pagan el 23 y al otro el
+ * último hábil—, así que a fin de mes ya hay plata del mes siguiente que
+ * ordenar. Un año alcanza de sobra para eso y evita que el selector se vaya a
+ * meses vacíos sin sentido.
+ */
+export const MESES_HACIA_ADELANTE = 12;
+
 export function shiftMonth(month: string, delta: number): string {
   const [year, m] = month.split('-').map(Number);
   const d = new Date(year, m - 1 + delta, 1);

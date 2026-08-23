@@ -1,5 +1,5 @@
 import { Logo } from './Icons';
-import { currentMonth, monthLabel, shiftMonth } from '../lib/format';
+import { MESES_HACIA_ADELANTE, currentMonth, esMesFuturo, monthLabel, shiftMonth } from '../lib/format';
 import { cambiarModo, useModo } from '../lib/modo';
 import { useSession } from '../lib/session';
 
@@ -28,7 +28,11 @@ export default function Cabecera({
   accion?: React.ReactNode;
   conModo?: boolean;
 }) {
-  const esFuturo = month ? month >= currentMonth() : true;
+  // Se puede mirar hacia adelante, no indefinidamente: pasado el horizonte no
+  // hay nada que planificar y el selector se vuelve un paseo por meses vacíos.
+  const tope = shiftMonth(currentMonth(), MESES_HACIA_ADELANTE);
+  const alTope = month ? month >= tope : true;
+  const futuro = month ? esMesFuturo(month) : false;
   const modo = useModo();
   const { user } = useSession();
   // En modo personal la cabecera dice de quién son las cuentas que se ven: si
@@ -74,8 +78,11 @@ export default function Cabecera({
           <button onClick={() => onMonthChange(shiftMonth(month, -1))} aria-label="Mes anterior">
             ‹
           </button>
-          <span className="selector-mes-actual">{monthLabel(month)}</span>
-          <button onClick={() => onMonthChange(shiftMonth(month, 1))} disabled={esFuturo} aria-label="Mes siguiente">
+          <span className="selector-mes-actual">
+            {monthLabel(month)}
+            {futuro && <span className="pill" style={{ marginLeft: 8 }}>por venir</span>}
+          </span>
+          <button onClick={() => onMonthChange(shiftMonth(month, 1))} disabled={alTope} aria-label="Mes siguiente">
             ›
           </button>
         </div>

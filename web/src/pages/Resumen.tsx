@@ -4,13 +4,14 @@ import {
   api,
   type BudgetStatus,
   type EstadoFijos,
+  type Projection,
   type ResumenPersonal,
   type Settlement,
   type Transaction,
 } from '../lib/api';
 import { useSession } from '../lib/session';
 import { useModo } from '../lib/modo';
-import { currentMonth, dayLabel, money, percent } from '../lib/format';
+import { currentMonth, dayLabel, esMesFuturo, money, percent } from '../lib/format';
 import { CategoryBars, SplitBar, type CategorySlice } from '../components/Charts';
 import Cabecera from '../components/Cabecera';
 import NuevoMovimiento from '../components/NuevoMovimiento';
@@ -29,15 +30,19 @@ export default function Resumen() {
   const [budget, setBudget] = useState<BudgetStatus | null>(null);
   const [personal, setPersonal] = useState<ResumenPersonal | null>(null);
   const [fijos, setFijos] = useState<EstadoFijos | null>(null);
+  const [proyeccion, setProyeccion] = useState<Projection | null>(null);
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const modo = useModo();
   const esPersonal = modo === 'personal';
+  const futuro = esMesFuturo(month);
 
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [s, c, t, g, b, p, f] = await Promise.all([
+      // En un mes que todavía no empieza no hay nada gastado que mostrar: lo
+      // que sirve es cuánto va a tener que poner cada uno.
+      const [s, c, t, g, b, p, f, pr] = await Promise.all([
         api.settlement(month),
         api.byCategory(month, esPersonal ? 'personal' : 'comun'),
         api.transactions({ month, limit: 6, scope: esPersonal ? 'personal' : undefined }),
@@ -45,6 +50,7 @@ export default function Resumen() {
         api.budgets(month, modo),
         esPersonal ? api.resumenPersonal(month) : Promise.resolve(null),
         esPersonal ? Promise.resolve(null) : api.gastosFijos(month),
+        futuro && !esPersonal ? api.projection(month) : Promise.resolve(null),
       ]);
       setSettlement(s);
       setCategories(c.categories);
@@ -53,10 +59,11 @@ export default function Resumen() {
       setBudget(b);
       setPersonal(p);
       setFijos(f);
+      setProyeccion(pr);
     } catch (err) {
       setError((err as Error).message);
     }
-  }, [month, modo, esPersonal]);
+  }, [month, modo, esPersonal, futuro]);
 
   useEffect(() => {
     void load();
@@ -142,7 +149,23 @@ export default function Resumen() {
         </div>
       ) : (
       <div className="card principal">
-        {me ? (
+        {futuro ? (
+          <>
+            <div className="label">Te va a tocar poner</div>
+            <div className="hero">
+              {money(proyeccion?.rows.find((r) => r.userId === user?.id)?.amount ?? 0, currency)}
+            </div>
+            <div className="muted">
+              {proyeccion
+                ? `Estimado sobre ${money(proyeccion.target, currency)} para el hogar, según ${proyeccion.basedOn}.`
+                : 'Este mes todavía no empieza. Carga los sueldos y los gastos fijos para verlo estimado.'}
+            </div>
+            <p className="muted" style={{ marginTop: 10, marginBottom: 0 }}>
+              Es una estimación, no una deuda: el mes no ha empezado. Sirve para saber cuánto apartar de un sueldo
+              que ya llegó.
+            </p>
+          </>
+        ) : me ? (
           <>
             <div className="label">{me.deviation < -0.5 ? 'Te falta poner' : 'Vas al día'}</div>
             <div
@@ -175,7 +198,11 @@ export default function Resumen() {
               }))}
             />
             <div className="muted" style={{ marginTop: 2 }}>
-              Sobre {money(settlement.totalSharedExpenses, currency)} en gastos comunes del mes.
+              {futuro
+                ? proyeccion
+                  ? `Sobre ${money(proyeccion.target, currency)} estimados para el mes.`
+                  : 'La proporción sale de los sueldos declarados.'
+                : `Sobre ${money(settlement.totalSharedExpenses, currency)} en gastos comunes del mes.`}
             </div>
           </div>
         )}
@@ -238,7 +265,9 @@ export default function Resumen() {
 
       {/* Cómo va cada uno es del hogar: en el bolsillo propio no viene al caso,
           y mostrar lo del otro acá sería justo lo que se acaba de separar. */}
-      {settlement && !esPersonal && (
+      {/* En un mes que no ha empezado nadie va atrasado ni adelantado: la tarjeta
+          diría "al día $0" para los dos, que no es información. */}
+      {settlement && !esPersonal && !futuro && (
         <div className="card">
           <div className="card-head">
             <h2>Cómo va cada uno</h2>
