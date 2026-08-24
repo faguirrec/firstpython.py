@@ -4,10 +4,14 @@ import { db, uid } from '../lib/db.js';
 import { requireAuth, requireHousehold } from '../lib/auth.js';
 import { soloMisMovimientos } from '../lib/visibilidad.js';
 import {
+  clearTarget,
   computePersonalSummary,
   computeReserve,
   computeSettlement,
   projectContributions,
+  saveTarget,
+  storedTarget,
+  targetIsInherited,
 } from '../services/split.js';
 import { HOGAR, personal, type Ambito } from '../lib/visibilidad.js';
 import {
@@ -150,16 +154,28 @@ financeRouter.get('/projection', (req, res) => {
     .prepare('SELECT contingency_pct AS pct FROM households WHERE id = ?')
     .get(req.household!.id) as { pct: number };
 
-  // Sin presupuesto explícito, los gastos fijos declarados dan una base mejor
-  // que el promedio de meses anteriores: mezcla lo que se sabe con lo que se
-  // supone, en vez de suponerlo todo.
-  const base = budget ?? gastoEsperadoDelMes(req.household!.id, month.data)?.total ?? null;
+  /*
+   * De dónde sale el gasto estimado, en orden:
+   *   1. el que venga en la consulta, para simular sin guardar
+   *   2. el que el hogar dejó anotado —heredado del último mes que lo fijó—
+   *   3. los gastos fijos declarados más el promedio de lo variable
+   *   4. el promedio de los últimos tres meses, que es suponerlo todo
+   */
+  const anotado = storedTarget(req.household!.id, month.data);
+  const heredado = anotado != null && targetIsInherited(req.household!.id, month.data);
+  const estimado = gastoEsperadoDelMes(req.household!.id, month.data)?.total ?? null;
+  const base = budget ?? anotado ?? estimado;
 
   const proyeccion = projectContributions(req.household!.id, month.data, base, override ?? stored.pct);
   if (budget == null && base != null) {
-    proyeccion.basedOn = 'gastos fijos declarados y el promedio de lo variable';
+    proyeccion.basedOn =
+      anotado != null
+        ? heredado
+          ? 'el total que dejaron anotado antes'
+          : 'el total que anotaron para este mes'
+        : 'gastos fijos declarados y el promedio de lo variable';
   }
-  res.json(proyeccion);
+  res.json({ ...proyeccion, savedTarget: anotado, targetInherited: heredado });
 });
 
 /** Fondo de reserva acumulado en la cuenta del hogar. */
@@ -234,6 +250,22 @@ financeRouter.put('/budgets', (req, res) => {
       'INSERT INTO budgets (id, household_id, user_id, category_id, month, amount) VALUES (?, ?, ?, ?, ?, ?)',
     ).run(uid(), req.household!.id, duenio, parsed.data.categoryId, month, parsed.data.amount);
   }
+  res.json({ ok: true });
+});
+
+/**
+ * Guarda el gasto estimado del mes. Queda anotado y los meses siguientes lo
+ * heredan, hasta que alguien lo cambie. Con monto 0 se borra y se vuelve a
+ * estimar solo.
+ */
+financeRouter.put('/target', (req, res) => {
+  const parsed = z.object({ month: monthSchema, amount: z.number().min(0) }).safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0].message });
+    return;
+  }
+  if (parsed.data.amount === 0) clearTarget(req.household!.id, parsed.data.month);
+  else saveTarget(req.household!.id, parsed.data.month, parsed.data.amount);
   res.json({ ok: true });
 });
 

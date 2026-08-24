@@ -8,6 +8,12 @@ import { Avatar, FichaCategoria } from './Fichas';
 type Props = {
   month?: string;
   existing?: Transaction | null;
+  /**
+   * Con qué llega abierto el formulario. Sirve para entrar desde una pantalla
+   * que ya sabe qué se va a anotar —el reparto sabe quién debe poner cuánto— y
+   * no obligar a repetirlo a mano.
+   */
+  inicial?: { type?: Transaction['type']; userId?: string; amount?: number };
   onClose: () => void;
   onSaved: () => void;
 };
@@ -32,7 +38,7 @@ function mesesPosibles(fecha: string, actual: string): string[] {
   return [...new Set(meses)].sort();
 }
 
-export default function NuevoMovimiento({ month, existing, onClose, onSaved }: Props) {
+export default function NuevoMovimiento({ month, existing, inicial, onClose, onSaved }: Props) {
   const { user, household } = useSession();
   const [categories, setCategories] = useState<Category[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
@@ -50,14 +56,14 @@ export default function NuevoMovimiento({ month, existing, onClose, onSaved }: P
     occurredOn: existing?.occurredOn ?? today(),
     // A qué mes cuenta: el que se está mirando, o el de la fecha.
     period: existing?.period ?? month ?? today().slice(0, 7),
-    amount: existing ? String(existing.amount) : '',
-    type: existing?.type ?? ('gasto' as Transaction['type']),
+    amount: existing ? String(existing.amount) : inicial?.amount ? String(Math.round(inicial.amount)) : '',
+    type: existing?.type ?? inicial?.type ?? ('gasto' as Transaction['type']),
     scope: existing?.scope ?? ('comun' as Transaction['scope']),
     fundedBy: existing?.fundedBy ?? 'oficial',
     categoryId: existing?.categoryId ?? '',
     merchant: existing?.merchant ?? '',
     description: existing?.description ?? '',
-    userId: existing?.userId ?? user?.id ?? '',
+    userId: existing?.userId ?? inicial?.userId ?? user?.id ?? '',
   });
 
   useEffect(() => {

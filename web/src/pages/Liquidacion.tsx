@@ -5,6 +5,7 @@ import { currentMonth, money, monthLabel, percent } from '../lib/format';
 import Cabecera from '../components/Cabecera';
 import { SplitBar } from '../components/Charts';
 import Metas from '../components/Metas';
+import NuevoMovimiento from '../components/NuevoMovimiento';
 import { IconoOculto, IconoVer } from '../components/Icons';
 import { alternarPrivacidad, usePrivacidad } from '../lib/privacidad';
 
@@ -18,6 +19,9 @@ export default function Liquidacion() {
   const [projection, setProjection] = useState<Projection | null>(null);
   const [reserve, setReserve] = useState<Reserve | null>(null);
   const [budget, setBudget] = useState('');
+  /** Quiénes tienen sueldo declarado para *este* mes y no heredado. */
+  const [propios, setPropios] = useState<Set<string>>(new Set());
+  const [aporteDe, setAporteDe] = useState<{ userId: string; amount: number } | null>(null);
   const privado = usePrivacidad();
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -36,9 +40,18 @@ export default function Liquidacion() {
       setMembers(h.members);
       setProjection(p);
       setReserve(r);
+      /*
+       * Las casillas parten con el sueldo que el cálculo está usando de verdad,
+       * que puede venir arrastrado de un mes anterior. Antes sólo se llenaban
+       * con el registro exacto del mes, así que al abrir un mes nuevo aparecían
+       * vacías y parecía que hubiera que cargarlo otra vez —cuando el reparto
+       * ya estaba bien calculado—.
+       */
       const map: Record<string, string> = {};
-      for (const row of i.incomes.filter((x) => x.month === month)) map[row.userId] = String(row.amount);
+      for (const m of s.members) if (m.income > 0) map[m.userId] = String(Math.round(m.income));
       setIncomes(map);
+      setPropios(new Set(i.incomes.filter((x) => x.month === month).map((x) => x.userId)));
+      setBudget(p.savedTarget != null ? String(Math.round(p.savedTarget)) : '');
     } catch (err) {
       setError((err as Error).message);
     }
@@ -56,9 +69,21 @@ export default function Liquidacion() {
     await load();
   }
 
-  async function recalcProjection() {
+  /**
+   * Guarda el total estimado y recalcula. Queda anotado para este mes y los
+   * siguientes lo heredan: la idea es escribirlo una vez, no cada vez que se
+   * abre la pantalla.
+   */
+  async function guardarEstimado() {
     const value = Number(budget.replace(/[^\d.,-]/g, '').replace(',', '.'));
-    setProjection(await api.projection(month, Number.isFinite(value) && value > 0 ? value : undefined));
+    if (!Number.isFinite(value) || value < 0) return;
+    await api.guardarGastoEstimado({ month, amount: value });
+    setMessage(
+      value > 0
+        ? 'Total guardado. Los meses siguientes lo van a asumir hasta que lo cambies.'
+        : 'Total borrado. Vuelve a estimarse con los gastos fijos.',
+    );
+    await load();
   }
 
   const transferFrom = settlement?.transfer ? members.find((m) => m.id === settlement.transfer!.fromUserId) : null;
@@ -110,6 +135,9 @@ export default function Liquidacion() {
                 onBlur={(e) => void saveIncome(m.id, e.target.value)}
               />
             )}
+            {!privado && incomes[m.id] && !propios.has(m.id) && (
+              <em className="muted">Viene del último mes declarado. Cámbialo sólo si este mes es distinto.</em>
+            )}
           </label>
         ))}
         {privado && (
@@ -151,10 +179,16 @@ export default function Liquidacion() {
             inputMode="decimal"
             value={budget}
             onChange={(e) => setBudget(e.target.value)}
-            placeholder={`Presupuesto (${projection ? money(projection.baseBudget, currency) : '—'})`}
+            placeholder={`Gasto estimado (${projection ? money(projection.baseBudget, currency) : '—'})`}
           />
-          <button onClick={() => void recalcProjection()}>Calcular</button>
+          <button onClick={() => void guardarEstimado()}>Guardar</button>
         </div>
+
+        {projection?.targetInherited && (
+          <p className="muted" style={{ marginTop: 0 }}>
+            Este total viene de un mes anterior. Si lo cambias, queda para este mes en adelante.
+          </p>
+        )}
 
         {projection && (
           <>
@@ -176,7 +210,17 @@ export default function Liquidacion() {
                     </td>
                     <td className="num">{money(row.base, currency)}</td>
                     <td className="num">{money(row.contingency, currency)}</td>
-                    <td className="num"><strong>{money(row.amount, currency)}</strong></td>
+                    <td className="num">
+                      <strong>{money(row.amount, currency)}</strong>
+                      <div>
+                        <button
+                          className="small ghost"
+                          onClick={() => setAporteDe({ userId: row.userId, amount: row.amount })}
+                        >
+                          Anotar
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
                 <tr>
@@ -189,7 +233,8 @@ export default function Liquidacion() {
             </table>
 
             <p className="muted" style={{ marginBottom: 0, marginTop: 10 }}>
-              Cada uno transfiere su monto a {household?.officialAccount ?? 'la cuenta del hogar'}.
+              Cada uno transfiere su monto a {household?.officialAccount ?? 'la cuenta del hogar'} y lo anota con
+              el botón de al lado.
               {projection.contingencyPct > 0 ? (
                 <>
                   {' '}Incluye un {projection.contingencyPct}% de contingencia que se acumula como reserva; se ajusta en
@@ -237,6 +282,19 @@ export default function Liquidacion() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {aporteDe && (
+        <NuevoMovimiento
+          month={month}
+          inicial={{ type: 'aporte', userId: aporteDe.userId, amount: aporteDe.amount }}
+          onClose={() => setAporteDe(null)}
+          onSaved={async () => {
+            setAporteDe(null);
+            setMessage('Aporte anotado.');
+            await load();
+          }}
+        />
       )}
 
       <Metas />

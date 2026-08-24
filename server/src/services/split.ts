@@ -237,6 +237,46 @@ export type Projection = {
  * cuenta del hogar dado un presupuesto (o el gasto promedio de los últimos meses),
  * más un porcentaje de contingencia que se reparte con el mismo criterio.
  */
+/**
+ * El gasto estimado que el hogar dejó anotado para un mes.
+ *
+ * Si ese mes no tiene uno propio, hereda el último declarado antes: la idea es
+ * escribirlo una vez y que se mantenga, no volver a decidirlo cada mes.
+ */
+export function storedTarget(householdId: string, month: string): number | null {
+  const exacto = db
+    .prepare('SELECT amount FROM expense_targets WHERE household_id = ? AND month = ?')
+    .get(householdId, month) as { amount: number } | undefined;
+  if (exacto) return exacto.amount;
+
+  const anterior = db
+    .prepare(
+      `SELECT amount FROM expense_targets
+        WHERE household_id = ? AND month < ? ORDER BY month DESC LIMIT 1`,
+    )
+    .get(householdId, month) as { amount: number } | undefined;
+  return anterior?.amount ?? null;
+}
+
+/** ¿El mes tiene su propio valor, o está heredando el de un mes anterior? */
+export function targetIsInherited(householdId: string, month: string): boolean {
+  const exacto = db
+    .prepare('SELECT 1 FROM expense_targets WHERE household_id = ? AND month = ?')
+    .get(householdId, month);
+  return !exacto && storedTarget(householdId, month) !== null;
+}
+
+export function saveTarget(householdId: string, month: string, amount: number): void {
+  db.prepare(
+    `INSERT INTO expense_targets (household_id, month, amount) VALUES (?, ?, ?)
+     ON CONFLICT (household_id, month) DO UPDATE SET amount = excluded.amount`,
+  ).run(householdId, month, amount);
+}
+
+export function clearTarget(householdId: string, month: string): void {
+  db.prepare('DELETE FROM expense_targets WHERE household_id = ? AND month = ?').run(householdId, month);
+}
+
 export function projectContributions(
   householdId: string,
   month: string,

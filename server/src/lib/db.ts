@@ -262,6 +262,23 @@ db.exec(`
 db.exec('CREATE INDEX IF NOT EXISTS idx_tx_periodo ON transactions (household_id, period)');
 
 /*
+ * Gasto estimado del mes, el que sirve para calcular cuánto transferir a
+ * principio de mes.
+ *
+ * Se guarda y se arrastra igual que el sueldo: escribirlo una vez y que el mes
+ * siguiente lo asuma, en vez de recalcularlo cada vez que se abre la pantalla.
+ * Una fila por mes en que se cambió; los meses sin fila heredan el último.
+ */
+db.exec(`
+  CREATE TABLE IF NOT EXISTS expense_targets (
+    household_id TEXT NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+    month        TEXT NOT NULL,
+    amount       REAL NOT NULL,
+    PRIMARY KEY (household_id, month)
+  );
+`);
+
+/*
  * Gastos fijos: lo que se repite todos los meses.
  *
  * Son una **expectativa**, no un movimiento. La app nunca inventa un gasto que

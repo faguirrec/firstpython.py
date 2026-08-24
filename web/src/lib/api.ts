@@ -150,6 +150,10 @@ export type MessagePreview = {
 
 export type Projection = {
   baseBudget: number;
+  /** El total que el hogar dejó anotado, si hay uno. */
+  savedTarget?: number | null;
+  /** true si ese total viene de un mes anterior y no de éste. */
+  targetInherited?: boolean;
   contingencyPct: number;
   contingencyAmount: number;
   target: number;
@@ -389,6 +393,9 @@ export const api = {
     get<BudgetStatus>(`/finance/budgets?month=${month}${paramModo(modo)}`),
   saveBudget: (body: { categoryId: string; amount: number; month?: string | null; modo?: Modo }) =>
     put<{ ok: true }>('/finance/budgets', body),
+
+  guardarGastoEstimado: (body: { month: string; amount: number }) =>
+    put<{ ok: true }>('/finance/target', body),
 
   gastosFijos: (month: string) => get<EstadoFijos>(`/finance/fixed?month=${month}`),
   crearGastoFijo: (body: {
