@@ -106,10 +106,65 @@ export const BANK_TEMPLATES: BankTemplate[] = [
     date_regex: null,
     account_regex: 'Destino[\\s\\S]{0,200}?N[°º] de Cuenta\\s*([\\d-]{8,})',
     must_contain: 'Transferencia a terceros',
-    must_not_contain: 'Mercado Pago',
+    // Lo que va a la cuenta del hogar es un aporte, no un gasto: lo toma la
+    // regla de más arriba. Ajusta el nombre si cambian de banco.
+    must_not_contain: 'Banco Falabella',
     type: 'gasto',
     scope: 'comun',
     account_label: null,
+  },
+  {
+    /**
+     * Plata que entra a la cuenta del hogar desde el banco de uno de los dos.
+     *
+     * El aviso lo manda el banco de origen —el de quien deposita—, no el de la
+     * cuenta que recibe. Se reconoce porque el destino es el banco donde está
+     * la cuenta común; si algún día tienen dos cuentas ahí, hay que apretar el
+     * filtro al número de cuenta.
+     *
+     * Al activarla hay que elegir de quién es el aporte: la liquidación suma lo
+     * que puso cada uno por su usuario. Si los dos depositan desde el mismo
+     * banco, van dos copias, cada una con el nombre de una persona.
+     */
+    key: 'bancochile_aporte_al_hogar',
+    name: 'Banco de Chile → cuenta del hogar (aporte)',
+    gmail_query: 'from:(bancochile.cl) subject:(transferencia) newer_than:60d',
+    amount_regex: 'Monto[\\s\\S]{0,40}?\\$\\s?([\\d.,]+)',
+    merchant_regex: null,
+    date_regex: null,
+    account_regex: 'Destino[\\s\\S]{0,200}?N[°\u00ba] de Cuenta\\s*([\\d-]{8,})',
+    must_contain: 'Transferencia a terceros; Banco Falabella',
+    type: 'aporte',
+    scope: 'comun',
+    account_label: 'Banco Falabella',
+  },
+  {
+    /**
+     * Plata que sale de la cuenta del hogar.
+     *
+     * Banco Falabella avisa dos veces la misma transferencia: una a quien la
+     * envía ("tu transferencia está lista") y otra a quien la recibe ("ha
+     * instruido una transferencia a su cuenta"). Las dos llegan al mismo buzón
+     * cuando el destinatario es uno de ustedes, así que la regla se queda con
+     * la primera y descarta la segunda.
+     *
+     * `must_not_contain` trae además los nombres de ustedes dos: sacar plata de
+     * la cuenta común hacia una cuenta propia no es un gasto del hogar, es
+     * devolverse plata, y contarlo como gasto lo repartiría entre los dos.
+     */
+    key: 'falabella_transferencia_enviada',
+    name: 'Banco Falabella — sale de la cuenta del hogar',
+    gmail_query: 'from:(bancofalabella.com) subject:(transferencia) newer_than:60d',
+    amount_regex: 'Monto transferencia[\\s\\S]{0,40}?\\$\\s?([\\d.,]+)',
+    merchant_regex: 'Nombre destinatario[\\s\\S]{0,40}?([^\\n]{2,60})',
+    date_regex: 'Fecha[\\s\\S]{0,40}?(\\d{1,2}[-/]\\d{1,2}[-/]\\d{2,4})',
+    account_regex: 'Cuenta de origen[\\s\\S]{0,40}?([\\d-]{8,})',
+    must_contain: 'Cuenta de origen',
+    // La copia del destinatario, y las devoluciones a las cuentas de ustedes.
+    must_not_contain: 'ha instruido',
+    type: 'gasto',
+    scope: 'comun',
+    account_label: 'Banco Falabella',
   },
   {
     key: 'santander_compra',

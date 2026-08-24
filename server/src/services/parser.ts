@@ -165,6 +165,19 @@ export function applyRule(email: ParsedEmail, rule: EmailRule): ParsedMovement |
   };
 }
 
+/**
+ * Entidades HTML con nombre que aparecen en los correos de los bancos chilenos.
+ * No pretende ser la lista completa: lo que no esté acá se deja como viene, que
+ * es preferible a adivinar.
+ */
+const NOMBRADAS: Record<string, string> = {
+  aacute: 'á', eacute: 'é', iacute: 'í', oacute: 'ó', uacute: 'ú', uuml: 'ü', ntilde: 'ñ',
+  Aacute: 'Á', Eacute: 'É', Iacute: 'Í', Oacute: 'Ó', Uacute: 'Ú', Uuml: 'Ü', Ntilde: 'Ñ',
+  ordm: 'º', ordf: 'ª', deg: '°', middot: '·', bull: '·',
+  iquest: '¿', iexcl: '¡', laquo: '«', raquo: '»', hellip: '…',
+  mdash: '—', ndash: '–', quot: '"', apos: "'", euro: '€', pound: '£', yen: '¥', cent: '¢',
+};
+
 /** Convierte el HTML del correo en texto plano razonable para aplicar regex. */
 export function htmlToText(html: string): string {
   return html
@@ -178,6 +191,12 @@ export function htmlToText(html: string): string {
     .replace(/&lt;/gi, '<')
     .replace(/&gt;/gi, '>')
     .replace(/&#(\d+);/g, (_, code: string) => String.fromCharCode(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, code: string) => String.fromCodePoint(parseInt(code, 16)))
+    // Las entidades con nombre importan más de lo que parece: los bancos
+    // escriben "N&ordm; de Cuenta" y "Monto de la operaci&oacute;n", y si
+    // sobreviven al texto plano, una regla escrita contra lo que uno ve en el
+    // correo no calza nunca —y el síntoma es que no importa nada, sin error—.
+    .replace(/&([a-z]+);/gi, (entera, nombre: string) => NOMBRADAS[nombre] ?? entera)
     .replace(/[ \t ]+/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
     .trim();

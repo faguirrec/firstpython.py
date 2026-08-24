@@ -154,9 +154,10 @@ ok('una transferencia a un tercero entra como gasto', aTercero !== null);
 ok('con el monto correcto', aTercero?.amount === 50000, aTercero?.amount);
 ok('y con el destinatario', /Carolina Perez/.test(aTercero?.merchant ?? ''), aTercero?.merchant);
 
-// A la propia cuenta del hogar: NO, porque ya entra como aporte por el otro correo.
-const aLaCasa = comprobanteEnviado('Francisco Aguirre', 'Mercado Pago', '00-105-00000-00', '$14.000');
-ok('la recarga de la cuenta del hogar NO entra como gasto',
+// A la cuenta del hogar: NO, porque esa plata entra como aporte por la regla
+// de aportes. El filtro es el banco donde vive la cuenta común.
+const aLaCasa = comprobanteEnviado('Sofia Zuniga', 'Banco Falabella', '01-983-40661-77', '$14.000');
+ok('depositar a la cuenta del hogar NO entra como gasto',
    applyRule(aLaCasa, reglaEnviada) === null, applyRule(aLaCasa, reglaEnviada));
 
 // Y el correo espejo del mismo movimiento sí entra, una sola vez, como aporte.
@@ -170,6 +171,121 @@ ok('y ese mismo correo no entra como transferencia enviada',
 ok('un abono recibido no se confunde con una transferencia enviada',
    applyRule(comprobanteChile('Banco Chile/Edwards', '$21.450', 'Nicolas Esteban Calderon'),
              reglaEnviada) === null);
+
+// ------------------------- Banco Falabella, la cuenta del hogar -------------
+/**
+ * Reconstrucciones de los avisos reales de la cuenta común. Los números de
+ * cuenta y los RUT son inventados: los verdaderos viven en la base del hogar,
+ * no en el repositorio.
+ */
+const CUENTA_HOGAR_BDC = '01-983-40661-77';   // como la escribe Banco de Chile
+const CUENTA_HOGAR_BF = '19834066177';        // como la escribe Falabella
+
+function depositoDesdeChile(banco: string, cuenta: string, monto: string) {
+  return {
+    from: 'Banco de Chile <serviciodetransferencias@bancochile.cl>',
+    subject: 'Transferencia a Terceros',
+    internalDate: new Date('2026-08-24T16:58:00-04:00').getTime(),
+    body: htmlToText(`
+      <h2>Comprobante de Transferencia a terceros</h2>
+      <p>Estimado(a): <b>Francisco Javier Aguirre</b></p>
+      <p>Te informamos que has realizado una Transferencia a terceros en forma
+      exitosa con el siguiente detalle:</p>
+      <table>
+        <tr><td>Origen</td><td></td></tr>
+        <tr><td>Tipo de Cuenta</td><td>Cuenta Corriente</td></tr>
+        <tr><td>N&ordm; de Cuenta</td><td>00-000-00000-00</td></tr>
+      </table>
+      <table>
+        <tr><td>Destino</td><td></td></tr>
+        <tr><td>Nombre y Apellido</td><td>Sofia Zuniga</td></tr>
+        <tr><td>Tipo de Cuenta</td><td>Cuenta Corriente</td></tr>
+        <tr><td>N&ordm; de Cuenta</td><td>${cuenta}</td></tr>
+        <tr><td>Banco</td><td>${banco}</td></tr>
+      </table>
+      <table><tr><td>Monto</td><td>${monto}</td></tr></table>`),
+  };
+}
+
+function salidaDeFalabella(destinatario: string, banco: string, monto: string) {
+  return {
+    from: 'Banco Falabella <notificaciones@cl.bancofalabella.com>',
+    subject: 'Transferencia de fondos realizada',
+    internalDate: new Date('2026-08-24T17:00:00-04:00').getTime(),
+    body: htmlToText(`
+      <p>SOFIA IGNACIA, tu transferencia est&aacute; lista</p>
+      <h3>Detalle</h3>
+      <table>
+        <tr><td>Nombre destinatario</td><td>${destinatario}</td></tr>
+        <tr><td>Rut</td><td>000000000</td></tr>
+        <tr><td>Banco</td><td>${banco}</td></tr>
+        <tr><td>Producto</td><td>Cuenta Corriente</td></tr>
+        <tr><td>N&uacute;mero de cuenta</td><td>000000000000</td></tr>
+        <tr><td>Asunto</td><td>Transferencia</td></tr>
+        <tr><td>Monto transferencia</td><td>${monto}</td></tr>
+      </table>
+      <table><tr><td>Cuenta de origen</td><td>Cuenta ${CUENTA_HOGAR_BF}</td></tr></table>
+      <table>
+        <tr><td>Fecha</td><td>24-08-2026</td></tr>
+        <tr><td>Hora</td><td>17:00</td></tr>
+        <tr><td>N&uacute;mero de operaci&oacute;n</td><td>697672114930</td></tr>
+      </table>`),
+  };
+}
+
+/** La copia que le llega al destinatario del mismo movimiento de arriba. */
+function copiaDelDestinatario(monto: string) {
+  return {
+    from: 'Banco Falabella <notificaciones@cl.bancofalabella.com>',
+    subject: 'Transferencia de fondos recibida',
+    internalDate: new Date('2026-08-24T17:02:00-04:00').getTime(),
+    body: htmlToText(`
+      <p>Francisco aguirre</p>
+      <p>Le informamos que hoy, 24-08-2026, nuestro(a) cliente SOFIA IGNACIA ZUNIGA
+      ha instruido una transferencia de fondos a su cuenta con el siguiente detalle:</p>
+      <h3>Detalle</h3>
+      <table>
+        <tr><td>Nombre destinatario</td><td>Francisco aguirre</td></tr>
+        <tr><td>Monto transferencia</td><td>${monto}</td></tr>
+      </table>
+      <table><tr><td>Cuenta de origen</td><td>Cuenta ${CUENTA_HOGAR_BF}</td></tr></table>`),
+  };
+}
+
+const reglaAporte = regla('bancochile_aporte_al_hogar');
+const reglaSalida = regla('falabella_transferencia_enviada');
+const reglaGastoChile = regla('bancochile_transferencia_enviada');
+
+// --- Depositar a la cuenta del hogar es un aporte, no un gasto ---
+const deposito = depositoDesdeChile('Banco Falabella', CUENTA_HOGAR_BDC, '$1.000');
+const comoAporte = applyRule(deposito, reglaAporte);
+ok('depositar a la cuenta del hogar entra como aporte', comoAporte !== null);
+ok('con el monto correcto', comoAporte?.amount === 1000, comoAporte?.amount);
+ok('y saca la cuenta de destino',
+   (comoAporte?.account ?? '').includes('40661'), comoAporte?.account);
+ok('el mismo correo NO entra además como gasto',
+   applyRule(deposito, reglaGastoChile) === null);
+
+// --- Transferir a un tercero desde el Banco de Chile sigue siendo gasto ---
+const haciaOtroBanco = depositoDesdeChile('Banco Estado', '00-111-11111-11', '$50.000');
+ok('una transferencia a un tercero sigue siendo gasto',
+   applyRule(haciaOtroBanco, reglaGastoChile) !== null);
+ok('y no se cuela como aporte al hogar', applyRule(haciaOtroBanco, reglaAporte) === null);
+
+// --- Salidas de la cuenta del hogar ---
+const pagoAlJardinero = salidaDeFalabella('Juan Perez', 'Banco Estado', '$80.000');
+const salida = applyRule(pagoAlJardinero, reglaSalida);
+ok('lo que sale de la cuenta del hogar entra como gasto', salida !== null);
+ok('con el monto', salida?.amount === 80000, salida?.amount);
+ok('con el destinatario', /Juan Perez/.test(salida?.merchant ?? ''), salida?.merchant);
+ok('y con la fecha del correo en formato 24-08-2026',
+   salida?.occurredOn === '2026-08-24', salida?.occurredOn);
+ok('y reconoce la cuenta de origen',
+   (salida?.account ?? '').includes(CUENTA_HOGAR_BF), salida?.account);
+
+// --- Y la copia del destinatario no lo duplica ---
+ok('la copia que avisa al destinatario no entra otra vez',
+   applyRule(copiaDelDestinatario('$80.000'), reglaSalida) === null);
 
 console.log(fallas === 0 ? '\nTodo bien.' : `\n${fallas} fallas.`);
 process.exit(fallas === 0 ? 0 : 1);
