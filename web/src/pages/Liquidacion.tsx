@@ -171,7 +171,8 @@ export default function Liquidacion() {
       <div className="card">
         <h2>Cuánto transferir este mes</h2>
         <p className="muted" style={{ marginTop: 0 }}>
-          Base de cálculo: {projection?.basedOn ?? '—'}.
+          Sobre un gasto estimado de {projection ? money(projection.target, currency) : '—'} —
+          {projection?.basedOn ?? '—'}—, descontando lo que cada uno ya puso.
         </p>
         <div className="wrap" style={{ marginBottom: 10 }}>
           <input
@@ -196,9 +197,9 @@ export default function Liquidacion() {
               <thead>
                 <tr>
                   <th>Persona</th>
-                  <th>Gasto</th>
-                  <th>Contingencia</th>
-                  <th>Transfiere</th>
+                  <th>Le toca</th>
+                  <th>Puso</th>
+                  <th>Le falta</th>
                 </tr>
               </thead>
               <tbody>
@@ -208,26 +209,34 @@ export default function Liquidacion() {
                       {row.name}
                       <div className="muted">{percent(row.share)}</div>
                     </td>
-                    <td className="num">{money(row.base, currency)}</td>
-                    <td className="num">{money(row.contingency, currency)}</td>
+                    <td className="num">{money(row.amount, currency)}</td>
+                    <td className="num">{money(row.contributed, currency)}</td>
                     <td className="num">
-                      <strong>{money(row.amount, currency)}</strong>
-                      <div>
-                        <button
-                          className="small ghost"
-                          onClick={() => setAporteDe({ userId: row.userId, amount: row.amount })}
-                        >
-                          Anotar
-                        </button>
-                      </div>
+                      <strong style={{ color: row.pending > 0 ? 'var(--critical)' : 'var(--good-text)' }}>
+                        {row.pending > 0 ? money(row.pending, currency) : 'al día'}
+                      </strong>
+                      {row.pending > 0 && (
+                        <div>
+                          <button
+                            className="small ghost"
+                            onClick={() => setAporteDe({ userId: row.userId, amount: row.pending })}
+                          >
+                            Anotar
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}
                 <tr>
                   <td><strong>Total</strong></td>
-                  <td className="num">{money(projection.baseBudget, currency)}</td>
-                  <td className="num">{money(projection.contingencyAmount, currency)}</td>
-                  <td className="num"><strong>{money(projection.target, currency)}</strong></td>
+                  <td className="num">{money(projection.target, currency)}</td>
+                  <td className="num">
+                    {money(projection.rows.reduce((a, r) => a + r.contributed, 0), currency)}
+                  </td>
+                  <td className="num">
+                    <strong>{money(projection.rows.reduce((a, r) => a + r.pending, 0), currency)}</strong>
+                  </td>
                 </tr>
               </tbody>
             </table>

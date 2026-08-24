@@ -71,6 +71,27 @@ export function round2(n: number): number {
 }
 
 /**
+ * Lo que una persona puso en el hogar en un mes: lo que transfirió a la cuenta
+ * común más los gastos comunes que pagó de su bolsillo.
+ *
+ * Vive en un solo lugar porque la liquidación y la proyección tienen que dar el
+ * mismo número. Si cada una lo calculara por su cuenta, tarde o temprano una
+ * diría que falta plata y la otra que está al día.
+ */
+export function contributedBy(householdId: string, userId: string, period: string): number {
+  const fila = db
+    .prepare(
+      `SELECT COALESCE(SUM(amount), 0) AS total FROM transactions
+        WHERE household_id = @hogar AND period = @periodo AND (
+              (type = 'aporte' AND user_id = @quien)
+           OR (type = 'gasto' AND scope = 'comun' AND funded_by = @quien)
+        )`,
+    )
+    .get({ hogar: householdId, periodo: period, quien: userId }) as { total: number };
+  return round2(fila.total);
+}
+
+/**
  * @param viewerId quién está mirando. Determina de quién son los gastos
  *   personales que se informan. `null` los deja fuera por completo, que es lo
  *   que corresponde cuando el resultado no es para una persona en particular
@@ -323,13 +344,19 @@ export function projectContributions(
     basedOn,
     rows: members.map((m, i) => {
       const share = totalIncome > 0 ? incomes[i] / totalIncome : 1 / Math.max(members.length, 1);
+      const amount = round2(target * share);
+      // Lo que ya puso, para que la pantalla pueda decir cuánto falta y no
+      // repetir el total del mes como si no hubiera pasado nada.
+      const contributed = contributedBy(householdId, m.userId, month);
       return {
         userId: m.userId,
         name: m.name,
         share,
         base: round2(baseBudget! * share),
         contingency: round2(contingencyAmount * share),
-        amount: round2(target * share),
+        amount,
+        contributed,
+        pending: round2(Math.max(amount - contributed, 0)),
       };
     }),
   };

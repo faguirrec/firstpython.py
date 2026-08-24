@@ -151,9 +151,13 @@ export default function Resumen() {
       <div className="card principal">
         {futuro ? (
           <>
-            <div className="label">Te va a tocar poner</div>
+            <div className="label">
+              {(proyeccion?.rows.find((r) => r.userId === user?.id)?.contributed ?? 0) > 0
+                ? 'Te falta poner'
+                : 'Te va a tocar poner'}
+            </div>
             <div className="hero">
-              {money(proyeccion?.rows.find((r) => r.userId === user?.id)?.amount ?? 0, currency)}
+              {money(proyeccion?.rows.find((r) => r.userId === user?.id)?.pending ?? 0, currency)}
             </div>
             <div className="muted">
               {proyeccion

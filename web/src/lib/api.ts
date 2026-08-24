@@ -158,7 +158,19 @@ export type Projection = {
   contingencyAmount: number;
   target: number;
   basedOn: string;
-  rows: { userId: string; name: string; share: number; base: number; contingency: number; amount: number }[];
+  rows: {
+    userId: string;
+    name: string;
+    share: number;
+    base: number;
+    contingency: number;
+    /** Lo que le toca poner en el mes, completo. */
+    amount: number;
+    /** Lo que ya puso. */
+    contributed: number;
+    /** Lo que le falta. */
+    pending: number;
+  }[];
 };
 
 export type CategoryBudget = {

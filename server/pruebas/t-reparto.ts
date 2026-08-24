@@ -109,6 +109,53 @@ async function main() {
   ok('y no a la otra',
      conAporte.members.find((m: any) => m.userId === C).contributed === 0);
 
+  // ------------------------------- lo que falta baja con lo que se pone
+  const despues = await s.pedir('GET', `/finance/projection?month=${SEP}`);
+  const filaF = despues.rows.find((r: any) => r.userId === F);
+  const filaC = despues.rows.find((r: any) => r.userId === C);
+  ok('la proyección registra lo que ya puso', filaF.contributed === leToca, filaF);
+  ok('y le deja cero por poner', filaF.pending === 0, filaF.pending);
+  ok('sin tocar lo que le toca en total', filaF.amount === leToca, filaF.amount);
+  ok('a la otra persona no le baja nada', filaC.pending === filaC.amount, filaC);
+
+  // Un aporte parcial descuenta parcial.
+  const mitad = Math.round(filaC.amount / 2);
+  await s.pedir('POST', '/transactions', {
+    occurredOn: `${AGO}-26`, period: SEP, amount: mitad, type: 'aporte', userId: C,
+  });
+  const parcial = (await s.pedir('GET', `/finance/projection?month=${SEP}`))
+    .rows.find((r: any) => r.userId === C);
+  ok('un aporte parcial descuenta lo suyo',
+     Math.abs(parcial.pending - (parcial.amount - mitad)) < 1, parcial);
+
+  // Poner de más no deja un pendiente negativo.
+  await s.pedir('POST', '/transactions', {
+    occurredOn: `${AGO}-27`, period: SEP, amount: filaC.amount, type: 'aporte', userId: C,
+  });
+  const pasado = (await s.pedir('GET', `/finance/projection?month=${SEP}`))
+    .rows.find((r: any) => r.userId === C);
+  ok('poner de más deja el pendiente en cero, no en negativo', pasado.pending === 0, pasado.pending);
+
+  // Un gasto común pagado del bolsillo también cuenta como puesto.
+  const antesDelBolsillo = (await s.pedir('GET', `/finance/projection?month=${SEP}`))
+    .rows.find((r: any) => r.userId === F).contributed;
+  await s.pedir('POST', '/transactions', {
+    occurredOn: `${AGO}-28`, period: SEP, amount: 20000, type: 'gasto', scope: 'comun',
+    fundedBy: F, merchant: 'FERRETERIA',
+  });
+  const conBolsillo = (await s.pedir('GET', `/finance/projection?month=${SEP}`))
+    .rows.find((r: any) => r.userId === F).contributed;
+  ok('pagar un gasto común de su bolsillo cuenta como aporte',
+     conBolsillo === antesDelBolsillo + 20000, [antesDelBolsillo, conBolsillo]);
+
+  // Y la liquidación tiene que decir exactamente lo mismo.
+  const liq = await s.pedir('GET', `/finance/settlement?month=${SEP}`);
+  const proyF = (await s.pedir('GET', `/finance/projection?month=${SEP}`))
+    .rows.find((r: any) => r.userId === F);
+  ok('la proyección y la liquidación coinciden en lo que puso cada uno',
+     liq.members.find((m: any) => m.userId === F).contributed === proyF.contributed,
+     [liq.members.find((m: any) => m.userId === F).contributed, proyF.contributed]);
+
   console.log(fallas === 0 ? '\nTodo bien.' : `\n${fallas} fallas.`);
   process.exit(fallas === 0 ? 0 : 1);
 }
