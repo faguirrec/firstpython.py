@@ -231,6 +231,37 @@ addColumn('email_rules', 'must_contain', 'TEXT');
 addColumn('email_rules', 'must_not_contain', 'TEXT');
 
 /*
+ * A qué mes cuenta un movimiento, que no siempre es el de su fecha.
+ *
+ * Los sueldos no llegan el mismo día ni a fin de mes exacto, así que la cuenta
+ * de septiembre se paga a menudo el 28 de agosto. Amarrar el mes a la fecha
+ * obligaba a falsear la fecha para que el gasto cayera donde corresponde —y con
+ * los correos del banco ni siquiera eso era posible, porque la fecha la pone el
+ * banco—.
+ *
+ * `occurred_on` sigue siendo cuándo ocurrió de verdad, para poder cuadrar con
+ * la cartola. `period` es a qué mes se imputa.
+ */
+addColumn('transactions', 'period', 'TEXT');
+db.prepare("UPDATE transactions SET period = substr(occurred_on, 1, 7) WHERE period IS NULL").run();
+
+/*
+ * Red de protección: SQLite no admite un DEFAULT calculado en ALTER TABLE, y
+ * una inserción que olvide el período dejaría una fila que ninguna consulta por
+ * mes encuentra —invisible en la app pero presente en la base—. El disparador
+ * la completa con el mes de la fecha, que es el valor correcto por defecto.
+ */
+db.exec(`
+  CREATE TRIGGER IF NOT EXISTS transactions_period_por_defecto
+  AFTER INSERT ON transactions WHEN NEW.period IS NULL
+  BEGIN
+    UPDATE transactions SET period = substr(NEW.occurred_on, 1, 7) WHERE id = NEW.id;
+  END;
+`);
+
+db.exec('CREATE INDEX IF NOT EXISTS idx_tx_periodo ON transactions (household_id, period)');
+
+/*
  * Gastos fijos: lo que se repite todos los meses.
  *
  * Son una **expectativa**, no un movimiento. La app nunca inventa un gasto que

@@ -94,9 +94,9 @@ function promedioHistorico(householdId: string, fijo: Fila, hasta: string): numb
           SELECT SUM(amount) AS total FROM transactions
            WHERE household_id = @hogar AND category_id = @categoria
              AND type = 'gasto' AND scope = 'comun'
-             AND substr(occurred_on, 1, 7) < @hasta
-           GROUP BY substr(occurred_on, 1, 7)
-           ORDER BY substr(occurred_on, 1, 7) DESC
+             AND period < @hasta
+           GROUP BY period
+           ORDER BY period DESC
            LIMIT 3)`,
     )
     .get({ hogar: householdId, categoria: fijo.category_id, hasta }) as { promedio: number | null };
@@ -120,11 +120,11 @@ export function estadoDelMes(householdId: string, month: string): EstadoMes {
     .prepare(
       `SELECT id, amount, occurred_on AS occurredOn, merchant, description, category_id AS categoryId
          FROM transactions
-        WHERE household_id = ? AND occurred_on LIKE ?
+        WHERE household_id = ? AND period = ?
           AND type = 'gasto' AND scope = 'comun'
         ORDER BY occurred_on`,
     )
-    .all(householdId, `${month}-%`) as {
+    .all(householdId, month) as {
     id: string;
     amount: number;
     occurredOn: string;
@@ -273,12 +273,12 @@ export function gastoEsperadoDelMes(householdId: string, month: string): { total
       `SELECT AVG(total) AS promedio FROM (
           SELECT SUM(amount) AS total FROM transactions
            WHERE household_id = ? AND type = 'gasto' AND scope = 'comun'
-             AND substr(occurred_on, 1, 7) < ?
+             AND period < ?
              ${categoriasFijas.size > 0
                ? `AND (category_id IS NULL OR category_id NOT IN (${[...categoriasFijas].map(() => '?').join(',')}))`
                : ''}
-           GROUP BY substr(occurred_on, 1, 7)
-           ORDER BY substr(occurred_on, 1, 7) DESC
+           GROUP BY period
+           ORDER BY period DESC
            LIMIT 3)`,
     )
     .get(householdId, month, ...categoriasFijas) as { promedio: number | null };

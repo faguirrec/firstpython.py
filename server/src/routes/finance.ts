@@ -395,7 +395,7 @@ financeRouter.get('/reports/monthly', (req, res) => {
   const months = Math.min(Number(req.query.months ?? 12) || 12, 36);
   const rows = db
     .prepare(
-      `SELECT substr(t.occurred_on, 1, 7) AS month,
+      `SELECT t.period AS month,
               SUM(CASE WHEN t.type = 'gasto' AND t.scope = 'comun'    THEN t.amount ELSE 0 END) AS shared,
               -- Sólo lo personal de quien pregunta: el gasto personal del otro
               -- no es asunto de este reporte.
@@ -431,8 +431,8 @@ financeRouter.get('/reports/by-category', (req, res) => {
   const params: Record<string, unknown> = { hogar: req.household!.id, yo: req.user!.id };
   let filter = '';
   if (month) {
-    filter += ' AND t.occurred_on LIKE @mes';
-    params.mes = `${month}-%`;
+    filter += ' AND t.period = @mes';
+    params.mes = month;
   }
   // Sin filtro se ven todos los que uno puede ver; las vistas del hogar piden
   // explícitamente 'comun'.
@@ -464,14 +464,14 @@ financeRouter.get('/reports/category-trend', (req, res) => {
   const months = Math.min(Number(req.query.months ?? 12) || 12, 36);
   const rows = db
     .prepare(
-      `SELECT substr(t.occurred_on, 1, 7) AS month,
+      `SELECT t.period AS month,
               COALESCE(c.name, 'Sin categoría') AS category,
               SUM(t.amount) AS total
          FROM transactions t
          LEFT JOIN categories c ON c.id = t.category_id
         WHERE t.household_id = @hogar AND t.type = 'gasto'
           AND ${soloMisMovimientos()}
-          AND substr(t.occurred_on, 1, 7) >= @desde
+          AND t.period >= @desde
         GROUP BY month, category
         ORDER BY month`,
     )

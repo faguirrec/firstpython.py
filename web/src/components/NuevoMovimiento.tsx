@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { api, type Category, type Member, type Transaction } from '../lib/api';
 import { useSession } from '../lib/session';
-import { today } from '../lib/format';
+import { monthLabel, shiftMonth, today } from '../lib/format';
 import Sheet from './Sheet';
 import { Avatar, FichaCategoria } from './Fichas';
 
@@ -20,6 +20,18 @@ type Props = {
  * como controles segmentados. Los menús desplegables obligaban a abrir, buscar
  * y elegir para algo que se hace varias veces al día.
  */
+/**
+ * Los meses a los que tiene sentido imputar un movimiento: el de su fecha y los
+ * vecinos. Pagar en agosto la cuenta de septiembre es corriente; imputarla a
+ * marzo no lo es, y una lista larga sólo invita a equivocarse.
+ */
+function mesesPosibles(fecha: string, actual: string): string[] {
+  const base = fecha.slice(0, 7);
+  const meses = [shiftMonth(base, -1), base, shiftMonth(base, 1)];
+  if (!meses.includes(actual)) meses.push(actual);
+  return [...new Set(meses)].sort();
+}
+
 export default function NuevoMovimiento({ month, existing, onClose, onSaved }: Props) {
   const { user, household } = useSession();
   const [categories, setCategories] = useState<Category[]>([]);
@@ -28,11 +40,16 @@ export default function NuevoMovimiento({ month, existing, onClose, onSaved }: P
   const [busy, setBusy] = useState(false);
   const montoRef = useRef<HTMLInputElement>(null);
 
-  // Al crear en un mes pasado, la fecha por defecto cae en ese mes.
-  const defaultDate = month && !today().startsWith(month) ? `${month}-01` : today();
-
+  /*
+   * La fecha es cuándo ocurrió, siempre. Antes, al anotar en otro mes se le
+   * ponía el día 1 de ese mes para que cayera donde correspondía: el gasto
+   * quedaba bien contado pero con una fecha falsa, y después no cuadraba con la
+   * cartola. Ahora eso lo resuelve el período, que es un campo aparte.
+   */
   const [form, setForm] = useState({
-    occurredOn: existing?.occurredOn ?? defaultDate,
+    occurredOn: existing?.occurredOn ?? today(),
+    // A qué mes cuenta: el que se está mirando, o el de la fecha.
+    period: existing?.period ?? month ?? today().slice(0, 7),
     amount: existing ? String(existing.amount) : '',
     type: existing?.type ?? ('gasto' as Transaction['type']),
     scope: existing?.scope ?? ('comun' as Transaction['scope']),
@@ -77,6 +94,7 @@ export default function NuevoMovimiento({ month, existing, onClose, onSaved }: P
     try {
       const payload = {
         occurredOn: form.occurredOn,
+        period: form.period,
         amount,
         type: form.type,
         scope: form.type === 'aporte' ? 'comun' : form.scope,
@@ -227,10 +245,26 @@ export default function NuevoMovimiento({ month, existing, onClose, onSaved }: P
             <input type="date" value={form.occurredOn} onChange={(e) => set('occurredOn', e.target.value)} required />
           </label>
           <label className="field">
-            <span>Nota</span>
-            <input value={form.description} onChange={(e) => set('description', e.target.value)} />
+            <span>Cuenta para</span>
+            <select value={form.period} onChange={(e) => set('period', e.target.value)}>
+              {mesesPosibles(form.occurredOn, form.period).map((m) => (
+                <option key={m} value={m}>{monthLabel(m)}</option>
+              ))}
+            </select>
           </label>
         </div>
+
+        {form.period !== form.occurredOn.slice(0, 7) && (
+          <p className="muted" style={{ marginTop: 0 }}>
+            Se pagó en {monthLabel(form.occurredOn.slice(0, 7))} pero cuenta en {monthLabel(form.period)}. La fecha
+            queda como está, para que cuadre con la cartola.
+          </p>
+        )}
+
+        <label className="field">
+          <span>Nota</span>
+          <input value={form.description} onChange={(e) => set('description', e.target.value)} />
+        </label>
 
         <button className="primary" disabled={busy} style={{ width: '100%', minHeight: 50, fontSize: '1rem' }}>
           {busy ? 'Guardando…' : existing ? 'Guardar cambios' : 'Confirmar'}

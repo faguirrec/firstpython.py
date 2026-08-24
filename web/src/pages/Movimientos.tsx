@@ -158,7 +158,11 @@ export default function Movimientos() {
                   {t.reviewed === 0 && <span className="pill warn" style={{ marginLeft: 6 }}>por revisar</span>}
                 </div>
                 <div className="meta">
-                  {dayLabel(t.occurredOn)} · {t.categoryName ?? 'Sin categoría'}
+                  {dayLabel(t.occurredOn)}
+                  {/* Se marca sólo cuando no coincide: si la fecha y el mes al
+                      que cuenta son el mismo, decirlo sería ruido. */}
+                  {t.period !== t.occurredOn.slice(0, 7) && ` · cuenta en ${monthLabel(t.period, true)}`}
+                  {' · '}{t.categoryName ?? 'Sin categoría'}
                   {t.scope === 'personal' && ' · personal'}
                   {t.type === 'aporte' && ` · aporte de ${t.userName ?? ''}`}
                   {t.fundedBy !== 'oficial' && t.type === 'gasto' && ` · pagó ${t.userName ?? 'uno de los dos'}`}

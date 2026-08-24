@@ -18,6 +18,8 @@ export type Member = { id: string; name: string; email: string; role: string; jo
 export type Transaction = {
   id: string;
   occurredOn: string;
+  /** A qué mes cuenta, que no siempre es el de la fecha. */
+  period: string;
   amount: number;
   type: 'gasto' | 'aporte' | 'ingreso_extra';
   scope: 'comun' | 'personal';

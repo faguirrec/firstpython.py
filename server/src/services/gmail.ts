@@ -226,9 +226,10 @@ export async function syncHousehold(householdId: string, maxPerRule = 100, dryRu
   const seen = db.prepare('SELECT 1 FROM transactions WHERE household_id = ? AND source_msg_id = ?');
   const insert = db.prepare(
     `INSERT INTO transactions
-       (id, household_id, occurred_on, amount, type, scope, funded_by, user_id, category_id,
+       (id, household_id, occurred_on, period, amount, type, scope, funded_by, user_id, category_id,
         merchant, description, account_label, installments, source, source_msg_id, raw_snippet, reviewed)
-     VALUES (@id, @household_id, @occurred_on, @amount, @type, @scope, 'oficial', @user_id, @category_id,
+     VALUES (@id, @household_id, @occurred_on, substr(@occurred_on, 1, 7), @amount, @type, @scope,
+        'oficial', @user_id, @category_id,
         @merchant, @description, @account_label, @installments, 'gmail', @source_msg_id, @raw_snippet, 0)`,
   );
 

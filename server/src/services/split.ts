@@ -91,15 +91,16 @@ export function computeSettlement(
     )
     .all(householdId) as MemberRow[];
 
-  const like = `${month}-%`;
+  // El período contable, que no siempre es el mes de la fecha.
+  const periodo = month;
 
   const totalShared = (
     db
       .prepare(
         `SELECT COALESCE(SUM(amount), 0) AS total FROM transactions
-          WHERE household_id = ? AND occurred_on LIKE ? AND type = 'gasto' AND scope = 'comun'`,
+          WHERE household_id = ? AND period = ? AND type = 'gasto' AND scope = 'comun'`,
       )
-      .get(householdId, like) as { total: number }
+      .get(householdId, periodo) as { total: number }
   ).total;
 
   const totalPersonal = viewerId
@@ -107,10 +108,10 @@ export function computeSettlement(
         db
           .prepare(
             `SELECT COALESCE(SUM(amount), 0) AS total FROM transactions
-              WHERE household_id = ? AND occurred_on LIKE ?
+              WHERE household_id = ? AND period = ?
                 AND type = 'gasto' AND scope = 'personal' AND user_id = ?`,
           )
-          .get(householdId, like, viewerId) as { total: number }
+          .get(householdId, periodo, viewerId) as { total: number }
       ).total
     : 0;
 
@@ -126,19 +127,19 @@ export function computeSettlement(
       db
         .prepare(
           `SELECT COALESCE(SUM(amount), 0) AS total FROM transactions
-            WHERE household_id = ? AND occurred_on LIKE ? AND type = 'aporte' AND user_id = ?`,
+            WHERE household_id = ? AND period = ? AND type = 'aporte' AND user_id = ?`,
         )
-        .get(householdId, like, m.userId) as { total: number },
+        .get(householdId, periodo, m.userId) as { total: number },
     ]);
 
     const paidOutOfPocket = sum([
       db
         .prepare(
           `SELECT COALESCE(SUM(amount), 0) AS total FROM transactions
-            WHERE household_id = ? AND occurred_on LIKE ?
+            WHERE household_id = ? AND period = ?
               AND type = 'gasto' AND scope = 'comun' AND funded_by = ?`,
         )
-        .get(householdId, like, m.userId) as { total: number },
+        .get(householdId, periodo, m.userId) as { total: number },
     ]);
 
     const fairShare = round2(totalShared * incomeShare);
@@ -161,10 +162,10 @@ export function computeSettlement(
     db
       .prepare(
         `SELECT COALESCE(SUM(amount), 0) AS total FROM transactions
-          WHERE household_id = ? AND occurred_on LIKE ?
+          WHERE household_id = ? AND period = ?
             AND type = 'gasto' AND scope = 'comun' AND funded_by = 'oficial'`,
       )
-      .get(householdId, like) as { total: number }
+      .get(householdId, periodo) as { total: number }
   ).total;
 
   const totalTransferred = breakdown.reduce((a, b) => a + b.transferred, 0);
@@ -258,12 +259,12 @@ export function projectContributions(
       .prepare(
         `SELECT AVG(monthly) AS avg FROM (
             SELECT SUM(amount) AS monthly FROM transactions
-             WHERE household_id = ? AND type = 'gasto' AND scope = 'comun' AND occurred_on < ?
-             GROUP BY substr(occurred_on, 1, 7)
-             ORDER BY substr(occurred_on, 1, 7) DESC
+             WHERE household_id = ? AND type = 'gasto' AND scope = 'comun' AND period < ?
+             GROUP BY period
+             ORDER BY period DESC
              LIMIT 3)`,
       )
-      .get(householdId, `${month}-01`) as { avg: number | null };
+      .get(householdId, month) as { avg: number | null };
     baseBudget = avg.avg ?? 0;
     basedOn = 'promedio de los últimos 3 meses';
   }
@@ -338,7 +339,7 @@ export function computePersonalSummary(
   month: string,
   currency: string,
 ): ResumenPersonal {
-  const like = `${month}-%`;
+  const periodo = month;
   const uno = (sql: string, params: unknown[]): number =>
     (db.prepare(sql).get(...params) as { total: number }).total;
 
@@ -346,24 +347,24 @@ export function computePersonalSummary(
 
   const personalExpenses = uno(
     `SELECT COALESCE(SUM(amount), 0) AS total FROM transactions
-      WHERE household_id = ? AND occurred_on LIKE ?
+      WHERE household_id = ? AND period = ?
         AND type = 'gasto' AND scope = 'personal' AND user_id = ?`,
-    [householdId, like, userId],
+    [householdId, periodo, userId],
   );
 
   const aportes = uno(
     `SELECT COALESCE(SUM(amount), 0) AS total FROM transactions
-      WHERE household_id = ? AND occurred_on LIKE ? AND type = 'aporte' AND user_id = ?`,
-    [householdId, like, userId],
+      WHERE household_id = ? AND period = ? AND type = 'aporte' AND user_id = ?`,
+    [householdId, periodo, userId],
   );
 
   // Un gasto común que pagó de su bolsillo es aporte igual: la plata salió de
   // su cuenta, no de la del hogar.
   const deSuBolsillo = uno(
     `SELECT COALESCE(SUM(amount), 0) AS total FROM transactions
-      WHERE household_id = ? AND occurred_on LIKE ?
+      WHERE household_id = ? AND period = ?
         AND type = 'gasto' AND scope = 'comun' AND funded_by = ?`,
-    [householdId, like, userId],
+    [householdId, periodo, userId],
   );
 
   const contributedToHousehold = aportes + deSuBolsillo;
@@ -414,7 +415,7 @@ export function computePersonalSavings(householdId: string, userId: string): num
 export function computeReserve(householdId: string): Reserve {
   const rows = db
     .prepare(
-      `SELECT substr(occurred_on, 1, 7) AS month,
+      `SELECT period AS month,
               COALESCE(SUM(CASE WHEN type = 'aporte' THEN amount ELSE 0 END), 0) AS contributed,
               COALESCE(SUM(CASE WHEN type = 'gasto' AND scope = 'comun' AND funded_by = 'oficial'
                                 THEN amount ELSE 0 END), 0) AS spent

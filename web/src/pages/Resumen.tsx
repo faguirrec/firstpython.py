@@ -11,7 +11,7 @@ import {
 } from '../lib/api';
 import { useSession } from '../lib/session';
 import { useModo } from '../lib/modo';
-import { currentMonth, dayLabel, esMesFuturo, money, percent } from '../lib/format';
+import { currentMonth, dayLabel, monthLabel, esMesFuturo, money, percent } from '../lib/format';
 import { CategoryBars, SplitBar, type CategorySlice } from '../components/Charts';
 import Cabecera from '../components/Cabecera';
 import NuevoMovimiento from '../components/NuevoMovimiento';
@@ -385,7 +385,11 @@ export default function Resumen() {
               <div className="body">
                 <div className="title">{t.merchant ?? t.description ?? 'Movimiento'}</div>
                 <div className="meta">
-                  {dayLabel(t.occurredOn)} · {t.categoryName ?? 'Sin categoría'}
+                  {dayLabel(t.occurredOn)}
+                  {/* Se marca sólo cuando no coincide: si la fecha y el mes al
+                      que cuenta son el mismo, decirlo sería ruido. */}
+                  {t.period !== t.occurredOn.slice(0, 7) && ` · cuenta en ${monthLabel(t.period, true)}`}
+                  {' · '}{t.categoryName ?? 'Sin categoría'}
                   {t.scope === 'personal' && ' · personal'}
                   {t.type === 'aporte' && ` · aporte de ${t.userName ?? ''}`}
                 </div>

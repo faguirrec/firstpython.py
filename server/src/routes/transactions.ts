@@ -9,7 +9,7 @@ export const transactionsRouter = Router();
 transactionsRouter.use(requireAuth, requireHousehold);
 
 const SELECT = `
-  SELECT t.id, t.occurred_on AS occurredOn, t.amount, t.type, t.scope, t.funded_by AS fundedBy,
+  SELECT t.id, t.occurred_on AS occurredOn, t.period, t.amount, t.type, t.scope, t.funded_by AS fundedBy,
          t.user_id AS userId, t.category_id AS categoryId, c.name AS categoryName, c.color AS categoryColor, c.emoji AS categoryEmoji,
          t.merchant, t.description, t.account_label AS accountLabel, t.installments,
          t.source, t.raw_snippet AS rawSnippet, t.reviewed, u.name AS userName
@@ -20,6 +20,12 @@ const SELECT = `
 
 const transactionInput = z.object({
   occurredOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha inválida'),
+  /**
+   * A qué mes cuenta. Si no viene, es el mes de la fecha —que es lo habitual—;
+   * se manda distinto cuando se paga por adelantado la cuenta del mes que
+   * viene, o cuando llega atrasada la del anterior.
+   */
+  period: z.string().regex(/^\d{4}-\d{2}$/, 'Mes inválido').optional(),
   amount: z.number().positive('El monto debe ser mayor que cero'),
   type: z.enum(['gasto', 'aporte', 'ingreso_extra']),
   scope: z.enum(['comun', 'personal']).default('comun'),
@@ -61,7 +67,7 @@ transactionsRouter.get('/', (req, res) => {
     limite: q.limit,
   };
 
-  if (q.month) { where.push('t.occurred_on LIKE @mes'); params.mes = `${q.month}-%`; }
+  if (q.month) { where.push('t.period = @mes'); params.mes = q.month; }
   if (q.from) { where.push('t.occurred_on >= @desde'); params.desde = q.from; }
   if (q.to) { where.push('t.occurred_on <= @hasta'); params.hasta = q.to; }
   if (q.type) { where.push('t.type = @tipo'); params.tipo = q.type; }
@@ -101,11 +107,12 @@ transactionsRouter.post('/', (req, res) => {
 
   db.prepare(
     `INSERT INTO transactions
-       (id, household_id, occurred_on, amount, type, scope, funded_by, user_id, category_id,
+       (id, household_id, occurred_on, period, amount, type, scope, funded_by, user_id, category_id,
         merchant, description, account_label, installments, source, reviewed)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', 1)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', 1)`,
   ).run(
-    id, req.household!.id, t.occurredOn, t.amount, t.type, t.scope, t.fundedBy, userId,
+    id, req.household!.id, t.occurredOn, t.period ?? t.occurredOn.slice(0, 7),
+    t.amount, t.type, t.scope, t.fundedBy, userId,
     categoryId, t.merchant ?? null, t.description ?? null, t.accountLabel ?? null, t.installments ?? null,
   );
 
@@ -133,6 +140,7 @@ transactionsRouter.patch('/:id', (req, res) => {
   db.prepare(
     `UPDATE transactions SET
         occurred_on   = COALESCE(?, occurred_on),
+        period        = COALESCE(?, period),
         amount        = COALESCE(?, amount),
         type          = COALESCE(?, type),
         scope         = COALESCE(?, scope),
@@ -146,7 +154,7 @@ transactionsRouter.patch('/:id', (req, res) => {
         reviewed      = COALESCE(?, reviewed)
       WHERE id = ? AND household_id = ?`,
   ).run(
-    p.occurredOn ?? null, p.amount ?? null, p.type ?? null, p.scope ?? null, p.fundedBy ?? null,
+    p.occurredOn ?? null, p.period ?? null, p.amount ?? null, p.type ?? null, p.scope ?? null, p.fundedBy ?? null,
     p.userId ?? null, p.categoryId ?? null, p.merchant ?? null, p.description ?? null,
     p.accountLabel ?? null, p.installments ?? null,
     p.reviewed === undefined ? null : p.reviewed ? 1 : 0,

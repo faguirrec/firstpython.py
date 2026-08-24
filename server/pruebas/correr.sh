@@ -56,10 +56,11 @@ correr t-reglas-reales.ts
 correr t-migracion.ts
 
 # Éstas levantan su propio servidor y hablan con la API como dos personas.
-rm -f privacidad.db personal.db
+rm -f privacidad.db personal.db fijos.db periodo.db
 correr t-privacidad.ts
 correr t-personal.ts
 correr t-fijos.ts
+correr t-periodo.ts
 
 # Éstas sí: cada una con el buzón recién levantado.
 levantar_buzon && correr t-imap.ts

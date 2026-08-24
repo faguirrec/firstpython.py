@@ -65,7 +65,7 @@ export function computeBudgetStatus(householdId: string, month: string, ambito: 
                 SELECT SUM(t.amount) FROM transactions t
                  WHERE t.household_id = c.household_id
                    AND t.category_id = c.id
-                   AND t.occurred_on LIKE @mes
+                   AND t.period = @mes
                    AND ${filtroGastos(ambito)}
               ), 0) AS spent
          FROM categories c
@@ -76,7 +76,7 @@ export function computeBudgetStatus(householdId: string, month: string, ambito: 
         WHERE c.household_id = @hogar AND c.archived = 0
         ORDER BY c.name`,
     )
-    .all({ mes: `${month}-%`, mesExacto: month, hogar: householdId, ...paramsAmbito(ambito) }) as {
+    .all({ mes: month, mesExacto: month, hogar: householdId, ...paramsAmbito(ambito) }) as {
     categoryId: string;
     category: string;
     color: string;
@@ -115,10 +115,10 @@ export function computeBudgetStatus(householdId: string, month: string, ambito: 
     db
       .prepare(
         `SELECT COALESCE(SUM(t.amount), 0) AS total FROM transactions t
-          WHERE t.household_id = @hogar AND t.occurred_on LIKE @mes
+          WHERE t.household_id = @hogar AND t.period = @mes
             AND ${filtroGastos(ambito)}`,
       )
-      .get({ hogar: householdId, mes: `${month}-%`, ...paramsAmbito(ambito) }) as { total: number }
+      .get({ hogar: householdId, mes: month, ...paramsAmbito(ambito) }) as { total: number }
   ).total;
 
   const budgetedSpent = withBudget.reduce((a, b) => a + b.spent, 0);
@@ -277,14 +277,14 @@ export function compareMonths(
       `SELECT COALESCE(c.name, 'Sin categoría') AS category,
               COALESCE(c.color, '#898781') AS color,
               COALESCE(c.emoji, '❓') AS emoji,
-              substr(t.occurred_on, 1, 7) AS month,
+              t.period AS month,
               SUM(t.amount) AS total
          FROM transactions t
          LEFT JOIN categories c ON c.id = t.category_id
         WHERE t.household_id = @hogar
           AND ${filtroGastos(ambito)}
-          AND substr(t.occurred_on, 1, 7) >= @desde
-          AND substr(t.occurred_on, 1, 7) <= @hasta
+          AND t.period >= @desde
+          AND t.period <= @hasta
         GROUP BY category, color, emoji, month`,
     )
     .all({ hogar: householdId, desde: since, hasta: month, ...paramsAmbito(ambito) }) as {
