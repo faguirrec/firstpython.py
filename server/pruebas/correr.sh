@@ -44,7 +44,7 @@ fallas=0
 correr() {
   echo ""
   echo "── $1 ──"
-  rm -f prueba.db ap.db vig.db mig.db fijos.db
+  rm -f prueba.db ap.db vig.db mig.db fijos.db presu.db
   if ! DB_PATH=prueba.db npx tsx "$1"; then fallas=$((fallas + 1)); fi
 }
 
@@ -52,6 +52,7 @@ correr() {
 correr t-cripto.ts
 correr t-consulta.ts
 correr t-reglas-reales.ts
+correr t-presupuesto.ts
 
 correr t-migracion.ts
 

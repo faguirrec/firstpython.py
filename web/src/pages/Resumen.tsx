@@ -44,7 +44,9 @@ export default function Resumen() {
       // que sirve es cuánto va a tener que poner cada uno.
       const [s, c, t, g, b, p, f, pr] = await Promise.all([
         api.settlement(month),
-        api.byCategory(month, esPersonal ? 'personal' : 'comun'),
+        // Sin los fijos: el arriendo se lleva tres cuartos del gráfico todos
+        // los meses y tapa lo único sobre lo que se puede decidir algo.
+        api.byCategory(month, esPersonal ? 'personal' : 'comun', !esPersonal),
         api.transactions({ month, limit: 6, scope: esPersonal ? 'personal' : undefined }),
         api.gmailStatus().catch(() => ({ pendingReview: 0 })),
         api.budgets(month, modo),
@@ -171,7 +173,9 @@ export default function Resumen() {
           </>
         ) : me ? (
           <>
-            <div className="label">{me.deviation < -0.5 ? 'Te falta poner' : 'Vas al día'}</div>
+            {/* "Vas al día · $330.600" deja el número sin explicar: no es lo que
+                debes ni lo que gastaste, es lo que pusiste de más. */}
+            <div className="label">{me.deviation < -0.5 ? 'Te falta poner' : 'Pusiste de más'}</div>
             <div
               className="hero"
               style={{ color: me.deviation < -0.5 ? 'var(--critical)' : 'var(--good-text)' }}
@@ -271,23 +275,23 @@ export default function Resumen() {
           y mostrar lo del otro acá sería justo lo que se acaba de separar. */}
       {/* En un mes que no ha empezado nadie va atrasado ni adelantado: la tarjeta
           diría "al día $0" para los dos, que no es información. */}
-      {settlement && !esPersonal && !futuro && (
+      {settlement && !esPersonal && !futuro && settlement.members.some((m) => m.userId !== user?.id) && (
         <div className="card">
           <div className="card-head">
-            <h2>Cómo va cada uno</h2>
+            <h2>Cómo va {settlement.members.find((m) => m.userId !== user?.id)?.name ?? 'el resto'}</h2>
             <Link to="/liquidacion" className="muted">Ver detalle →</Link>
           </div>
 
           <div className="list">
-            {settlement.members.map((m, i) => {
+            {/* Sin tu propia fila: el encabezado de arriba ya dice cómo vas tú,
+                y repetirlo a media pantalla de distancia sólo alarga la vista. */}
+            {settlement.members.map((m, i) => ({ m, i })).filter(({ m }) => m.userId !== user?.id).map(({ m, i }) => {
               const debe = m.deviation < -0.5;
               return (
                 <div className="item" key={m.userId}>
                   <Avatar nombre={m.name} indice={i} />
                   <div className="body">
-                    <div className="title">
-                      {m.name} {m.userId === user?.id && <span className="muted">· tú</span>}
-                    </div>
+                    <div className="title">{m.name}</div>
                     <div className="meta">
                       Le toca {money(m.fairShare, currency)} ({percent(m.incomeShare)}) · lleva puesto{' '}
                       {money(m.contributed, currency)}
@@ -357,18 +361,31 @@ export default function Resumen() {
       {categories.length > 0 && (
         <div className="card">
           <div className="card-head">
-            <h2>En qué se fue</h2>
+            <h2>{esPersonal ? 'En qué se fue' : 'En qué se fue, sin los fijos'}</h2>
             <Link to="/reportes" className="muted">Análisis →</Link>
           </div>
+          {!esPersonal && fijos && fijos.totalPaid > 0 && (
+            <p className="muted" style={{ marginTop: 0 }}>
+              Los fijos suman {money(fijos.totalPaid, currency)} aparte. Se dejan fuera porque son los mismos todos
+              los meses y tapaban el resto.
+            </p>
+          )}
           <CategoryBars data={categories} currency={currency} limit={6} />
         </div>
       )}
 
-      <div className="card">
-        <div className="card-head">
-          <h2>Últimos movimientos</h2>
-          <Link to="/movimientos" className="muted">Ver todos →</Link>
-        </div>
+      {/* Plegado a propósito: la lista completa está a un toque en su propia
+          pestaña, y desplegada empujaba fuera de pantalla todo lo que sí se
+          responde acá. Se abre sola cuando no hay nada más que mostrar. */}
+      <details className="card plegable" open={recent.length === 0}>
+        <summary>
+          <strong>Últimos movimientos</strong>
+          <span className="muted">
+            {recent.length > 0
+              ? `Los ${recent.length} más recientes · ver todos en Movimientos`
+              : 'Todavía no hay ninguno'}
+          </span>
+        </summary>
         {recent.length === 0 && (
           <Vacio
             icono={<IconoBolsillo size={26} />}
@@ -405,7 +422,7 @@ export default function Resumen() {
             </div>
           ))}
         </div>
-      </div>
+      </details>
 
       {adding && (
         <NuevoMovimiento

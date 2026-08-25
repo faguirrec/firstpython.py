@@ -23,6 +23,10 @@ export type CategoryBudget = {
   remaining: number;
   /** Proporción gastada (puede pasar de 1). */
   used: number;
+  /**
+   * `atencion` no significa "cerca del tope" sino "más rápido que el mes": ir
+   * en el 75% el día 15 es ir acelerado, aunque falte un cuarto por gastar.
+   */
   status: 'sin-presupuesto' | 'ok' | 'atencion' | 'excedido';
 };
 
@@ -86,13 +90,19 @@ export function computeBudgetStatus(householdId: string, month: string, ambito: 
     spent: number;
   }[];
 
+  const avance = monthProgress(month);
+
   const categories: CategoryBudget[] = rows.map((r) => {
     const budget = r.budget ?? 0;
     const used = budget > 0 ? r.spent / budget : 0;
     let status: CategoryBudget['status'] = 'sin-presupuesto';
     if (budget > 0) {
       if (used > 1) status = 'excedido';
-      else if (used >= 0.8) status = 'atencion';
+      // Se compara contra cuánto mes ha pasado, no contra un porcentaje fijo.
+      // El margen evita que dos compras seguidas a principio de mes enciendan
+      // la alerta: un presupuesto no se gasta en cuotas iguales todos los días.
+      else if (used > avance + 0.15) status = 'atencion';
+      else if (used >= 0.9) status = 'atencion';
       else status = 'ok';
     }
     return {
@@ -130,7 +140,7 @@ export function computeBudgetStatus(householdId: string, month: string, ambito: 
     budgetedSpent: round2(budgetedSpent),
     unbudgetedSpent: round2(totalSpentShared - budgetedSpent),
     categories,
-    monthProgress: monthProgress(month),
+    monthProgress: avance,
     overBudget: categories.filter((c) => c.status === 'excedido'),
     nearLimit: categories.filter((c) => c.status === 'atencion'),
   };

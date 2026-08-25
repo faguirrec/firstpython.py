@@ -462,6 +462,24 @@ financeRouter.get('/reports/by-category', (req, res) => {
   const scope = req.query.scope as string | undefined;
   const params: Record<string, unknown> = { hogar: req.household!.id, yo: req.user!.id };
   let filter = '';
+
+  /*
+   * Sin los gastos fijos, cuando se piden aparte.
+   *
+   * El arriendo se lleva tres cuartos del gráfico todos los meses y aplasta lo
+   * único sobre lo que se puede actuar. Separarlos deja ver el gasto variable,
+   * que es donde uno decide algo.
+   */
+  if (req.query.excluirFijos === '1' && month) {
+    const pagados = estadoDelMes(req.household!.id, month)
+      .items.map((i) => i.paidWith?.id)
+      .filter((id): id is string => Boolean(id));
+    if (pagados.length > 0) {
+      const marcas = pagados.map((_, i) => `@fijo${i}`);
+      filter += ` AND t.id NOT IN (${marcas.join(', ')})`;
+      pagados.forEach((id, i) => { params[`fijo${i}`] = id; });
+    }
+  }
   if (month) {
     filter += ' AND t.period = @mes';
     params.mes = month;

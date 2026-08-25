@@ -385,10 +385,11 @@ export const api = {
     get<{ months: { month: string; shared: number; personal: number; contributions: number; income: number }[] }>(
       `/finance/reports/monthly?months=${months}`,
     ),
-  byCategory: (month?: string, scope?: 'comun' | 'personal') => {
+  byCategory: (month?: string, scope?: 'comun' | 'personal', excluirFijos = false) => {
     const query = new URLSearchParams();
     if (month) query.set('month', month);
     if (scope) query.set('scope', scope);
+    if (excluirFijos) query.set('excluirFijos', '1');
     return get<{ categories: { category: string; color: string; emoji: string; total: number; count: number }[] }>(
       `/finance/reports/by-category?${query.toString()}`,
     );

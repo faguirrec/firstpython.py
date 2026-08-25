@@ -22,8 +22,32 @@ export function moneyShort(amount: number, currency = 'CLP'): string {
   return `${symbol}${Math.round(amount)}`;
 }
 
+/**
+ * Porcentaje en número entero.
+ *
+ * Antes llevaba un decimal, y la barra del reparto redondeaba a entero: la
+ * misma pantalla decía 60% arriba y 59,7% más abajo. El decimal no cambia
+ * ninguna decisión y sí hacía dudar de la cifra.
+ */
 export function percent(fraction: number): string {
-  return `${(fraction * 100).toFixed(1).replace('.', ',')}%`;
+  return `${Math.round(fraction * 100)}%`;
+}
+
+/**
+ * Reparte porcentajes enteros que suman exactamente 100.
+ *
+ * Redondear cada parte por su cuenta puede dar 101 —50,5 y 49,5 se van los dos
+ * para arriba—, y una barra que suma 101% se nota.
+ */
+export function percentParts(fractions: number[]): number[] {
+  const enteros = fractions.map((f) => Math.round(f * 100));
+  const total = enteros.reduce((a, b) => a + b, 0);
+  if (total !== 100 && enteros.length > 0) {
+    // La diferencia se le carga a la parte más grande, donde menos se nota.
+    const mayor = enteros.indexOf(Math.max(...enteros));
+    enteros[mayor] += 100 - total;
+  }
+  return enteros;
 }
 
 const MONTH_NAMES = [

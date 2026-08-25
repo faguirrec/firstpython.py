@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { money, moneyShort, monthLabel } from '../lib/format';
+import { money, moneyShort, monthLabel, percentParts } from '../lib/format';
 import { FichaCategoria } from './Fichas';
 
 /** Rectángulo con las esquinas superiores redondeadas, anclado a la línea base. */
@@ -205,10 +205,13 @@ export function SplitBar({
 }: {
   parts: { name: string; share: number; color: string }[];
 }) {
+  // Enteros que suman 100: los porcentajes de la barra y los del detalle tienen
+  // que coincidir, o la pantalla se contradice consigo misma.
+  const enteros = percentParts(parts.map((p) => p.share));
   return (
     <div>
       <div style={{ display: 'flex', height: 26, borderRadius: 8, overflow: 'hidden', gap: 2 }}>
-        {parts.map((part) => (
+        {parts.map((part, i) => (
           <div
             key={part.name}
             style={{
@@ -221,7 +224,7 @@ export function SplitBar({
               fontWeight: 600,
             }}
           >
-            {Math.round(part.share * 100)}%
+            {enteros[i]}%
           </div>
         ))}
       </div>
