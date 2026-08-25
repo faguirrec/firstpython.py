@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, type BudgetStatus, type CategoryBudget } from '../lib/api';
+import { useVersionDatos } from '../lib/datos';
 import { useModo } from '../lib/modo';
 import { useSession } from '../lib/session';
 import { money, monthLabel } from '../lib/format';
@@ -66,6 +67,8 @@ export default function Presupuesto({ month }: { month: string }) {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const modo = useModo();
+  // Para que anotar desde el botón flotante también actualice esta pantalla.
+  const version = useVersionDatos();
 
   const load = useCallback(async () => {
     try {
@@ -77,7 +80,7 @@ export default function Presupuesto({ month }: { month: string }) {
     } catch (err) {
       setError((err as Error).message);
     }
-  }, [month, modo]);
+  }, [month, modo, version]);
 
   useEffect(() => {
     void load();

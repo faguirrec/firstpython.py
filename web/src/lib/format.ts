@@ -69,7 +69,7 @@ export function dayLabel(date: string): string {
 
 /**
  * El día como encabezado de un grupo de movimientos: "Hoy", "Ayer" o
- * "lunes 25 de agosto".
+ * "Miércoles, 26 de agosto".
  *
  * Hoy y ayer llevan nombre propio porque es donde está casi todo lo que uno
  * viene a revisar, y leer la fecha para reconocerlos es trabajo de más.

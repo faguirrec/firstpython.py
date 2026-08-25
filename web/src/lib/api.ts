@@ -95,7 +95,30 @@ export type EmailRule = {
   accountLabel: string | null;
   /** A quién se le atribuye lo que importe esta regla. */
   userId: string | null;
+  /** De qué plantilla salió, si salió de una. */
+  templateKey?: string | null;
+  /** La plantilla cambió desde que se copió esta regla. */
+  desactualizada?: boolean;
   priority: number;
+};
+
+/** Por qué las reglas no están tomando los correos del buzón. */
+export type DiagnosticoBuzon = {
+  cuentas: string[];
+  reglasActivas: string[];
+  reglasInactivas: string[];
+  correos: {
+    subject: string;
+    from: string;
+    date: string;
+    yaImportado: boolean;
+    reglas: {
+      regla: string;
+      resultado: 'calza' | 'fuera-de-busqueda' | 'descartado';
+      motivo: string | null;
+    }[];
+  }[];
+  errores: string[];
 };
 
 export type BankTemplate = {
@@ -444,8 +467,10 @@ export const api = {
   createEmailRule: (body: Record<string, unknown>) => post<{ id: string }>('/settings/email-rules', body),
   updateEmailRule: (id: string, body: Record<string, unknown>) => patch<{ ok: true }>(`/settings/email-rules/${id}`, body),
   deleteEmailRule: (id: string) => del<{ ok: true }>(`/settings/email-rules/${id}`),
+  reglaDesdePlantilla: (id: string) => post<{ ok: true }>(`/settings/email-rules/${id}/desde-plantilla`, {}),
+
   testEmailRule: (body: { sample: string; isHtml: boolean; rule: Record<string, unknown> }) =>
-    post<{ matched: boolean; movement: { amount: number; merchant: string | null; occurredOn: string; period: string | null; account: string | null } | null; text: string }>(
+    post<{ matched: boolean; movement: { amount: number; merchant: string | null; occurredOn: string; period: string | null; account: string | null } | null; motivo: string | null; text: string }>(
       '/settings/email-rules/test',
       body,
     ),
@@ -480,6 +505,7 @@ export const api = {
     post<{ ok: true; carpeta: string; mensajes: number }>('/imap/accounts', body),
   desconectarImap: (id: string) => del<{ ok: true }>(`/imap/accounts/${id}`),
   imapSync: (dryRun = false) => post<SyncResult>('/imap/sync', { dryRun }),
+  imapDiagnostico: () => get<DiagnosticoBuzon>('/imap/diagnostico'),
   imapSearch: (q: string, limit = 10) =>
     get<{ messages: MessagePreview[]; errors: string[] }>(
       `/imap/messages?q=${encodeURIComponent(q)}&limit=${limit}`,

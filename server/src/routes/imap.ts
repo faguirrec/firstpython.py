@@ -5,6 +5,7 @@ import { requireAuth, requireHousehold } from '../lib/auth.js';
 import { env } from '../lib/env.js';
 import {
   buscarMensajesImap,
+  diagnosticarBuzon,
   explicarErrorImap,
   guardarCuenta,
   probarCredencial,
@@ -102,6 +103,21 @@ imapRouter.post('/sync', requireAuth, requireHousehold, async (req, res) => {
   const dryRun = req.body?.dryRun === true;
   try {
     res.json(await sincronizarImap(req.household!.id, 100, dryRun));
+  } catch (err) {
+    res.status(500).json({ error: explicarErrorImap(err) });
+  }
+});
+
+/**
+ * Por qué no está entrando nada.
+ *
+ * No filtra por la búsqueda de ninguna regla a propósito: cuando no entra nada,
+ * la búsqueda es una de las causas posibles, y filtrar por ella escondería
+ * justo los correos que hay que mirar.
+ */
+imapRouter.get('/diagnostico', requireAuth, requireHousehold, async (req, res) => {
+  try {
+    res.json(await diagnosticarBuzon(req.household!.id, 15));
   } catch (err) {
     res.status(500).json({ error: explicarErrorImap(err) });
   }

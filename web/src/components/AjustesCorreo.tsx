@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import AjustesCorreoImap from './AjustesCorreoImap';
+import DiagnosticoBuzon from './DiagnosticoBuzon';
 import AjustesGmail from './AjustesGmail';
 
 /**
@@ -29,6 +30,8 @@ export default function AjustesCorreo() {
   return (
     <>
       <AjustesCorreoImap />
+
+      <DiagnosticoBuzon />
 
       <details className="card plegable" open={abierta}>
         <summary>

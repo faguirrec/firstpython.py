@@ -51,9 +51,14 @@ export default function AjustesReglas() {
    * único síntoma es que el mes cuadra de más.
    */
   const aportesRepetidos = rules
-    .filter((r) => r.enabled && r.type === 'aporte' && r.userId)
+    .filter((r) => r.enabled && r.type === 'aporte')
     .reduce<Record<string, string[]>>((acc, r) => {
-      acc[r.userId!] = [...(acc[r.userId!] ?? []), r.name];
+      // Las que no tienen dueño se agrupan juntas, y es el caso que más
+      // importa: las reglas vienen sembradas sin dueño, así que dos activadas
+      // de un tirón caen las dos acá. Filtrarlas por tener dueño dejaba el
+      // aviso apagado justo cuando hacía falta.
+      const clave = r.userId ?? '(sin dueño)';
+      acc[clave] = [...(acc[clave] ?? []), r.name];
       return acc;
     }, {});
   const conflictos = Object.values(aportesRepetidos).filter((nombres) => nombres.length > 1);
@@ -112,6 +117,11 @@ export default function AjustesReglas() {
                 <div className="meta">
                   {rule.type === 'aporte' ? 'crea aportes' : 'crea gastos'} · {rule.scope === 'comun' ? 'comunes' : 'personales'}
                 </div>
+                {rule.desactualizada && (
+                  <div className="meta" style={{ color: 'var(--warning)' }}>
+                    La plantilla de este banco cambió desde que se creó esta regla.
+                  </div>
+                )}
               </div>
               <div className="actions">
                 <span className={`pill ${rule.enabled ? 'good' : ''}`}>{rule.enabled ? '● activa' : '○ inactiva'}</span>
@@ -120,6 +130,29 @@ export default function AjustesReglas() {
                     {rule.enabled ? 'Desactivar' : 'Activar'}
                   </button>
                   <button className="small ghost" onClick={() => setEditing(rule)}>Editar</button>
+                  {rule.desactualizada && (
+                    <button
+                      className="small"
+                      onClick={async () => {
+                        if (
+                          !confirm(
+                            `Traer a "${rule.name}" los patrones y filtros de la plantilla actual.\n\n` +
+                              'Se mantienen si está activa, de quién es y qué tarjetas mira.',
+                          )
+                        ) {
+                          return;
+                        }
+                        try {
+                          await api.reglaDesdePlantilla(rule.id);
+                          await load();
+                        } catch (err) {
+                          setError((err as Error).message);
+                        }
+                      }}
+                    >
+                      Actualizar
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -390,7 +423,11 @@ function EditorRegla({
               </div>
             ) : (
               <div className="error">
-                No calzó. Lo más común es que falle la regex del monto: revisa que el grupo 1 sea el número.
+                <strong>No calzó.</strong>
+                {/* El motivo concreto en vez del consejo genérico: "no calzó"
+                    tiene cinco causas posibles y adivinar cuál fue era el
+                    trabajo que quedaba de este lado. */}
+                <div>{test.motivo ?? 'Revisa que el grupo 1 de la regex del monto sea el número.'}</div>
               </div>
             )}
           </div>

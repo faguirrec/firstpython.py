@@ -62,6 +62,12 @@ siempre es el de la fecha: una transferencia con el comentario "Mensualidad
 septiembre" hecha el 25 de agosto cuenta en septiembre. Con la conexión abierta al buzón, entran **apenas llegan**. La app
 sólo lee, y sólo toca los correos que calzan con las reglas que definas.
 
+**Diagnóstico del buzón.** Cuando no entra nada, la app dice por qué: revisa los
+últimos correos sin filtrar por ninguna regla y, correo por correo, muestra cuál
+lo tomaría o qué condición lo descartó —*«el correo no dice "compra", y la regla
+lo exige»*—. Y si la plantilla de un banco cambió desde que se copió la regla,
+lo avisa y ofrece traer los cambios sin perder lo que uno decidió.
+
 **Categorías y trazabilidad.** Cada movimiento entra categorizado según reglas
 por comercio ("jumbo|lider|unimarc" → Supermercado), y los reportes muestran la
 evolución mes a mes y el desglose por categoría.

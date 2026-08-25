@@ -3,6 +3,7 @@ import { api } from '../lib/api';
 import { useSession } from '../lib/session';
 import { money, monthLabel } from '../lib/format';
 import { cambiarMes, useMes } from '../lib/mes';
+import { useVersionDatos } from '../lib/datos';
 import { CategoryBars, TrendChart, type CategorySlice, type TrendPoint } from '../components/Charts';
 import Cabecera from '../components/Cabecera';
 import Presupuesto from '../components/Presupuesto';
@@ -49,6 +50,7 @@ function Tendencia() {
   const currency = household?.currency ?? 'CLP';
   const privado = usePrivacidad();
   const [range, setRange] = useState(12);
+  const version = useVersionDatos();
   const [months, setMonths] = useState<(TrendPoint & { income: number; personal: number })[]>([]);
   const [categories, setCategories] = useState<CategorySlice[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -63,7 +65,7 @@ function Tendencia() {
         setError((err as Error).message);
       }
     })();
-  }, [range]);
+  }, [range, version]);
 
   const totalShared = months.reduce((a, b) => a + b.shared, 0);
   const average = months.length ? totalShared / months.length : 0;

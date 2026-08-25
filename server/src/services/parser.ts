@@ -123,14 +123,24 @@ export function parseDate(raw: string, fallback: Date): string {
  * seguido de lo que se atrasa.
  */
 export function parsePeriod(raw: string, referencia: string): string | null {
-  const iso = raw.match(/(\d{4})[-/](\d{1,2})(?!\d)/);
-  if (iso) {
+  /*
+   * Un año tiene que parecer un año.
+   *
+   * Sin `(?<!\d)` y sin el rango, un RUT chileno calzaba: de "19831102-2" salía
+   * "1102-02", que se guardaba tal cual como período y dejaba el movimiento en
+   * un mes al que la app nunca llega. Los correos del banco traen el RUT justo
+   * al lado del comentario, así que no es un caso rebuscado.
+   */
+  const anioPlausible = (anio: string) => Number(anio) >= 2000 && Number(anio) <= 2100;
+
+  const iso = raw.match(/(?<!\d)(\d{4})[-/](\d{1,2})(?!\d)/);
+  if (iso && anioPlausible(iso[1])) {
     const mes = Number(iso[2]);
     if (mes >= 1 && mes <= 12) return `${iso[1]}-${String(mes).padStart(2, '0')}`;
   }
 
-  const my = raw.match(/(?<!\d)(\d{1,2})[-/](\d{4})/);
-  if (my) {
+  const my = raw.match(/(?<!\d)(\d{1,2})[-/](\d{4})(?!\d)/);
+  if (my && anioPlausible(my[2])) {
     const mes = Number(my[1]);
     if (mes >= 1 && mes <= 12) return `${my[2]}-${String(mes).padStart(2, '0')}`;
   }
@@ -140,7 +150,7 @@ export function parsePeriod(raw: string, referencia: string): string | null {
   // rendirse por un espacio de más.
   let mes: string | null = null;
   let anioEscrito: string | null = null;
-  for (const palabra of raw.matchAll(/([a-záéíóúñ]{3,})\.?\s*(?:de\s*)?(\d{4})?/gi)) {
+  for (const palabra of raw.matchAll(/([a-záéíóúñ]{3,})\.?\s*(?:del?\s*)?(\d{4})?/gi)) {
     const encontrado = MONTHS[palabra[1].slice(0, 3).toLowerCase()];
     if (!encontrado) continue;
     mes = encontrado;
@@ -180,7 +190,20 @@ function firstGroup(text: string, pattern: string | null): string | null {
   }
 }
 
-export function applyRule(email: ParsedEmail, rule: EmailRule): ParsedMovement | null {
+/**
+ * El resultado de pasar una regla por un correo, con el motivo cuando no calza.
+ *
+ * Que `applyRule` devolviera `null` a secas era cómodo para el código y pésimo
+ * para quien configura: la pantalla decía "no calzó" y había cinco razones
+ * posibles —el filtro de tarjeta, los dos filtros de texto, la regex del monto—
+ * sin forma de distinguirlas. Con el motivo, arreglar una regla deja de ser
+ * adivinar.
+ */
+export type Evaluacion =
+  | { calza: true; movimiento: ParsedMovement }
+  | { calza: false; motivo: string };
+
+export function evaluarRegla(email: ParsedEmail, rule: EmailRule): Evaluacion {
   const haystack = `${email.subject}\n${email.body}`;
 
   if (rule.card_filter) {
@@ -188,16 +211,25 @@ export function applyRule(email: ParsedEmail, rule: EmailRule): ParsedMovement |
       .split(/[,\s]+/)
       .map((d) => d.trim())
       .filter(Boolean);
-    if (digits.length > 0 && !digits.some((d) => haystack.includes(d))) return null;
+    if (digits.length > 0 && !digits.some((d) => haystack.includes(d))) {
+      return { calza: false, motivo: `El correo no menciona ninguna de las tarjetas ${digits.join(', ')}.` };
+    }
   }
+
+  const enMinuscula = haystack.toLowerCase();
 
   if (rule.must_contain) {
     const exigidos = rule.must_contain
       .split(/[;\n]+/)
       .map((t) => t.trim().toLowerCase())
       .filter(Boolean);
-    const enMinuscula = haystack.toLowerCase();
-    if (!exigidos.every((t) => enMinuscula.includes(t))) return null;
+    const faltantes = exigidos.filter((t) => !enMinuscula.includes(t));
+    if (faltantes.length > 0) {
+      return {
+        calza: false,
+        motivo: `El correo no dice ${faltantes.map((t) => `«${t}»`).join(' ni ')}, y la regla lo exige.`,
+      };
+    }
   }
 
   if (rule.must_not_contain) {
@@ -205,14 +237,20 @@ export function applyRule(email: ParsedEmail, rule: EmailRule): ParsedMovement |
       .split(/[;\n]+/)
       .map((t) => t.trim().toLowerCase())
       .filter(Boolean);
-    const enMinuscula = haystack.toLowerCase();
-    if (prohibidos.some((t) => enMinuscula.includes(t))) return null;
+    const encontrado = prohibidos.find((t) => enMinuscula.includes(t));
+    if (encontrado) {
+      return { calza: false, motivo: `El correo dice «${encontrado}», y la regla descarta los que lo digan.` };
+    }
   }
 
   const amountRaw = firstGroup(haystack, rule.amount_regex);
-  if (!amountRaw) return null;
+  if (!amountRaw) {
+    return { calza: false, motivo: 'La expresión del monto no encontró nada en el texto del correo.' };
+  }
   const amount = parseAmount(amountRaw);
-  if (amount == null) return null;
+  if (amount == null) {
+    return { calza: false, motivo: `La expresión del monto capturó «${amountRaw}», que no es una cantidad.` };
+  }
 
   const dateRaw = firstGroup(haystack, rule.date_regex);
   const fallback = new Date(email.internalDate || Date.now());
@@ -226,13 +264,22 @@ export function applyRule(email: ParsedEmail, rule: EmailRule): ParsedMovement |
   const periodRaw = firstGroup(haystack, rule.period_regex);
 
   return {
-    amount,
-    merchant,
-    occurredOn,
-    period: periodRaw ? parsePeriod(periodRaw, occurredOn.slice(0, 7)) : null,
-    account: firstGroup(haystack, rule.account_regex) ?? rule.account_label,
-    installments: installments ? Number(installments[1]) : null,
+    calza: true,
+    movimiento: {
+      amount,
+      merchant,
+      occurredOn,
+      period: periodRaw ? parsePeriod(periodRaw, occurredOn.slice(0, 7)) : null,
+      account: firstGroup(haystack, rule.account_regex) ?? rule.account_label,
+      installments: installments ? Number(installments[1]) : null,
+    },
   };
+}
+
+/** El movimiento a secas, para el código al que el motivo no le sirve de nada. */
+export function applyRule(email: ParsedEmail, rule: EmailRule): ParsedMovement | null {
+  const resultado = evaluarRegla(email, rule);
+  return resultado.calza ? resultado.movimiento : null;
 }
 
 /**

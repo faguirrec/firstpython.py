@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, type CategoryChange, type Comparison } from '../lib/api';
+import { useVersionDatos } from '../lib/datos';
 import { useModo } from '../lib/modo';
 import { useSession } from '../lib/session';
 import { money, monthLabel } from '../lib/format';
@@ -40,13 +41,15 @@ export default function Comparacion({ month }: { month: string }) {
   const [data, setData] = useState<Comparison | null>(null);
   const [error, setError] = useState<string | null>(null);
   const modo = useModo();
+  // Para que anotar desde el botón flotante también actualice esta pantalla.
+  const version = useVersionDatos();
 
   useEffect(() => {
     void api
       .comparison(month, 3, modo)
       .then(setData)
       .catch((err: Error) => setError(err.message));
-  }, [month, modo]);
+  }, [month, modo, version]);
 
   if (error) return <div className="error">{error}</div>;
   if (!data) return null;

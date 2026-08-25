@@ -252,6 +252,40 @@ Nada se duplica: cada movimiento queda amarrado al identificador del correo.
 
 ---
 
+# Si no entra nada: el diagnóstico
+
+**Ajustes → Correo → ¿Por qué no entra nada? → Revisar.**
+
+Toma los últimos correos del buzón —*sin* filtrar por la búsqueda de ninguna
+regla, porque esa búsqueda puede ser justamente el problema— y dice, correo por
+correo, qué hizo cada regla activa con él:
+
+- **lo toma** — ese correo entraría como movimiento.
+- **la búsqueda no lo alcanza** — el `from:` o el `newer_than:` de la regla lo
+  dejan fuera antes de mirarlo.
+- **descartado** — la regla lo mira y lo bota, y dice por qué: *«El correo no
+  dice "compra", y la regla lo exige»*.
+
+Si un correo del banco aparece con **ninguna regla lo toma**, ahí está la causa
+y el texto dice qué cambiar.
+
+## Cuando la plantilla de tu banco cambió
+
+Las plantillas son una **copia**: al crear el hogar se copian a tus reglas y ahí
+quedan. Si después se corrige la plantilla en la app —porque el banco cambió el
+formato de sus avisos, o porque cambiaron de banco—, tu regla sigue con la copia
+vieja y deja de calzar sin dar ningún error.
+
+En **Ajustes → Reglas de correo**, una regla en esa situación avisa:
+
+> La plantilla de este banco cambió desde que se creó esta regla.
+
+y aparece un botón **Actualizar** que trae los patrones y los filtros nuevos.
+Lo que decidiste tú —si está activa, de quién es el aporte, qué tarjetas mira,
+el nombre— se mantiene.
+
+---
+
 # Si algo falla
 
 **«El servidor rechazó la contraseña»**

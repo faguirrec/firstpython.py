@@ -17,7 +17,7 @@ import { useVersionDatos } from '../lib/datos';
 import { CategoryBars, SplitBar, type CategorySlice } from '../components/Charts';
 import Cabecera from '../components/Cabecera';
 import NuevoMovimiento from '../components/NuevoMovimiento';
-import { IconoAlerta, IconoBolsillo, IconoMas } from '../components/Icons';
+import { IconoAlerta, IconoBolsillo } from '../components/Icons';
 import { Avatar, FichaCategoria } from '../components/Fichas';
 import Cifra from '../components/Cifra';
 import PrimerosPasos, { pasosPendientes } from '../components/PrimerosPasos';

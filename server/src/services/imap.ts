@@ -2,7 +2,7 @@ import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
 import { db, uid } from '../lib/db.js';
 import { cifrar, descifrar } from '../lib/cripto.js';
-import { applyRule, htmlToText, type EmailRule, type ParsedEmail } from './parser.js';
+import { applyRule, evaluarRegla, htmlToText, type EmailRule, type ParsedEmail } from './parser.js';
 import { categorize } from './categorizer.js';
 import { calza, calzaEncabezado, criteriosImap, interpretarConsulta } from './consultaCorreo.js';
 import type { MessagePreview, SyncResult } from './gmail.js';
@@ -273,7 +273,6 @@ export async function sincronizarImap(
               resultado.skipped += 1;
               continue;
             }
-            enEstaPasada.add(idFuente);
 
             const email: ParsedEmail = {
               from: correo.from,
@@ -289,6 +288,9 @@ export async function sincronizarImap(
             }
 
             if (dryRun) {
+              // La simulación también lo marca, para que una segunda copia del
+              // mismo correo se muestre como repetida y no como dos gastos.
+              enEstaPasada.add(idFuente);
               resultado.preview.push({
                 rule: regla.name,
                 amount: movimiento.amount,
@@ -306,6 +308,18 @@ export async function sincronizarImap(
               }
               continue;
             }
+
+            /*
+             * Recién acá se marca como visto.
+             *
+             * Antes se marcaba apenas se bajaba, y eso hacía perder correos en
+             * silencio: si la primera regla lo descartaba por un filtro de
+             * texto, quedaba marcado igual y las reglas siguientes lo saltaban
+             * como si fuera repetido. Con dos reglas sobre la misma búsqueda
+             * —una para lo que entra y otra para lo que sale, que es el caso
+             * normal de un banco— la segunda no veía nunca su correo.
+             */
+            enEstaPasada.add(idFuente);
 
             insertar.run({
               id: uid(),
@@ -396,6 +410,110 @@ export async function buscarMensajesImap(
   }
 
   return { messages: messages.slice(0, limite), errors };
+}
+
+/**
+ * Por qué no está entrando nada.
+ *
+ * Es la pregunta que la app no sabía contestar. La sincronización decía
+ * "0 movimientos" y ahí se acababa la conversación: podía ser que el buzón no
+ * conectara, que la búsqueda de la regla no alcanzara ningún correo, que un
+ * filtro de texto los descartara, o que la regex del monto no encontrara el
+ * número. Cuatro causas distintas con el mismo síntoma.
+ *
+ * Esto toma los últimos correos del buzón **sin filtrar por la búsqueda de
+ * ninguna regla** —justamente porque la búsqueda puede ser el problema— y
+ * cuenta, correo por correo, qué hizo cada regla activa con él.
+ */
+export type DiagnosticoCorreo = {
+  subject: string;
+  from: string;
+  date: string;
+  yaImportado: boolean;
+  reglas: {
+    regla: string;
+    /**
+     * `calza` lo importaría · `fuera-de-busqueda` la búsqueda de la regla ni
+     * siquiera lo alcanza · `descartado` lo alcanza pero una condición lo bota.
+     */
+    resultado: 'calza' | 'fuera-de-busqueda' | 'descartado';
+    motivo: string | null;
+  }[];
+};
+
+export type DiagnosticoBuzon = {
+  cuentas: string[];
+  reglasActivas: string[];
+  reglasInactivas: string[];
+  correos: DiagnosticoCorreo[];
+  errores: string[];
+};
+
+export async function diagnosticarBuzon(householdId: string, limite = 15): Promise<DiagnosticoBuzon> {
+  const todas = db
+    .prepare('SELECT * FROM email_rules WHERE household_id = ? ORDER BY priority')
+    .all(householdId) as (EmailRule & { gmail_query: string; enabled: number })[];
+  const activas = todas.filter((r) => r.enabled);
+
+  const resultado: DiagnosticoBuzon = {
+    cuentas: [],
+    reglasActivas: activas.map((r) => r.name),
+    reglasInactivas: todas.filter((r) => !r.enabled).map((r) => r.name),
+    correos: [],
+    errores: [],
+  };
+
+  const lista = cuentas(householdId);
+  if (lista.length === 0) resultado.errores.push('No hay ninguna cuenta de correo conectada.');
+
+  const visto = db.prepare('SELECT 1 FROM transactions WHERE household_id = ? AND source_msg_id = ?');
+  // Una consulta vacía trae los últimos 30 días sin filtrar por remitente: el
+  // punto es ver también los correos que las reglas no están alcanzando.
+  const sinFiltro = interpretarConsulta('');
+
+  for (const cuenta of lista) {
+    let cliente: ImapFlow | null = null;
+    try {
+      cliente = await conectar(cuenta, secretoDe(cuenta.id));
+      resultado.cuentas.push(cuenta.email);
+      const correos = await bajarCorreos(cliente, cuenta, sinFiltro, limite);
+
+      for (const correo of correos) {
+        const email: ParsedEmail = {
+          from: correo.from,
+          subject: correo.subject,
+          body: correo.body,
+          internalDate: correo.fecha.getTime(),
+        };
+
+        resultado.correos.push({
+          subject: correo.subject.slice(0, 140),
+          from: correo.from.slice(0, 120),
+          date: correo.fecha.toISOString(),
+          yaImportado: Boolean(visto.get(householdId, PREFIJO + correo.messageId)),
+          reglas: activas.map((regla) => {
+            if (!calza(interpretarConsulta(regla.gmail_query), correo)) {
+              return {
+                regla: regla.name,
+                resultado: 'fuera-de-busqueda' as const,
+                motivo: `La búsqueda «${regla.gmail_query}» no alcanza este correo.`,
+              };
+            }
+            const evaluacion = evaluarRegla(email, regla);
+            return evaluacion.calza
+              ? { regla: regla.name, resultado: 'calza' as const, motivo: null }
+              : { regla: regla.name, resultado: 'descartado' as const, motivo: evaluacion.motivo };
+          }),
+        });
+      }
+    } catch (err) {
+      resultado.errores.push(`${cuenta.email}: ${explicarErrorImap(err)}`);
+    } finally {
+      await cliente?.logout().catch(() => undefined);
+    }
+  }
+
+  return resultado;
 }
 
 /** Texto de un correo puntual, para cargarlo en el probador de reglas. */

@@ -62,8 +62,15 @@ const mensajes = [
     }),
   },
   {
-    // Comprobante de Banco de Chile por plata que ENTRA a la cuenta del hogar.
-    // Mercado Pago no avisa los abonos, así que éste es el único rastro.
+    /*
+     * Comprobante de Banco de Chile por plata que ENTRA a la cuenta del hogar.
+     * El aviso lo manda el banco de quien deposita, no el de la cuenta que
+     * recibe, así que éste es el único rastro del aporte.
+     *
+     * Va con el comentario del campo "Asunto" y con el RUT justo debajo: los
+     * dos importan. El primero dice a qué mes pertenece la plata; el segundo
+     * está ahí para comprobar que no se lea como año.
+     */
     raw: correo({
       id: 'chile-abono@bancochile.cl',
       de: 'Banco de Chile <enviodigital@bancochile.cl>',
@@ -74,13 +81,49 @@ const mensajes = [
         'transferencia de fondos a tu cuenta con el siguiente detalle:',
         'Fecha',
         '18/08/2026',
+        'Asunto',
+        'Mensualidad septiembre',
+        'Nombre y Apellido',
+        'Persona De Prueba',
+        'Rut',
+        '11111111-1',
         'Banco',
-        'Mercado Pago',
+        'Banco Falabella',
         'Cuenta destino',
-        'Cuenta Vista',
+        'Cuenta Corriente',
         '00-105-05465-00',
         'Monto',
         '$14.000',
+      ].join('\n'),
+    }),
+  },
+
+  {
+    /*
+     * La copia del MISMO movimiento que le llega a quien lo envía.
+     *
+     * Está acá para vigilar dos cosas a la vez: que la regla de "recibida" la
+     * descarte —si no, el aporte entraría dos veces— y que descartarla no haga
+     * perder el correo para las demás reglas, que es un modo de fallar que ya
+     * ocurrió.
+     */
+    raw: correo({
+      id: 'chile-enviada@bancochile.cl',
+      de: 'Banco de Chile <enviodigital@bancochile.cl>',
+      asunto: 'Comprobante de Transferencia a terceros',
+      fecha: haceDias(1),
+      cuerpo: [
+        'Te informamos que has realizado una Transferencia a terceros en forma exitosa',
+        'con el siguiente detalle:',
+        'Destino',
+        'Nombre y Apellido',
+        'Otra Persona',
+        'N\u00ba de Cuenta',
+        '00-222-22222-22',
+        'Banco',
+        'Banco Estado',
+        'Monto',
+        '$25.000',
       ].join('\n'),
     }),
   },

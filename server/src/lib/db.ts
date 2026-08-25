@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import { DEFAULT_CATEGORIES } from '../services/bankTemplates.js';
+import { BANK_TEMPLATES, DEFAULT_CATEGORIES } from '../services/bankTemplates.js';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -239,6 +239,33 @@ addColumn('email_rules', 'must_not_contain', 'TEXT');
  * septiembre. Si la regla no lo define, el mes sigue saliendo de la fecha.
  */
 addColumn('email_rules', 'period_regex', 'TEXT');
+
+/*
+ * De qué plantilla salió la regla.
+ *
+ * Las plantillas son una copia, no un vínculo: al crear el hogar se copian a
+ * esta tabla y ahí quedan congeladas. Cuando un banco cambia el formato de sus
+ * avisos y la plantilla se corrige en el código, los hogares que ya existían
+ * siguen con la copia vieja y no hay forma de enterarse: la regla simplemente
+ * deja de calzar, sin error. Guardar de dónde vino permite ofrecer traer los
+ * cambios.
+ */
+addColumn('email_rules', 'template_key', 'TEXT');
+
+/*
+ * Relleno para los hogares que ya existían, por el nombre de la plantilla.
+ *
+ * El nombre es lo único que las ata, y alcanza: son distintivos ("Banco de
+ * Chile — transferencia recibida (aporte)") y nadie los escribe a mano por
+ * casualidad. Si alguien renombró su regla, se queda sin el vínculo y no pasa
+ * nada más: sigue funcionando como está.
+ */
+{
+  const porNombre = db.prepare(
+    'UPDATE email_rules SET template_key = ? WHERE template_key IS NULL AND name = ?',
+  );
+  for (const t of BANK_TEMPLATES) porNombre.run(t.key, t.name);
+}
 
 /*
  * A qué mes cuenta un movimiento, que no siempre es el de su fecha.

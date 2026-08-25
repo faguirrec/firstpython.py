@@ -698,6 +698,28 @@ details.plegable > summary .resumen-dato {
 
 .pasos li.listo .title { color: var(--text-muted); text-decoration: line-through; }
 
+/* --------------------------- Diagnóstico del buzón ------------------------ */
+
+.motivos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 7px;
+  font-size: var(--t-menor);
+}
+
+/* Una barra de color al costado dice de un vistazo cuál regla iba bien: leer
+   diez motivos seguidos sin jerarquía no ayuda a nadie. */
+.motivos li {
+  padding-left: 10px;
+  border-left: 3px solid var(--grid);
+  color: var(--text-secondary);
+}
+
+.motivos li.calza { border-left-color: var(--good); color: var(--text-primary); }
+.motivos li.descartado { border-left-color: var(--warning); }
+
 /* ------------------------------- Filtros --------------------------------- */
 
 .filtros { display: grid; gap: 10px; padding: 12px; }
