@@ -48,6 +48,17 @@ siguiente reciba un peso. Repartir la misma bolsa entre todas a la vez daría a
 entender que hay más plata de la que hay. Con fecha, calcula cuánto apartar cada
 mes.
 
+**Gastos fijos, reconocidos solos.** El arriendo, la luz, el agua, el internet
+y las suscripciones ya están en los movimientos: son los mismos comercios
+cobrando todos los meses. La app los busca y los deja listos para aceptar de un
+toque, en vez de hacer que se escriban a mano. La señal que usa no es sólo que
+se repitan —el supermercado también se repite— sino que lleguen **siempre por la
+misma fecha**, que es lo que tiene una cuenta y no tiene un gasto corriente.
+
+> Se proponen, no se crean solos. Un gasto fijo dice "esto se espera pagar", y
+> una expectativa inventada por la app llenaría el mes de deudas que nadie
+> contrajo. Lo que se ahorra es el tecleo, no la decisión.
+
 **Comparación entre meses.** En qué categorías subió y bajó el gasto respecto
 del mes anterior y del promedio, ordenado por impacto.
 

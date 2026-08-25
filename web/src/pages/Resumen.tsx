@@ -242,7 +242,7 @@ export default function Resumen() {
         <div className="card">
           <div className="card-head">
             <h2>Falta por pagar</h2>
-            <Link to="/ajustes/fijos" className="muted">Gastos fijos →</Link>
+            <Link to="/reportes?vista=fijos" className="muted">Gastos fijos →</Link>
           </div>
           <div className="list">
             {fijos.pendientes.map((g) => (

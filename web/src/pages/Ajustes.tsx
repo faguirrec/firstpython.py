@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { api, type CambiosHogar, type Household, type Member } from '../lib/api';
 import { useSession } from '../lib/session';
 import Categorias from '../components/AjustesCategorias';
-import GastosFijos from '../components/GastosFijos';
 import CorreoPanel from '../components/AjustesCorreo';
 import ReglasCorreo from '../components/AjustesReglas';
 import Invitacion from '../components/Invitacion';
@@ -12,7 +11,6 @@ import Cabecera from '../components/Cabecera';
 const TABS = [
   { key: 'hogar', label: 'Hogar' },
   { key: 'categorias', label: 'Categorías' },
-  { key: 'fijos', label: 'Gastos fijos' },
   { key: 'gmail', label: 'Correo' },
   { key: 'reglas', label: 'Reglas de correo' },
 ] as const;
@@ -23,12 +21,17 @@ export default function Ajustes() {
   const location = useLocation();
   const navigate = useNavigate();
   const fromUrl = location.pathname.split('/')[2] as TabKey | undefined;
+  // Los gastos fijos se mudaron a Análisis. La dirección vieja sigue viva
+  // porque anda dando vueltas en enlaces y en la pantalla de inicio.
+  const seMudo = fromUrl === ('fijos' as TabKey);
   const [tab, setTab] = useState<TabKey>(TABS.some((t) => t.key === fromUrl) ? fromUrl! : 'hogar');
 
   function select(key: TabKey) {
     setTab(key);
     navigate(key === 'hogar' ? '/ajustes' : `/ajustes/${key}`, { replace: true });
   }
+
+  if (seMudo) return <Navigate to="/reportes?vista=fijos" replace />;
 
   return (
     <>
@@ -44,7 +47,6 @@ export default function Ajustes() {
 
       {tab === 'hogar' && <PanelHogar />}
       {tab === 'categorias' && <Categorias />}
-      {tab === 'fijos' && <GastosFijos />}
       {tab === 'gmail' && <CorreoPanel />}
       {tab === 'reglas' && <ReglasCorreo />}
     </>

@@ -632,6 +632,12 @@ details.plegable > summary .resumen-dato {
   from { transform: scaleX(0); }
 }
 
+/* ------------------------- Fijos que la app reconoce ---------------------- */
+
+/* Acá el nombre del comercio es lo que se está decidiendo, así que se deja
+   correr a dos líneas en vez de cortarlo con puntos suspensivos. */
+.fijo-sugerido .title { white-space: normal; }
+
 /* --------------------------- Primeros pasos ------------------------------ */
 
 /* Se despega del resto con el color de marca: es lo primero que hay que hacer,

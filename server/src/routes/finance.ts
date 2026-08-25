@@ -18,6 +18,7 @@ import {
   actualizarGastoFijo,
   borrarGastoFijo,
   crearGastoFijo,
+  detectarFijos,
   estadoDelMes,
   gastoEsperadoDelMes,
   listarGastosFijos,
@@ -300,6 +301,47 @@ financeRouter.post('/fixed', (req, res) => {
     return;
   }
   res.status(201).json({ id: crearGastoFijo(req.household!.id, parsed.data) });
+});
+
+/**
+ * Los gastos fijos que se reconocen en los movimientos que ya hay.
+ *
+ * Se proponen, no se crean solos: un gasto fijo dice "esto se espera pagar", y
+ * una expectativa que la app inventa llenaría el mes de deudas que nadie
+ * contrajo. Lo que se ahorra es escribirlos.
+ */
+financeRouter.get('/fixed/sugerencias', (req, res) => {
+  res.json({ sugerencias: detectarFijos(req.household!.id) });
+});
+
+/** Aceptar de una vez las que la persona eligió. */
+financeRouter.post('/fixed/sugerencias', (req, res) => {
+  const parsed = z
+    .object({ nombres: z.array(z.string().min(1).max(120)).min(1).max(40) })
+    .safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0].message });
+    return;
+  }
+
+  // Se vuelven a detectar en vez de confiar en lo que llegó del navegador: así
+  // el monto y la categoría salen de los movimientos y no de lo que alguien
+  // haya mandado en el cuerpo.
+  const disponibles = detectarFijos(req.household!.id);
+  const elegidas = disponibles.filter((s) => parsed.data.nombres.includes(s.name));
+
+  const creados = elegidas.map((s) =>
+    crearGastoFijo(req.household!.id, {
+      name: s.name,
+      amount: s.amount,
+      categoryId: s.categoryId,
+      dueDay: s.dueDay,
+      // El comercio es lo que después reconoce el pago del mes.
+      matchText: s.name,
+    }),
+  );
+
+  res.status(201).json({ creados: creados.length });
 });
 
 financeRouter.patch('/fixed/:id', (req, res) => {

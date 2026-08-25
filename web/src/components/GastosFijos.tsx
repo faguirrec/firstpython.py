@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { api, type Category, type EstadoFijos, type GastoFijo } from '../lib/api';
 import { useSession } from '../lib/session';
-import { currentMonth, dayLabel, money } from '../lib/format';
+import { dayLabel, money } from '../lib/format';
 import { FichaCategoria } from './Fichas';
+import FijosDetectados from './FijosDetectados';
 import Sheet from './Sheet';
 
 /**
@@ -13,7 +14,7 @@ import Sheet from './Sheet';
  * permite responder la pregunta de mitad de mes —qué falta por pagar— sin que
  * nadie tenga que acordarse.
  */
-export default function GastosFijos() {
+export default function GastosFijos({ month }: { month: string }) {
   const currency = useSession().household?.currency ?? 'CLP';
   const [estado, setEstado] = useState<EstadoFijos | null>(null);
   const [categorias, setCategorias] = useState<Category[]>([]);
@@ -22,13 +23,13 @@ export default function GastosFijos() {
 
   const cargar = useCallback(async () => {
     try {
-      const [e, c] = await Promise.all([api.gastosFijos(currentMonth()), api.categories()]);
+      const [e, c] = await Promise.all([api.gastosFijos(month), api.categories()]);
       setEstado(e);
       setCategorias(c.categories.filter((x) => !x.archived));
     } catch (err) {
       setError((err as Error).message);
     }
-  }, []);
+  }, [month]);
 
   useEffect(() => {
     void cargar();
@@ -45,6 +46,10 @@ export default function GastosFijos() {
   return (
     <>
       {error && <div className="error">{error}</div>}
+
+      {/* Antes de la lista: si la app ya sabe cuáles son, pedir que se
+          escriban a mano es hacer trabajo que ya está hecho. */}
+      <FijosDetectados onCreados={() => void cargar()} />
 
       <div className="card">
         <div className="card-head">

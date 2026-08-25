@@ -271,6 +271,20 @@ export type EstadoFijos = {
   all: GastoFijo[];
 };
 
+/** Un gasto fijo que la app reconoce en los movimientos que ya existen. */
+export type FijoDetectado = {
+  name: string;
+  amount: number | null;
+  categoryId: string | null;
+  categoryName: string | null;
+  categoryEmoji: string | null;
+  categoryColor: string | null;
+  dueDay: number | null;
+  meses: number;
+  mesesConDatos: number;
+  ultimo: number;
+};
+
 export type ResumenPersonal = {
   month: string;
   currency: string;
@@ -437,6 +451,9 @@ export const api = {
     put<{ ok: true }>('/finance/target', body),
 
   gastosFijos: (month: string) => get<EstadoFijos>(`/finance/fixed?month=${month}`),
+  fijosSugeridos: () => get<{ sugerencias: FijoDetectado[] }>('/finance/fixed/sugerencias'),
+  aceptarFijosSugeridos: (nombres: string[]) =>
+    post<{ creados: number }>('/finance/fixed/sugerencias', { nombres }),
   crearGastoFijo: (body: {
     name: string; amount?: number | null; categoryId?: string | null;
     dueDay?: number | null; matchText?: string | null;

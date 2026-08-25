@@ -51,7 +51,7 @@ export function pasosPendientes(
       clave: 'fijos',
       titulo: 'Anoten los gastos fijos',
       detalle: 'Arriendo, cuentas, internet. Con eso la app estima el mes antes de que empiece.',
-      a: '/ajustes/fijos',
+      a: '/reportes?vista=fijos',
       accion: 'Anotar los fijos',
       listo: (fijos?.all.length ?? 0) > 0,
     },

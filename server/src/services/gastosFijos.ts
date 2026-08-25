@@ -288,3 +288,216 @@ export function gastoEsperadoDelMes(householdId: string, month: string): { total
     fijos: estado.totalExpected,
   };
 }
+
+/* -------------------- Detectar los fijos en el historial ------------------ */
+
+/**
+ * Un gasto fijo que la app cree reconocer en los movimientos que ya existen.
+ *
+ * Se propone, no se crea. Un gasto fijo es una **expectativa declarada**: dice
+ * "esto se espera pagar". Si la app inventara expectativas sola, el mes
+ * mostraría deudas que nadie contrajo y la proyección se llenaría de ruido que
+ * nadie pidió. Lo que sí puede hacer —y es lo que ahorra el trabajo— es mirar
+ * lo que ya pasó y dejar la lista lista para aceptar de un toque.
+ */
+export type FijoDetectado = {
+  /** El comercio tal como aparece en los movimientos; sirve de nombre y de calce. */
+  name: string;
+  /** Null cuando el monto varía demasiado como para dar una cifra. */
+  amount: number | null;
+  categoryId: string | null;
+  categoryName: string | null;
+  categoryEmoji: string | null;
+  categoryColor: string | null;
+  dueDay: number | null;
+  /** En cuántos de los meses mirados apareció. */
+  meses: number;
+  /** De cuántos meses con movimientos se está hablando. */
+  mesesConDatos: number;
+  /** Lo último que se pagó, para que la cifra no sea un número mudo. */
+  ultimo: number;
+};
+
+/** "JUMBO KENNEDY  " y "Jumbo Kennedy" son el mismo comercio. */
+function normalizar(texto: string): string {
+  return texto.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function mediana(valores: number[]): number {
+  const orden = [...valores].sort((a, b) => a - b);
+  const medio = Math.floor(orden.length / 2);
+  return orden.length % 2 ? orden[medio] : (orden[medio - 1] + orden[medio]) / 2;
+}
+
+/**
+ * ¿Cae siempre alrededor del mismo día del mes?
+ *
+ * Se mira la dispersión respecto de la mediana. El mes se trata como un círculo
+ * —el 31 y el 1 están a dos días, no a treinta—, porque una cuenta que vence a
+ * fin de mes se paga indistintamente el 30 o el 2 y no por eso deja de ser fija.
+ */
+export function fechaRegular(dias: number[], tolerancia = 4): boolean {
+  if (dias.length < 2) return true;
+
+  const dispersion = (valores: number[]) => {
+    const centro = mediana(valores);
+    return Math.max(...valores.map((d) => Math.abs(d - centro)));
+  };
+
+  // La segunda lectura corre los primeros días al final del mes, para que un
+  // grupo repartido entre el 29 y el 2 se vea junto y no de punta a punta.
+  const corridos = dias.map((d) => (d <= 7 ? d + 31 : d));
+  return Math.min(dispersion(dias), dispersion(corridos)) <= tolerancia;
+}
+
+/**
+ * Gastos fijos que se pueden reconocer en los movimientos de los últimos meses.
+ *
+ * El comercio es la clave, no la categoría: "Supermercado" pasa todos los meses
+ * y no es un gasto fijo, mientras que "Aguas Andinas" sí lo es. Un candidato es
+ * un comercio que aparece **en varios meses distintos y a lo más una vez por
+ * mes**; esa segunda condición es la que deja fuera al supermercado y a la
+ * bencina, que se repiten dentro del mismo mes.
+ *
+ * El monto se propone sólo si es estable. Para el arriendo eso es una cifra
+ * exacta; para la cuenta de la luz, que cambia con la estación, es mejor
+ * dejarlo en blanco y que la app use el promedio: una cifra inventada se vería
+ * igual de segura que una real.
+ */
+export function detectarFijos(householdId: string, meses = 6): FijoDetectado[] {
+  const periodos = db
+    .prepare(
+      `SELECT DISTINCT period FROM transactions
+        WHERE household_id = ? AND type = 'gasto' AND scope = 'comun'
+        ORDER BY period DESC LIMIT ?`,
+    )
+    .all(householdId, meses) as { period: string }[];
+
+  // Con uno o dos meses no hay repetición que observar, y proponer a partir de
+  // eso sería adivinar en voz alta.
+  if (periodos.length < 2) return [];
+  const desde = periodos[periodos.length - 1].period;
+
+  const movimientos = db
+    .prepare(
+      `SELECT t.period, t.amount, t.occurred_on AS occurredOn, t.merchant, t.description,
+              t.category_id AS categoryId, c.name AS categoryName, c.emoji AS categoryEmoji,
+              c.color AS categoryColor
+         FROM transactions t
+         LEFT JOIN categories c ON c.id = t.category_id
+        WHERE t.household_id = ? AND t.type = 'gasto' AND t.scope = 'comun'
+          AND t.period >= ?
+        ORDER BY t.period`,
+    )
+    .all(householdId, desde) as {
+    period: string;
+    amount: number;
+    occurredOn: string;
+    merchant: string | null;
+    description: string | null;
+    categoryId: string | null;
+    categoryName: string | null;
+    categoryEmoji: string | null;
+    categoryColor: string | null;
+  }[];
+
+  // Lo que ya está declarado no se vuelve a proponer, se llame como se llame.
+  const yaDeclarados = new Set(
+    (db
+      .prepare('SELECT name, match_text AS matchText FROM fixed_expenses WHERE household_id = ?')
+      .all(householdId) as { name: string; matchText: string | null }[])
+      .flatMap((f) => [normalizar(f.name), f.matchText ? normalizar(f.matchText) : ''])
+      .filter(Boolean),
+  );
+
+  type Grupo = {
+    nombre: string;
+    porMes: Map<string, number[]>;
+    dias: number[];
+    categorias: Map<string, { id: string; name: string | null; emoji: string | null; color: string | null; veces: number }>;
+    ultimo: number;
+  };
+  const grupos = new Map<string, Grupo>();
+
+  for (const m of movimientos) {
+    const bruto = m.merchant ?? m.description;
+    // Sin comercio no hay con qué reconocerlo después: el calce del mes mira el
+    // comercio y la glosa, y un fijo que no calza con nada queda pendiente para
+    // siempre.
+    if (!bruto || bruto.trim().length < 3) continue;
+    const clave = normalizar(bruto);
+    if (yaDeclarados.has(clave)) continue;
+
+    const grupo: Grupo = grupos.get(clave) ?? {
+      nombre: bruto.trim(),
+      porMes: new Map(),
+      dias: [],
+      categorias: new Map(),
+      ultimo: 0,
+    };
+    grupo.porMes.set(m.period, [...(grupo.porMes.get(m.period) ?? []), m.amount]);
+    grupo.dias.push(Number(m.occurredOn.slice(8, 10)));
+    grupo.ultimo = m.amount;
+    if (m.categoryId) {
+      const c = grupo.categorias.get(m.categoryId) ?? {
+        id: m.categoryId, name: m.categoryName, emoji: m.categoryEmoji, color: m.categoryColor, veces: 0,
+      };
+      c.veces += 1;
+      grupo.categorias.set(m.categoryId, c);
+    }
+    grupos.set(clave, grupo);
+  }
+
+  const conDatos = periodos.length;
+  // Con pocos meses basta que se repita en todos; con historia larga, en la
+  // mayoría —una cuenta puede haberse pagado tarde y saltarse un período—.
+  const minimoMeses = conDatos <= 3 ? 2 : Math.ceil(conDatos * 0.6);
+
+  const candidatos: FijoDetectado[] = [];
+
+  for (const grupo of grupos.values()) {
+    const mesesVistos = grupo.porMes.size;
+    if (mesesVistos < minimoMeses) continue;
+
+    // Más de una vez por mes es un gasto corriente, no una cuenta que llega.
+    const vecesTotales = [...grupo.porMes.values()].reduce((a, b) => a + b.length, 0);
+    if (vecesTotales > mesesVistos * 1.4) continue;
+
+    /*
+     * Y tiene que llegar siempre por la misma fecha.
+     *
+     * Es la señal que separa una cuenta de un gasto corriente que se repite:
+     * el arriendo se paga el 4, el internet el 10, Netflix el 20, porque hay un
+     * ciclo de facturación detrás. Ir al supermercado una vez al mes también se
+     * repite, pero cae cualquier día. Sin esta condición la lista proponía la
+     * feria y la bencina junto al arriendo, y una lista así hay que revisarla
+     * entera —que es exactamente el trabajo que se quería ahorrar—.
+     */
+    if (!fechaRegular(grupo.dias)) continue;
+
+    // Un monto por mes: si en algún mes hubo dos cargos, se suman.
+    const porMes = [...grupo.porMes.values()].map((v) => v.reduce((a, b) => a + b, 0));
+    const centro = mediana(porMes);
+    const desvio = centro > 0 ? Math.max(...porMes.map((v) => Math.abs(v - centro))) / centro : 1;
+
+    const categoria = [...grupo.categorias.values()].sort((a, b) => b.veces - a.veces)[0] ?? null;
+
+    candidatos.push({
+      name: grupo.nombre,
+      // Hasta un 15% de diferencia sigue siendo "el mismo monto todos los
+      // meses"; más que eso, mejor no decir una cifra.
+      amount: desvio <= 0.15 ? round2(centro) : null,
+      categoryId: categoria?.id ?? null,
+      categoryName: categoria?.name ?? null,
+      categoryEmoji: categoria?.emoji ?? null,
+      categoryColor: categoria?.color ?? null,
+      dueDay: grupo.dias.length ? Math.round(mediana(grupo.dias)) : null,
+      meses: mesesVistos,
+      mesesConDatos: conDatos,
+      ultimo: round2(grupo.ultimo),
+    });
+  }
+
+  // Los más grandes primero: son los que mueven la proyección del mes.
+  return candidatos.sort((a, b) => (b.amount ?? b.ultimo) - (a.amount ?? a.ultimo));
+}

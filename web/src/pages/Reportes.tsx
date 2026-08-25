@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Navigate, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useSession } from '../lib/session';
 import { money, monthLabel } from '../lib/format';
@@ -8,10 +9,17 @@ import { CategoryBars, TrendChart, type CategorySlice, type TrendPoint } from '.
 import Cabecera from '../components/Cabecera';
 import Presupuesto from '../components/Presupuesto';
 import Comparacion from '../components/Comparacion';
+import GastosFijos from '../components/GastosFijos';
 import { usePrivacidad } from '../lib/privacidad';
 
 const VISTAS = [
   { key: 'presupuesto', label: 'Presupuesto' },
+  // Los gastos fijos viven acá y no en Ajustes: no son una configuración de la
+  // app, son plata que sale todos los meses, y la pregunta que contestan —qué
+  // falta por pagar— es la misma que se viene a hacer a esta pantalla. Además
+  // el presupuesto por categoría estaba pidiendo lo mismo dos veces, en dos
+  // lugares que no se conocían entre sí.
+  { key: 'fijos', label: 'Gastos fijos' },
   { key: 'comparacion', label: 'Comparación' },
   { key: 'tendencia', label: 'Tendencia' },
 ] as const;
@@ -19,7 +27,12 @@ const VISTAS = [
 type Vista = (typeof VISTAS)[number]['key'];
 
 export default function Reportes() {
-  const [vista, setVista] = useState<Vista>('presupuesto');
+  // La vista va en la dirección para que se pueda enlazar desde fuera: el
+  // Resumen manda a los gastos fijos, y /ajustes/fijos redirige acá.
+  const [params, setParams] = useSearchParams();
+  const pedida = params.get('vista') as Vista | null;
+  const vista: Vista = VISTAS.some((v) => v.key === pedida) ? pedida! : 'presupuesto';
+  const setVista = (v: Vista) => setParams(v === 'presupuesto' ? {} : { vista: v }, { replace: true });
   const month = useMes();
 
   return (
@@ -39,6 +52,7 @@ export default function Reportes() {
       </div>
 
       {vista === 'presupuesto' && <Presupuesto month={month} />}
+      {vista === 'fijos' && <GastosFijos month={month} />}
       {vista === 'comparacion' && <Comparacion month={month} />}
       {vista === 'tendencia' && <Tendencia />}
     </>
