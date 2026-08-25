@@ -40,10 +40,15 @@ services:
       # la toma como origen público si no hay WEB_ORIGIN. Declararla sería una
       # referencia del servicio a sí mismo.
       #
-      # La primera cuenta se puede crear sin código porque la base está vacía;
-      # de ahí en adelante hace falta invitación.
+      # Abierto: cualquiera puede crear su cuenta y su propio hogar desde
+      # www.myhaus.cl. En `invite` sólo entraba la primera cuenta —la base
+      # estaba vacía— y de ahí en adelante todos recibían un 403, porque un
+      # código de invitación sirve para *unirse a un hogar*, que admite dos
+      # personas, no para crear uno nuevo.
+      #
+      # Se cierra de nuevo cambiando esto a `closed` sin tocar código.
       - key: ALLOW_SIGNUP
-        value: invite
+        value: open
       - key: TRUST_PROXY
         value: "1"
       # Render la genera sola y no queda escrita en ninguna parte del repo.
