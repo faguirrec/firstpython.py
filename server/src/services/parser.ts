@@ -20,6 +20,8 @@ export type EmailRule = {
   merchant_regex: string | null;
   date_regex: string | null;
   account_regex: string | null;
+  /** De dónde sacar el mes contable, cuando el correo lo dice. Ver `parsePeriod`. */
+  period_regex: string | null;
   card_filter: string | null;
   /**
    * Textos que el correo tiene que contener, todos. Separados por punto y coma
@@ -39,6 +41,11 @@ export type ParsedMovement = {
   amount: number;
   merchant: string | null;
   occurredOn: string;
+  /**
+   * Mes al que se le carga el movimiento (YYYY-MM), cuando el correo lo dice.
+   * Null = el del día en que ocurrió.
+   */
+  period: string | null;
   account: string | null;
   installments: number | null;
 };
@@ -102,6 +109,66 @@ export function parseDate(raw: string, fallback: Date): string {
   return fallback.toISOString().slice(0, 10);
 }
 
+/**
+ * Mes contable escrito en el correo, normalizado a YYYY-MM.
+ *
+ * Quien transfiere escribe un comentario a mano —"Mensualidad septiembre",
+ * "Gastos de agosto"— y ese texto dice a qué mes pertenece la plata mucho mejor
+ * que el día en que se apretó el botón: el sueldo del 25 de agosto paga el
+ * septiembre. Acepta "2026-09", "09/2026" y el nombre del mes, con o sin año.
+ *
+ * Sin año hay que elegirlo, y el criterio es el mes más cercano a la fecha del
+ * movimiento: en enero, "diciembre" es el diciembre que acaba de pasar, no el
+ * que viene. Empatados, gana el futuro, porque una mensualidad se adelanta más
+ * seguido de lo que se atrasa.
+ */
+export function parsePeriod(raw: string, referencia: string): string | null {
+  const iso = raw.match(/(\d{4})[-/](\d{1,2})(?!\d)/);
+  if (iso) {
+    const mes = Number(iso[2]);
+    if (mes >= 1 && mes <= 12) return `${iso[1]}-${String(mes).padStart(2, '0')}`;
+  }
+
+  const my = raw.match(/(?<!\d)(\d{1,2})[-/](\d{4})/);
+  if (my) {
+    const mes = Number(my[1]);
+    if (mes >= 1 && mes <= 12) return `${my[2]}-${String(mes).padStart(2, '0')}`;
+  }
+
+  // Se busca el nombre de mes entre las palabras, no en la primera: si la regla
+  // captura "Mensualidad septiembre" de una, quedarse con "Mensualidad" sería
+  // rendirse por un espacio de más.
+  let mes: string | null = null;
+  let anioEscrito: string | null = null;
+  for (const palabra of raw.matchAll(/([a-záéíóúñ]{3,})\.?\s*(?:de\s*)?(\d{4})?/gi)) {
+    const encontrado = MONTHS[palabra[1].slice(0, 3).toLowerCase()];
+    if (!encontrado) continue;
+    mes = encontrado;
+    anioEscrito = palabra[2] ?? null;
+    break;
+  }
+  if (!mes) return null;
+  if (anioEscrito) return `${anioEscrito}-${mes}`;
+
+  const [anioRef, mesRef] = referencia.split('-').map(Number);
+  if (!anioRef || !mesRef) return null;
+  const desdeRef = anioRef * 12 + (mesRef - 1);
+  let elegido: number | null = null;
+  for (const anio of [anioRef - 1, anioRef, anioRef + 1]) {
+    const candidato = anio * 12 + (Number(mes) - 1);
+    if (elegido == null) {
+      elegido = candidato;
+      continue;
+    }
+    const distancia = Math.abs(candidato - desdeRef);
+    const mejor = Math.abs(elegido - desdeRef);
+    // Empate: se queda el que está más adelante en el tiempo.
+    if (distancia < mejor || (distancia === mejor && candidato > elegido)) elegido = candidato;
+  }
+  if (elegido == null) return null;
+  return `${Math.floor(elegido / 12)}-${String((elegido % 12) + 1).padStart(2, '0')}`;
+}
+
 function firstGroup(text: string, pattern: string | null): string | null {
   if (!pattern) return null;
   try {
@@ -156,10 +223,13 @@ export function applyRule(email: ParsedEmail, rule: EmailRule): ParsedMovement |
 
   const installments = /(\d{1,2})\s*cuotas/i.exec(haystack);
 
+  const periodRaw = firstGroup(haystack, rule.period_regex);
+
   return {
     amount,
     merchant,
     occurredOn,
+    period: periodRaw ? parsePeriod(periodRaw, occurredOn.slice(0, 7)) : null,
     account: firstGroup(haystack, rule.account_regex) ?? rule.account_label,
     installments: installments ? Number(installments[1]) : null,
   };

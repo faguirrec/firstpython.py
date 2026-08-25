@@ -7,7 +7,7 @@
  * parece: Mercado Pago no avisa lo que entra, así que ese comprobante es la
  * única evidencia de que hubo un aporte.
  */
-import { applyRule, htmlToText, type EmailRule } from '../src/services/parser.js';
+import { applyRule, htmlToText, parsePeriod, type EmailRule } from '../src/services/parser.js';
 import { BANK_TEMPLATES } from '../src/services/bankTemplates.js';
 
 let fallas = 0;
@@ -23,6 +23,7 @@ function regla(key: string, extra: Partial<EmailRule> = {}): EmailRule {
     id: key, name: t.name,
     amount_regex: t.amount_regex, merchant_regex: t.merchant_regex,
     date_regex: t.date_regex, account_regex: t.account_regex,
+    period_regex: t.period_regex ?? null,
     card_filter: null, must_contain: t.must_contain ?? null,
     must_not_contain: t.must_not_contain ?? null,
     type: t.type, scope: t.scope, account_label: t.account_label,
@@ -55,7 +56,7 @@ ok('Mercado Pago: sin fecha en el cuerpo, usa la del correo',
 ok('Mercado Pago: es un gasto común', regla('mercadopago_enviada').type === 'gasto');
 
 // --------------------------------------------------------------- recibida ---
-function comprobanteChile(banco: string, monto: string, quien: string) {
+function comprobanteChile(banco: string, monto: string, quien: string, asunto = '') {
   return {
     from: 'Banco de Chile <enviodigital@bancochile.cl>',
     subject: 'Comprobante de transferencia electrónica de fondos',
@@ -67,7 +68,7 @@ function comprobanteChile(banco: string, monto: string, quien: string) {
       transferencia de fondos a tu cuenta con el siguiente detalle:</p>
       <table>
         <tr><td>Fecha</td><td>18/08/2026</td></tr>
-        <tr><td>Asunto</td><td></td></tr>
+        <tr><td>Asunto</td><td>${asunto}</td></tr>
       </table>
       <table>
         <tr><td>Nombre y Apellido</td><td>Francisco Aguirre</td></tr>
@@ -80,7 +81,7 @@ function comprobanteChile(banco: string, monto: string, quien: string) {
 }
 
 const aporte = applyRule(
-  comprobanteChile('Mercado Pago', '$14.000', 'Francisco Javier Aguirre'),
+  comprobanteChile('Banco Falabella', '$14.000', 'Francisco Javier Aguirre'),
   regla('bancochile_transferencia_recibida'),
 );
 ok('Banco de Chile: reconoce el comprobante', aporte !== null);
@@ -103,13 +104,65 @@ ok('una transferencia a la cuenta personal NO entra como aporte del hogar',
 
 // Separar por persona: dos copias de la regla, una por cada uno.
 const soloFrancisco = regla('bancochile_transferencia_recibida', {
-  must_contain: 'Mercado Pago; Francisco Javier Aguirre',
+  must_contain: 'Banco Falabella; Francisco Javier Aguirre',
   user_id: 'usuario-francisco',
 });
 ok('la regla de Francisco toma su transferencia',
-   applyRule(comprobanteChile('Mercado Pago', '$14.000', 'Francisco Javier Aguirre'), soloFrancisco) !== null);
+   applyRule(comprobanteChile('Banco Falabella', '$14.000', 'Francisco Javier Aguirre'), soloFrancisco) !== null);
 ok('la regla de Francisco NO toma la de otra persona',
-   applyRule(comprobanteChile('Mercado Pago', '$50.000', 'Carolina Perez'), soloFrancisco) === null);
+   applyRule(comprobanteChile('Banco Falabella', '$50.000', 'Carolina Perez'), soloFrancisco) === null);
+
+// ------------------- el mes al que cuenta la transferencia -------------------
+/**
+ * El caso que motivó todo esto: el sueldo se transfiere el 25 de agosto con el
+ * comentario "Mensualidad septiembre", y esa plata es de septiembre. Si el mes
+ * saliera de la fecha, el aporte quedaría en agosto y septiembre se vería sin
+ * un peso puesto.
+ */
+const mensualidad = applyRule(
+  comprobanteChile('Banco Falabella', '$450.000', 'Sofia Ignacia Zuniga', 'Mensualidad septiembre'),
+  regla('bancochile_transferencia_recibida'),
+);
+ok('la transferencia de la mensualidad entra', mensualidad !== null);
+ok('la fecha sigue siendo la del comprobante',
+   mensualidad?.occurredOn === '2026-08-18', mensualidad?.occurredOn);
+ok('pero cuenta en septiembre, no en agosto',
+   mensualidad?.period === '2026-09', mensualidad?.period);
+
+// Sin comentario no se inventa nada: el mes queda en manos de la fecha.
+const sinAsunto = applyRule(
+  comprobanteChile('Banco Falabella', '$450.000', 'Sofia Ignacia Zuniga'),
+  regla('bancochile_transferencia_recibida'),
+);
+ok('sin comentario, el mes lo decide la fecha',
+   sinAsunto?.period === null, sinAsunto?.period);
+
+// Un comentario cualquiera tampoco puede mover el mes a ninguna parte.
+const otroAsunto = applyRule(
+  comprobanteChile('Banco Falabella', '$30.000', 'Sofia Ignacia Zuniga', 'Regalo'),
+  regla('bancochile_transferencia_recibida'),
+);
+ok('un comentario sin mes no cambia nada', otroAsunto?.period === null, otroAsunto?.period);
+
+// El RUT que viene abajo en el mismo correo no puede colarse como año.
+ok('el RUT de más abajo no se lee como año',
+   mensualidad?.period === '2026-09', mensualidad?.period);
+
+// --- parsePeriod, los formatos que puede escribir una persona ---
+ok('"septiembre" en agosto es el septiembre que viene',
+   parsePeriod('septiembre', '2026-08') === '2026-09', parsePeriod('septiembre', '2026-08'));
+ok('"diciembre" en enero es el diciembre que pasó',
+   parsePeriod('diciembre', '2027-01') === '2026-12', parsePeriod('diciembre', '2027-01'));
+ok('con año escrito manda el año escrito',
+   parsePeriod('marzo 2028', '2026-08') === '2028-03', parsePeriod('marzo 2028', '2026-08'));
+ok('entiende 2026-09', parsePeriod('2026-09', '2026-08') === '2026-09');
+ok('entiende 09/2026', parsePeriod('09/2026', '2026-08') === '2026-09');
+ok('acepta la abreviatura', parsePeriod('sept.', '2026-08') === '2026-09', parsePeriod('sept.', '2026-08'));
+ok('encuentra el mes aunque venga con más palabras',
+   parsePeriod('Mensualidad septiembre', '2026-08') === '2026-09');
+ok('un texto sin mes no devuelve nada', parsePeriod('pago de arriendo', '2026-08') === null);
+ok('un mes inexistente no devuelve nada', parsePeriod('13/2026', '2026-08') === null,
+   parsePeriod('13/2026', '2026-08'));
 
 // ----------------------------- el correo espejo -----------------------------
 /**
@@ -161,7 +214,7 @@ ok('depositar a la cuenta del hogar NO entra como gasto',
    applyRule(aLaCasa, reglaEnviada) === null, applyRule(aLaCasa, reglaEnviada));
 
 // Y el correo espejo del mismo movimiento sí entra, una sola vez, como aporte.
-const espejo = comprobanteChile('Mercado Pago', '$14.000', 'Francisco Javier Aguirre');
+const espejo = comprobanteChile('Banco Falabella', '$14.000', 'Francisco Javier Aguirre');
 ok('el correo espejo entra como aporte',
    applyRule(espejo, regla('bancochile_transferencia_recibida')) !== null);
 ok('y ese mismo correo no entra como transferencia enviada',
@@ -283,9 +336,33 @@ ok('y con la fecha del correo en formato 24-08-2026',
 ok('y reconoce la cuenta de origen',
    (salida?.account ?? '').includes(CUENTA_HOGAR_BF), salida?.account);
 
+// --- Devolverse plata a una cuenta propia también es un gasto ---
+/**
+ * Si sale del pozo común, sale. Quién la recibió es asunto aparte: no contarlo
+ * dejaría el fondo de reserva mostrando plata que ya no está.
+ */
+const aMiCuenta = applyRule(
+  salidaDeFalabella('Francisco Aguirre', 'Banco de Chile', '$120.000'),
+  reglaSalida,
+);
+ok('sacar plata del hogar a una cuenta propia entra como gasto', aMiCuenta !== null);
+ok('por el monto completo', aMiCuenta?.amount === 120000, aMiCuenta?.amount);
+ok('y es un gasto común, no personal',
+   reglaSalida.type === 'gasto' && reglaSalida.scope === 'comun');
+
 // --- Y la copia del destinatario no lo duplica ---
 ok('la copia que avisa al destinatario no entra otra vez',
    applyRule(copiaDelDestinatario('$80.000'), reglaSalida) === null);
+
+// --- Dos reglas de aporte para la misma persona: no pueden calzar las dos ---
+/**
+ * El banco manda dos correos por la misma transferencia. Si los dos calzaran,
+ * el aporte de Sofía entraría dos veces y el mes cuadraría de más sin que nada
+ * lo avise.
+ */
+const copiaDelQueEnvia = depositoDesdeChile('Banco Falabella', CUENTA_HOGAR_BDC, '$450.000');
+ok('la copia del que envía no calza con la regla de recibida',
+   applyRule(copiaDelQueEnvia, regla('bancochile_transferencia_recibida')) === null);
 
 console.log(fallas === 0 ? '\nTodo bien.' : `\n${fallas} fallas.`);
 process.exit(fallas === 0 ? 0 : 1);

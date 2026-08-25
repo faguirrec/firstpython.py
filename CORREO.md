@@ -291,3 +291,103 @@ La forma A no se entera del cambio de dominio: sigue funcionando igual.
 
 La forma B sí. En Google Cloud → Credenciales → tu ID de cliente, agrega
 `https://app.myhaus.cl/api/gmail/callback`. No hace falta reconectar la cuenta.
+
+---
+
+# Que la app pueda mandar correos
+
+Es lo único que le falta al servidor para funcionar entero. Sin esto la app
+anda igual, pero:
+
+- Las invitaciones hay que pasarlas a mano por el link o el código QR.
+- El resumen del mes cerrado no llega a nadie.
+
+Se activa poniendo cuatro variables en Render. **No hace falta tocar código**:
+el archivo `render.yaml` ya las declara como `sync: false`, que quiere decir que
+Render las pide en el panel y las guarda cifradas, sin escribirlas en el
+repositorio.
+
+## Qué proveedor usar
+
+Recomendado: **Resend**. Es gratis hasta 3.000 correos al mes —muy por encima
+de lo que esta app necesita— y permite enviar desde `hola@myhaus.cl`, que es lo
+que corresponde: un correo de MyHaus que llega desde una dirección de Gmail
+personal se ve como spam y a menudo termina ahí.
+
+| | Resend | Gmail con contraseña de aplicación |
+|---|---|---|
+| Sale desde | `hola@myhaus.cl` | tu dirección de Gmail |
+| Configuración | tres registros DNS en Cloudflare | ninguna, ya tienes la clave |
+| Límite | 3.000/mes | ~500/día, y Google puede frenarlo |
+| Sirve para más usuarios | sí | no |
+
+Si sólo quieres probar hoy, la segunda columna funciona en cinco minutos. Para
+dejarlo andando, la primera.
+
+## Con Resend
+
+1. Crea la cuenta en [resend.com](https://resend.com).
+2. **Domains → Add Domain** → `myhaus.cl`. Te muestra tres registros (DKIM, SPF
+   y uno de retorno).
+3. Cópialos a **Cloudflare → myhaus.cl → DNS → Add record**, tal cual. Van en
+   **nube gris**: son registros de correo, no de tráfico web.
+4. Vuelve a Resend y toca **Verify**. Suele tardar unos minutos.
+5. **API Keys → Create API Key**, con permiso de envío.
+6. En Render → tu servicio → **Environment**, completa:
+
+```
+SMTP_HOST = smtp.resend.com
+SMTP_PORT = 587
+SMTP_USER = resend
+SMTP_PASS = la API key que acabas de crear
+SMTP_FROM = MyHaus <hola@myhaus.cl>
+```
+
+`SMTP_USER` es literalmente la palabra `resend`: así lo pide ese proveedor.
+
+## Con Gmail
+
+Sirve la misma contraseña de aplicación de la forma A, o una nueva. En Render:
+
+```
+SMTP_HOST = smtp.gmail.com
+SMTP_PORT = 587
+SMTP_USER = tu-correo@gmail.com
+SMTP_PASS = la contraseña de aplicación, sin espacios
+SMTP_FROM = MyHaus <tu-correo@gmail.com>
+```
+
+`SMTP_FROM` tiene que llevar la misma dirección de `SMTP_USER`: Gmail rechaza
+enviar en nombre de otra.
+
+## Comprobar que quedó
+
+Render reinicia el servicio solo al guardar las variables. Después:
+
+1. Abre **Ajustes → Correo**. El estado tiene que decir **● activo** y mostrar
+   desde qué dirección salen.
+2. Toca **Enviar correo de prueba**. Llega en segundos.
+
+Si dice *"El usuario o la contraseña SMTP no son correctos"*, con Gmail casi
+siempre es que la contraseña se pegó con los espacios que muestra Google.
+
+También puedes mirarlo sin entrar a la app:
+
+```bash
+curl -s https://app.myhaus.cl/api/health
+```
+
+`"correo": true` significa que está configurado.
+
+## El resumen del mes
+
+Con el correo andando, falta que alguien dispare el envío. La app expone la
+tarea protegida con `CRON_SECRET`, que Render genera sola —está en
+Environment—. Desde cualquier programador de tareas gratuito, una vez al mes:
+
+```bash
+curl -X POST https://app.myhaus.cl/api/tareas/reporte-mensual \
+  -H "Authorization: Bearer EL_CRON_SECRET"
+```
+
+Cada hogar decide si lo quiere, en **Ajustes → Correo**.

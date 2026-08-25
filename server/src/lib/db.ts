@@ -231,6 +231,16 @@ addColumn('email_rules', 'must_contain', 'TEXT');
 addColumn('email_rules', 'must_not_contain', 'TEXT');
 
 /*
+ * De dónde sacar el mes al que cuenta lo que importa la regla.
+ *
+ * Una transferencia lleva un comentario que el que la hace escribe a mano —"Mensualidad
+ * septiembre"—, y ese comentario dice a qué mes pertenece la plata mucho mejor
+ * que la fecha en que se apretó el botón: el sueldo del 25 de agosto paga el
+ * septiembre. Si la regla no lo define, el mes sigue saliendo de la fecha.
+ */
+addColumn('email_rules', 'period_regex', 'TEXT');
+
+/*
  * A qué mes cuenta un movimiento, que no siempre es el de su fecha.
  *
  * Los sueldos no llegan el mismo día ni a fin de mes exacto, así que la cuenta

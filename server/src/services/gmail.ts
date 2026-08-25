@@ -84,6 +84,8 @@ export type SyncResult = {
     amount: number;
     merchant: string | null;
     occurredOn: string;
+    /** Mes al que se le cargaría, si el correo lo dice y no es el de la fecha. */
+    period: string | null;
     account: string | null;
     subject: string;
     duplicate: boolean;
@@ -228,7 +230,7 @@ export async function syncHousehold(householdId: string, maxPerRule = 100, dryRu
     `INSERT INTO transactions
        (id, household_id, occurred_on, period, amount, type, scope, funded_by, user_id, category_id,
         merchant, description, account_label, installments, source, source_msg_id, raw_snippet, reviewed)
-     VALUES (@id, @household_id, @occurred_on, substr(@occurred_on, 1, 7), @amount, @type, @scope,
+     VALUES (@id, @household_id, @occurred_on, COALESCE(@period, substr(@occurred_on, 1, 7)), @amount, @type, @scope,
         'oficial', @user_id, @category_id,
         @merchant, @description, @account_label, @installments, 'gmail', @source_msg_id, @raw_snippet, 0)`,
   );
@@ -277,6 +279,7 @@ export async function syncHousehold(householdId: string, maxPerRule = 100, dryRu
               amount: movement.amount,
               merchant: movement.merchant,
               occurredOn: movement.occurredOn,
+              period: movement.period,
               account: movement.account,
               subject: email.subject.slice(0, 120),
               duplicate,
@@ -297,6 +300,7 @@ export async function syncHousehold(householdId: string, maxPerRule = 100, dryRu
             // sin dueño no le cuenta a nadie.
             user_id: rule.user_id,
             occurred_on: movement.occurredOn,
+            period: movement.period,
             amount: movement.amount,
             type: rule.type,
             scope: rule.scope,

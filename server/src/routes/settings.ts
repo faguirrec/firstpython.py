@@ -200,6 +200,7 @@ const emailRuleInput = z.object({
   merchantRegex: z.string().max(300).nullable().optional(),
   dateRegex: z.string().max(300).nullable().optional(),
   accountRegex: z.string().max(300).nullable().optional(),
+  periodRegex: z.string().max(300).nullable().optional(),
   cardFilter: z.string().max(120).nullable().optional(),
   mustContain: z.string().max(400).nullable().optional(),
   mustNotContain: z.string().max(400).nullable().optional(),
@@ -216,6 +217,7 @@ function validRegexes(input: z.infer<typeof emailRuleInput>): string | null {
     ['comercio', input.merchantRegex],
     ['fecha', input.dateRegex],
     ['cuenta', input.accountRegex],
+    ['mes', input.periodRegex],
   ] as const) {
     if (!pattern) continue;
     try {
@@ -230,9 +232,14 @@ function validRegexes(input: z.infer<typeof emailRuleInput>): string | null {
 settingsRouter.get('/email-rules', (req, res) => {
   const rules = db
     .prepare(
+      // Van todas las columnas que el formulario deja editar. Devolver menos
+      // hacía que abrir una regla mostrara vacíos los filtros de texto y el
+      // dueño, que sí estaban guardados: parecía que se habían perdido.
       `SELECT id, name, enabled, gmail_query AS gmailQuery, amount_regex AS amountRegex,
               merchant_regex AS merchantRegex, date_regex AS dateRegex, account_regex AS accountRegex,
-              card_filter AS cardFilter, type, scope, account_label AS accountLabel, priority
+              period_regex AS periodRegex, card_filter AS cardFilter,
+              must_contain AS mustContain, must_not_contain AS mustNotContain,
+              type, scope, account_label AS accountLabel, user_id AS userId, priority
          FROM email_rules WHERE household_id = ? ORDER BY priority`,
     )
     .all(req.household!.id);
@@ -255,12 +262,13 @@ settingsRouter.post('/email-rules', (req, res) => {
   db.prepare(
     `INSERT INTO email_rules
        (id, household_id, name, enabled, gmail_query, amount_regex, merchant_regex, date_regex,
-        account_regex, card_filter, must_contain, must_not_contain, type, scope,
+        account_regex, period_regex, card_filter, must_contain, must_not_contain, type, scope,
         account_label, user_id, priority)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     id, req.household!.id, r.name, r.enabled ? 1 : 0, r.gmailQuery, r.amountRegex,
-    r.merchantRegex ?? null, r.dateRegex ?? null, r.accountRegex ?? null, r.cardFilter ?? null,
+    r.merchantRegex ?? null, r.dateRegex ?? null, r.accountRegex ?? null,
+    r.periodRegex ?? null, r.cardFilter ?? null,
     r.mustContain ?? null, r.mustNotContain ?? null, r.type, r.scope,
     r.accountLabel ?? null, r.userId ?? null, r.priority,
   );
@@ -284,6 +292,7 @@ settingsRouter.patch('/email-rules/:id', (req, res) => {
         name = COALESCE(?, name), enabled = COALESCE(?, enabled), gmail_query = COALESCE(?, gmail_query),
         amount_regex = COALESCE(?, amount_regex), merchant_regex = COALESCE(?, merchant_regex),
         date_regex = COALESCE(?, date_regex), account_regex = COALESCE(?, account_regex),
+        period_regex = COALESCE(?, period_regex),
         card_filter = COALESCE(?, card_filter), must_contain = COALESCE(?, must_contain),
         must_not_contain = COALESCE(?, must_not_contain),
         type = COALESCE(?, type), scope = COALESCE(?, scope),
@@ -293,6 +302,7 @@ settingsRouter.patch('/email-rules/:id', (req, res) => {
   ).run(
     r.name ?? null, r.enabled === undefined ? null : r.enabled ? 1 : 0, r.gmailQuery ?? null,
     r.amountRegex ?? null, r.merchantRegex ?? null, r.dateRegex ?? null, r.accountRegex ?? null,
+    r.periodRegex ?? null,
     r.cardFilter ?? null, r.mustContain ?? null, r.mustNotContain ?? null, r.type ?? null, r.scope ?? null,
     r.accountLabel ?? null, r.userId ?? null, r.priority ?? null,
     req.params.id, req.household!.id,
@@ -331,6 +341,7 @@ settingsRouter.post('/email-rules/test', (req, res) => {
     merchant_regex: r.merchantRegex ?? null,
     date_regex: r.dateRegex ?? null,
     account_regex: r.accountRegex ?? null,
+    period_regex: r.periodRegex ?? null,
     card_filter: r.cardFilter ?? null,
     must_contain: r.mustContain ?? null,
     must_not_contain: r.mustNotContain ?? null,

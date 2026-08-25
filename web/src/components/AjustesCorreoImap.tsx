@@ -177,6 +177,12 @@ export default function AjustesCorreoImap() {
           <p className="muted" style={{ marginTop: 0 }}>
             No es la contraseña de tu cuenta. Se guarda cifrada y sólo se usa para leer el buzón.
           </p>
+          <p className="alerta" style={{ marginTop: 0 }}>
+            Conviene saberlo: una contraseña de aplicación da acceso a <strong>todo</strong> el
+            buzón, no sólo a los correos del banco. Las reglas limitan lo que la app usa, no lo que
+            podría leer. Se revoca cuando quieras desde tu cuenta de Google, y la conexión se cae
+            en ese mismo momento.
+          </p>
 
           {!form.avanzado ? (
             <button type="button" className="small ghost" onClick={() => setForm({ ...form, avanzado: true })}>

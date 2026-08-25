@@ -248,7 +248,7 @@ export async function sincronizarImap(
     `INSERT INTO transactions
        (id, household_id, occurred_on, period, amount, type, scope, funded_by, user_id, category_id,
         merchant, description, account_label, installments, source, source_msg_id, raw_snippet, reviewed)
-     VALUES (@id, @household_id, @occurred_on, substr(@occurred_on, 1, 7), @amount, @type, @scope,
+     VALUES (@id, @household_id, @occurred_on, COALESCE(@period, substr(@occurred_on, 1, 7)), @amount, @type, @scope,
         'oficial', @user_id, @category_id,
         @merchant, @description, @account_label, @installments, 'imap', @source_msg_id, @raw_snippet, 0)`,
   );
@@ -294,6 +294,7 @@ export async function sincronizarImap(
                 amount: movimiento.amount,
                 merchant: movimiento.merchant,
                 occurredOn: movimiento.occurredOn,
+                period: movimiento.period,
                 account: movimiento.account,
                 subject: correo.subject.slice(0, 120),
                 duplicate: repetido,
@@ -314,6 +315,9 @@ export async function sincronizarImap(
               // aporte sin dueño no le cuenta a nadie.
               user_id: regla.user_id,
               occurred_on: movimiento.occurredOn,
+              // El mes al que se le carga, que el correo puede decir aparte de
+              // la fecha: "Mensualidad septiembre" transferida el 25 de agosto.
+              period: movimiento.period,
               amount: movimiento.amount,
               type: regla.type,
               scope: regla.scope,

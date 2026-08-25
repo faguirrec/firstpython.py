@@ -85,6 +85,8 @@ export type EmailRule = {
   merchantRegex: string | null;
   dateRegex: string | null;
   accountRegex: string | null;
+  /** De dónde leer el mes contable cuando el correo lo dice aparte de la fecha. */
+  periodRegex: string | null;
   cardFilter: string | null;
   mustContain: string | null;
   mustNotContain: string | null;
@@ -104,6 +106,7 @@ export type BankTemplate = {
   merchant_regex: string | null;
   date_regex: string | null;
   account_regex: string | null;
+  period_regex?: string | null;
   must_contain?: string | null;
   must_not_contain?: string | null;
   type: 'gasto' | 'aporte';
@@ -442,7 +445,7 @@ export const api = {
   updateEmailRule: (id: string, body: Record<string, unknown>) => patch<{ ok: true }>(`/settings/email-rules/${id}`, body),
   deleteEmailRule: (id: string) => del<{ ok: true }>(`/settings/email-rules/${id}`),
   testEmailRule: (body: { sample: string; isHtml: boolean; rule: Record<string, unknown> }) =>
-    post<{ matched: boolean; movement: { amount: number; merchant: string | null; occurredOn: string; account: string | null } | null; text: string }>(
+    post<{ matched: boolean; movement: { amount: number; merchant: string | null; occurredOn: string; period: string | null; account: string | null } | null; text: string }>(
       '/settings/email-rules/test',
       body,
     ),

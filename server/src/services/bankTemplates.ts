@@ -15,6 +15,8 @@ export type BankTemplate = {
   merchant_regex: string | null;
   date_regex: string | null;
   account_regex: string | null;
+  /** De dónde leer el mes al que cuenta la plata, cuando el correo lo dice. */
+  period_regex?: string | null;
   /** Textos que el correo debe contener, todos. Separados por punto y coma. */
   must_contain?: string | null;
   must_not_contain?: string | null;
@@ -77,13 +79,23 @@ export const BANK_TEMPLATES: BankTemplate[] = [
     merchant_regex: 'cliente\\s+([^\\n]{2,60}?)\\s+ha efectuado',
     date_regex: 'Fecha[\\s\\S]{0,40}?(\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4})',
     account_regex: 'Cuenta destino[\\s\\S]{0,60}?([\\d-]{8,})',
+    // El comentario que quien transfiere escribe a mano en el campo "Asunto".
+    // Ahí es donde dice a qué mes corresponde la plata, y casi nunca es el mes
+    // de la fecha: el sueldo del 25 de agosto paga el septiembre. El año sólo
+    // se acepta en la misma línea; abarcando el salto tomaría como año los
+    // primeros cuatro dígitos del RUT que viene más abajo.
+    period_regex: 'Asunto[\\s\\S]{0,60}?(?:mensualidad|mes|gastos|cuentas)\\s*(?:de\\s*)?([A-Za-z\\u00c0-\\u00ff]+(?:[^\\S\\n]+\\d{4})?)',
     // El banco de la cuenta del hogar, tal como aparece en el comprobante.
     // Sin este filtro, la regla también tomaría como aporte la plata que llegue
     // a tus cuentas personales, que el mismo correo informa igual.
-    must_contain: 'Mercado Pago',
+    must_contain: 'Banco Falabella',
+    // La copia que le llega a quien *envía* la misma transferencia. Si las dos
+    // llegan al mismo buzón y las dos reglas están activas, el aporte entraría
+    // dos veces: son alternativas, no complementos.
+    must_not_contain: 'Transferencia a terceros',
     type: 'aporte',
     scope: 'comun',
-    account_label: 'Mercado Pago',
+    account_label: 'Banco Falabella',
   },
   {
     /**
@@ -125,6 +137,12 @@ export const BANK_TEMPLATES: BankTemplate[] = [
      * Al activarla hay que elegir de quién es el aporte: la liquidación suma lo
      * que puso cada uno por su usuario. Si los dos depositan desde el mismo
      * banco, van dos copias, cada una con el nombre de una persona.
+     *
+     * **Es alternativa a "transferencia recibida", no complemento.** El banco
+     * manda las dos copias del mismo movimiento —la del que envía y la del que
+     * recibe—, y si la cuenta que recibe avisa al mismo buzón, tener las dos
+     * reglas activas para la misma persona suma el aporte dos veces. Conviene
+     * la de "recibida", que además trae el comentario con el mes.
      */
     key: 'bancochile_aporte_al_hogar',
     name: 'Banco de Chile → cuenta del hogar (aporte)',
@@ -148,9 +166,10 @@ export const BANK_TEMPLATES: BankTemplate[] = [
      * cuando el destinatario es uno de ustedes, así que la regla se queda con
      * la primera y descarta la segunda.
      *
-     * `must_not_contain` trae además los nombres de ustedes dos: sacar plata de
-     * la cuenta común hacia una cuenta propia no es un gasto del hogar, es
-     * devolverse plata, y contarlo como gasto lo repartiría entre los dos.
+     * Sacar plata de la cuenta común hacia una cuenta propia **sí es un gasto**,
+     * y se reparte como cualquier otro. Es lo que corresponde: la plata salió
+     * del pozo común, y quién la recibió es asunto aparte. Si no se contara, el
+     * fondo de reserva mostraría un saldo que ya no está.
      */
     key: 'falabella_transferencia_enviada',
     name: 'Banco Falabella — sale de la cuenta del hogar',

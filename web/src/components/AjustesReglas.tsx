@@ -13,6 +13,7 @@ const EMPTY: Omit<EmailRule, 'id'> = {
   merchantRegex: 'en\\s+([^\\n,]{2,60})',
   dateRegex: '(\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4})',
   accountRegex: null,
+  periodRegex: null,
   cardFilter: null,
   mustContain: null,
   mustNotContain: null,
@@ -40,6 +41,23 @@ export default function AjustesReglas() {
     void load();
   }, []);
 
+  /**
+   * Dos reglas de aporte activas para la misma persona.
+   *
+   * El banco manda dos correos por la misma transferencia —la copia del que
+   * envía y la del que recibe—, y si las dos llegan al mismo buzón, dos reglas
+   * de aporte para la misma persona la suman dos veces. No se puede detectar
+   * después: los movimientos son distintos, con distinto id de correo, y el
+   * único síntoma es que el mes cuadra de más.
+   */
+  const aportesRepetidos = rules
+    .filter((r) => r.enabled && r.type === 'aporte' && r.userId)
+    .reduce<Record<string, string[]>>((acc, r) => {
+      acc[r.userId!] = [...(acc[r.userId!] ?? []), r.name];
+      return acc;
+    }, {});
+  const conflictos = Object.values(aportesRepetidos).filter((nombres) => nombres.length > 1);
+
   async function toggle(rule: EmailRule) {
     await api.updateEmailRule(rule.id, { enabled: rule.enabled === 0 });
     await load();
@@ -55,6 +73,7 @@ export default function AjustesReglas() {
       merchantRegex: template.merchant_regex,
       dateRegex: template.date_regex,
       accountRegex: template.account_regex,
+      periodRegex: template.period_regex ?? null,
       mustContain: template.must_contain ?? null,
       mustNotContain: template.must_not_contain ?? null,
       type: template.type,
@@ -65,6 +84,14 @@ export default function AjustesReglas() {
   return (
     <>
       {error && <div className="error">{error}</div>}
+
+      {conflictos.map((nombres) => (
+        <div className="alerta" key={nombres.join('|')}>
+          <strong>Ojo: dos reglas de aporte para la misma persona.</strong>{' '}
+          {nombres.join(' y ')} están activas las dos. Si el banco avisa la misma transferencia como
+          enviada y como recibida, esa plata va a entrar dos veces. Deja activa una sola.
+        </div>
+      ))}
 
       <div className="card">
         <div className="card-head">
@@ -170,6 +197,7 @@ function EditorRegla({
     merchantRegex: form.merchantRegex || null,
     dateRegex: form.dateRegex || null,
     accountRegex: form.accountRegex || null,
+    periodRegex: form.periodRegex || null,
     cardFilter: form.cardFilter || null,
     mustContain: form.mustContain || null,
     mustNotContain: form.mustNotContain || null,
@@ -251,6 +279,20 @@ function EditorRegla({
         <span>Cuenta o tarjeta (regex)</span>
         <input value={form.accountRegex ?? ''} onChange={(e) => set('accountRegex', e.target.value)} />
       </label>
+      <label className="field">
+        <span>Mes al que cuenta (regex)</span>
+        <input
+          value={form.periodRegex ?? ''}
+          onChange={(e) => set('periodRegex', e.target.value)}
+          placeholder="Asunto[\\s\\S]{0,60}?mensualidad\\s*(\\w+)"
+        />
+        <em className="muted">
+          Opcional. Si el correo dice a qué mes corresponde la plata —el comentario "Mensualidad
+          septiembre" de una transferencia—, se usa eso en vez de la fecha. Entiende el nombre del mes,
+          "2026-09" y "09/2026".
+        </em>
+      </label>
+
       <label className="field">
         <span>Sólo estas tarjetas (últimos 4 dígitos, separados por coma)</span>
         <input
@@ -340,6 +382,10 @@ function EditorRegla({
                 <div>Monto: {money(test.movement.amount, currency)}</div>
                 <div>Comercio: {test.movement.merchant ?? '—'}</div>
                 <div>Fecha: {test.movement.occurredOn}</div>
+                <div>
+                  Cuenta en: {test.movement.period ?? test.movement.occurredOn.slice(0, 7)}
+                  {!test.movement.period && ' (el mes de la fecha)'}
+                </div>
                 <div>Cuenta/tarjeta: {test.movement.account ?? '—'}</div>
               </div>
             ) : (
