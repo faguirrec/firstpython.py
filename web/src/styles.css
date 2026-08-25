@@ -127,7 +127,9 @@ a { color: var(--series-1); }
 .app {
   max-width: 720px;
   margin: 0 auto;
-  padding: max(12px, env(safe-area-inset-top)) 14px calc(84px + env(safe-area-inset-bottom));
+  /* Deja aire abajo para la barra de pestañas y el botón de anotar, que van
+     fijos y taparían el final de la lista. */
+  padding: max(12px, env(safe-area-inset-top)) 14px calc(122px + env(safe-area-inset-bottom));
 }
 
 .topbar {
@@ -175,6 +177,44 @@ a { color: var(--series-1); }
 .tabbar a.active svg { stroke-width: 2.1; }
 .tabbar a:active { transform: scale(0.94); }
 
+/*
+ * El botón de anotar.
+ *
+ * Va fijo justo encima de la barra, del lado derecho: es el gesto más frecuente
+ * de la app y con el pulgar derecho es donde queda más a mano. Antes había que
+ * ir a una pantalla concreta y buscarlo en la cabecera.
+ */
+.boton-anotar {
+  position: fixed;
+  right: 16px;
+  bottom: calc(70px + env(safe-area-inset-bottom));
+  z-index: 25;
+
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+
+  background: var(--marca);
+  color: #fff;
+  box-shadow: var(--shadow-alta);
+  transition: transform var(--transicion), box-shadow var(--transicion);
+}
+
+.boton-anotar:active {
+  transform: scale(0.92);
+  box-shadow: var(--shadow);
+}
+
+/* En pantalla ancha la app está centrada; el botón la acompaña en vez de irse
+   a la esquina del monitor. */
+@media (min-width: 760px) {
+  .boton-anotar { right: max(16px, calc(50vw - 360px + 16px)); }
+}
+
 /* ------------------------------- Piezas -------------------------------- */
 
 .card {
@@ -197,6 +237,9 @@ a { color: var(--series-1); }
 }
 
 .hero {
+  /* Puede venir como <span> —la cifra que cuenta hasta su valor lo es— y tiene
+     que ocupar su línea igual. */
+  display: block;
   font-size: var(--cifra-lg);
   font-weight: 650;
   letter-spacing: -0.025em;
@@ -475,6 +518,13 @@ details.plegable > summary strong { display: block; }
 details.plegable > summary .muted { display: block; margin-top: 4px; font-size: 0.9rem; }
 details.plegable[open] > summary { margin-bottom: 4px; }
 
+/* Lo que el plegado ya contesta, en la misma línea del título: "Fecha y
+   detalles · hoy". En bloque aparte parecía un subtítulo huérfano. */
+details.plegable > summary .resumen-dato {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
 /* --------------------------------- Modal -------------------------------- */
 
 .sheet-backdrop {
@@ -485,7 +535,15 @@ details.plegable[open] > summary { margin-bottom: 4px; }
   align-items: flex-end;
   justify-content: center;
   z-index: 40;
+  animation: aparecer 180ms ease-out;
 }
+
+/* La hoja sube desde el borde, como en iOS. Aparecer de golpe en el centro de
+   la pantalla no dice de dónde vino ni cómo se cierra. */
+.sheet { animation: subir 260ms cubic-bezier(0.2, 0.8, 0.25, 1); }
+
+@keyframes aparecer { from { opacity: 0; } }
+@keyframes subir { from { transform: translateY(14px); opacity: 0.6; } }
 
 .sheet {
   background: var(--surface-1);
@@ -500,6 +558,228 @@ details.plegable[open] > summary { margin-bottom: 4px; }
 @media (min-width: 640px) {
   .sheet-backdrop { align-items: center; }
   .sheet { border-radius: 18px; margin: 20px; }
+}
+
+/*
+ * El aviso de la última acción.
+ *
+ * Va sobre la barra de pestañas, no encima del contenido: uno acaba de tocar
+ * algo abajo y ahí es donde está mirando. Se sale de la pantalla por su cuenta.
+ */
+.aviso {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: calc(72px + env(safe-area-inset-bottom));
+  z-index: 30;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+
+  background: var(--text-primary);
+  color: var(--surface-1);
+  font-size: var(--t-base);
+  box-shadow: var(--shadow-alta);
+  animation: aviso-entra 220ms cubic-bezier(0.2, 0.8, 0.25, 1);
+}
+
+.aviso.error { background: var(--critical); color: #fff; }
+
+/* El botón hereda el color del aviso, que es el inverso del de la app. */
+.aviso button {
+  color: inherit;
+  border-color: color-mix(in srgb, currentColor 40%, transparent);
+  background: transparent;
+  flex: none;
+  font-weight: 600;
+}
+
+@keyframes aviso-entra {
+  from { transform: translateY(10px); opacity: 0; }
+}
+
+/* En pantalla ancha acompaña a la app, no se estira de lado a lado. */
+@media (min-width: 760px) {
+  .aviso {
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    min-width: 320px;
+    max-width: 460px;
+  }
+  @keyframes aviso-entra {
+    from { transform: translateX(-50%) translateY(10px); opacity: 0; }
+  }
+}
+
+/*
+ * Las barras crecen desde la izquierda al entrar.
+ *
+ * Dibujarlas ya terminadas las convierte en un rectángulo de color; creciendo,
+ * el largo se lee como una cantidad. Es medio segundo y sólo la primera vez que
+ * la barra aparece en pantalla.
+ */
+.barra-crece {
+  animation: crecer 480ms cubic-bezier(0.2, 0.8, 0.25, 1);
+  transform-origin: left center;
+}
+
+@keyframes crecer {
+  from { transform: scaleX(0); }
+}
+
+/* --------------------------- Primeros pasos ------------------------------ */
+
+/* Se despega del resto con el color de marca: es lo primero que hay que hacer,
+   no una tarjeta más de la pila. */
+.primeros-pasos {
+  border-color: color-mix(in srgb, var(--marca) 35%, transparent);
+  background: linear-gradient(var(--marca-suave), var(--surface-1) 70%);
+}
+
+.pasos-progreso {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 14px;
+}
+
+.pasos-progreso span {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--grid);
+  transition: background-color var(--transicion);
+}
+
+.pasos-progreso span.listo { background: var(--good); }
+
+.pasos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+}
+
+.pasos li {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+}
+
+.pasos li .title { font-weight: 600; }
+.pasos li .meta { color: var(--text-secondary); font-size: var(--t-menor); margin-top: 2px; }
+
+/* Marca de hecho o pendiente, del ancho de un dedo para que la columna de
+   títulos quede alineada tenga o no check. */
+.pasos .marca {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+
+  border: 1.5px solid var(--axis);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.pasos li.listo .marca {
+  border-color: var(--good);
+  background: var(--good);
+  color: #fff;
+}
+
+.pasos li.listo .title { color: var(--text-muted); text-decoration: line-through; }
+
+/* ------------------------------- Filtros --------------------------------- */
+
+.filtros { display: grid; gap: 10px; padding: 12px; }
+
+/*
+ * Fichas de filtro en una fila que se desliza con el pulgar.
+ *
+ * Se sale del borde de la tarjeta a propósito: cortadas justo en el margen no
+ * se ve que hay más a la derecha, y nadie las desliza.
+ */
+.chips-fila {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 2px 12px;
+  margin: 0 -12px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.chips-fila::-webkit-scrollbar { display: none; }
+.chips-fila { scrollbar-width: none; }
+
+.filtro-chip {
+  flex: none;
+  min-height: 34px;
+  padding: 6px 13px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  font-size: var(--t-menor);
+  font-weight: 500;
+  white-space: nowrap;
+  transition: border-color var(--transicion), background-color var(--transicion), color var(--transicion);
+}
+
+.filtro-chip.activo {
+  border-color: transparent;
+  background: var(--marca);
+  color: #fff;
+  font-weight: 600;
+}
+
+.filtro-chip:active { transform: scale(0.96); }
+
+/* -------------------------- Movimientos por día -------------------------- */
+
+/*
+ * El encabezado del día se queda pegado mientras se recorre su grupo, así que
+ * al bajar por una lista larga uno siempre sabe qué día está mirando.
+ *
+ * `top` es la altura de la cabecera de la app, que también va pegada arriba.
+ */
+.dia-cabecera {
+  position: sticky;
+  top: 92px;
+  z-index: 5;
+
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+
+  margin: 0 -16px;
+  padding: 7px 16px;
+  background: color-mix(in srgb, var(--surface-1) 94%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+
+  font-size: var(--t-menor);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.dia-cabecera .num { color: var(--text-muted); font-weight: 500; }
+
+.fila-movimiento {
+  width: 100%;
+  text-align: left;
+  border: none;
+  border-bottom: 1px solid var(--grid);
+  border-radius: 0;
 }
 
 /* ------------------------------- Cabecera -------------------------------- */

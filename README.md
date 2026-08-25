@@ -56,8 +56,10 @@ del mes anterior y del promedio, ordenado por impacto.
 > hogar.
 
 **Lectura del correo del banco.** Conectas la cuenta donde llegan los avisos y la
-app los convierte en movimientos: monto, comercio, fecha y últimos 4 dígitos de
-la tarjeta. Con la conexión abierta al buzón, entran **apenas llegan**. La app
+app los convierte en movimientos: monto, comercio, fecha, últimos 4 dígitos de
+la tarjeta y —cuando el correo lo dice— **a qué mes pertenece la plata**, que no
+siempre es el de la fecha: una transferencia con el comentario "Mensualidad
+septiembre" hecha el 25 de agosto cuenta en septiembre. Con la conexión abierta al buzón, entran **apenas llegan**. La app
 sólo lee, y sólo toca los correos que calzan con las reglas que definas.
 
 **Categorías y trazabilidad.** Cada movimiento entra categorizado según reglas
@@ -66,6 +68,20 @@ evolución mes a mes y el desglose por categoría.
 
 **Gastos personales.** Un gasto se puede marcar como personal para que quede
 registrado pero fuera del reparto.
+
+**Anotar en dos toques.** Un botón fijo sobre la barra, en todas las pantallas,
+abre el formulario con el monto en grande y el teclado numérico ya arriba. La
+fecha, el mes contable y la nota van plegados: casi siempre son hoy, el mes que
+se está mirando y nada. Al guardar, un aviso confirma y ofrece deshacer, que es
+mejor que preguntar antes en cada gasto.
+
+**Los movimientos, por día.** Agrupados con encabezado pegajoso y el subtotal
+del día al lado, y filtrados con fichas —*Por revisar*, *Comunes*, cada
+categoría— en vez de menús desplegables, que escondían cuál estaba puesto.
+
+**Primeros pasos.** Un hogar recién creado ve los tres que hacen que la app
+sirva: declarar los sueldos, anotar los gastos fijos y conectar el buzón. Cada
+uno se marca solo, y la tarjeta desaparece cuando están los tres.
 
 ## Cómo se calcula el reparto
 

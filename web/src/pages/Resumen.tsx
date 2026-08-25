@@ -11,18 +11,23 @@ import {
 } from '../lib/api';
 import { useSession } from '../lib/session';
 import { useModo } from '../lib/modo';
-import { currentMonth, dayLabel, monthLabel, esMesFuturo, money, percent } from '../lib/format';
+import { dayLabel, monthLabel, esMesFuturo, money, percent } from '../lib/format';
+import { cambiarMes, useMes } from '../lib/mes';
+import { useVersionDatos } from '../lib/datos';
 import { CategoryBars, SplitBar, type CategorySlice } from '../components/Charts';
 import Cabecera from '../components/Cabecera';
 import NuevoMovimiento from '../components/NuevoMovimiento';
 import { IconoAlerta, IconoBolsillo, IconoMas } from '../components/Icons';
 import { Avatar, FichaCategoria } from '../components/Fichas';
+import Cifra from '../components/Cifra';
+import PrimerosPasos, { pasosPendientes } from '../components/PrimerosPasos';
 import { TarjetaCargando, Vacio } from '../components/Estados';
 
 export default function Resumen() {
   const { user, household } = useSession();
   const currency = household?.currency ?? 'CLP';
-  const [month, setMonth] = useState(currentMonth());
+  const month = useMes();
+  const version = useVersionDatos();
   const [settlement, setSettlement] = useState<Settlement | null>(null);
   const [categories, setCategories] = useState<CategorySlice[]>([]);
   const [recent, setRecent] = useState<Transaction[]>([]);
@@ -31,6 +36,8 @@ export default function Resumen() {
   const [personal, setPersonal] = useState<ResumenPersonal | null>(null);
   const [fijos, setFijos] = useState<EstadoFijos | null>(null);
   const [proyeccion, setProyeccion] = useState<Projection | null>(null);
+  /** Cuántos buzones hay conectados, para saber si falta ese paso. */
+  const [buzones, setBuzones] = useState<number | null>(null);
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const modo = useModo();
@@ -54,6 +61,14 @@ export default function Resumen() {
         esPersonal ? Promise.resolve(null) : api.gastosFijos(month),
         futuro && !esPersonal ? api.projection(month) : Promise.resolve(null),
       ]);
+      // Si el servidor no responde, el paso queda como pendiente y no como
+      // hecho: es preferible ofrecer conectar algo ya conectado que dar por
+      // resuelto lo que quizá no lo está.
+      setBuzones(
+        await Promise.all([api.imapStatus().catch(() => null), api.gmailStatus().catch(() => null)]).then(
+          ([i, g]) => (i?.accounts.length ?? 0) + (g?.accounts.length ?? 0),
+        ),
+      );
       setSettlement(s);
       setCategories(c.categories);
       setRecent(t.transactions);
@@ -65,7 +80,7 @@ export default function Resumen() {
     } catch (err) {
       setError((err as Error).message);
     }
-  }, [month, modo, esPersonal, futuro]);
+  }, [month, modo, esPersonal, futuro, version]);
 
   useEffect(() => {
     void load();
@@ -78,19 +93,14 @@ export default function Resumen() {
       <Cabecera
         hogar={household?.name ?? 'Mi hogar'}
         month={month}
-        onMonthChange={setMonth}
-        accion={
-          <button
-            className="primary small"
-            onClick={() => setAdding(true)}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, flex: 'none' }}
-          >
-            <IconoMas size={16} /> Movimiento
-          </button>
-        }
+        onMonthChange={cambiarMes}
       />
 
       {error && <div className="error">{error}</div>}
+
+      {/* Sólo en el hogar: lo personal no necesita sueldos declarados ni gastos
+          fijos, y el buzón es del hogar. */}
+      {!esPersonal && <PrimerosPasos pasos={pasosPendientes(settlement, fijos, buzones ?? 0)} />}
 
       {!settlement && <TarjetaCargando conCifra filas={2} />}
 
@@ -104,12 +114,12 @@ export default function Resumen() {
               <div className="label">
                 {personal.left >= 0 ? 'Te queda este mes' : 'Vas gastando de más'}
               </div>
-              <div
+              <Cifra
                 className="hero"
+                valor={Math.abs(personal.left)}
+                moneda={currency}
                 style={{ color: personal.left >= 0 ? 'var(--good-text)' : 'var(--critical)' }}
-              >
-                {money(Math.abs(personal.left), currency)}
-              </div>
+              />
               {personal.income > 0 ? (
                 <div className="muted">
                   De {money(personal.income, currency)} de sueldo, {money(personal.contributedToHousehold, currency)}{' '}
@@ -117,7 +127,7 @@ export default function Resumen() {
                 </div>
               ) : (
                 <div className="muted">
-                  Falta declarar tu sueldo del mes en <Link to="/reparto">Reparto</Link> para saber cuánto te queda.
+                  Falta declarar tu sueldo del mes en <Link to="/liquidacion">Reparto</Link> para saber cuánto te queda.
                 </div>
               )}
 
@@ -158,9 +168,11 @@ export default function Resumen() {
                 ? 'Te falta poner'
                 : 'Te va a tocar poner'}
             </div>
-            <div className="hero">
-              {money(proyeccion?.rows.find((r) => r.userId === user?.id)?.pending ?? 0, currency)}
-            </div>
+            <Cifra
+              className="hero"
+              valor={proyeccion?.rows.find((r) => r.userId === user?.id)?.pending ?? 0}
+              moneda={currency}
+            />
             <div className="muted">
               {proyeccion
                 ? `Estimado sobre ${money(proyeccion.target, currency)} para el hogar, según ${proyeccion.basedOn}.`
@@ -176,12 +188,12 @@ export default function Resumen() {
             {/* "Vas al día · $330.600" deja el número sin explicar: no es lo que
                 debes ni lo que gastaste, es lo que pusiste de más. */}
             <div className="label">{me.deviation < -0.5 ? 'Te falta poner' : 'Pusiste de más'}</div>
-            <div
+            <Cifra
               className="hero"
+              valor={Math.abs(me.deviation)}
+              moneda={currency}
               style={{ color: me.deviation < -0.5 ? 'var(--critical)' : 'var(--good-text)' }}
-            >
-              {money(Math.abs(me.deviation), currency)}
-            </div>
+            />
             <div className="muted">
               {me.deviation < -0.5
                 ? `De los ${money(me.fairShare, currency)} que te tocan este mes, llevas ${money(me.contributed, currency)}.`
@@ -191,7 +203,7 @@ export default function Resumen() {
         ) : (
           <>
             <div className="label">Gastos comunes del mes</div>
-            <div className="hero">{money(settlement?.totalSharedExpenses ?? 0, currency)}</div>
+            <Cifra className="hero" valor={settlement?.totalSharedExpenses ?? 0} moneda={currency} />
           </>
         )}
 

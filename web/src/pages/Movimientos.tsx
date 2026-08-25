@@ -2,9 +2,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api, type Category, type Transaction } from '../lib/api';
 import { useSession } from '../lib/session';
-import { currentMonth, dayLabel, money, monthLabel } from '../lib/format';
+import { diaLargo, money, monthLabel } from '../lib/format';
+import { cambiarMes, useMes } from '../lib/mes';
+import { useVersionDatos } from '../lib/datos';
 import Cabecera from '../components/Cabecera';
-import { IconoMas } from '../components/Icons';
 import NuevoMovimiento from '../components/NuevoMovimiento';
 import Sheet from '../components/Sheet';
 import { FichaCategoria } from '../components/Fichas';
@@ -15,7 +16,9 @@ export default function Movimientos() {
   const [params, setParams] = useSearchParams();
   const onlyPending = params.get('pendientes') === '1';
 
-  const [month, setMonth] = useState(currentMonth());
+  const month = useMes();
+  // Sube cuando se anota algo desde el botón flotante, que vive fuera de acá.
+  const version = useVersionDatos();
   const [search, setSearch] = useState('');
   const [scope, setScope] = useState('');
   const [categoryId, setCategoryId] = useState('');
@@ -23,7 +26,6 @@ export default function Movimientos() {
   const [rows, setRows] = useState<Transaction[]>([]);
   const [editing, setEditing] = useState<Transaction | null>(null);
   const [detail, setDetail] = useState<Transaction | null>(null);
-  const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -41,7 +43,7 @@ export default function Movimientos() {
     } catch (err) {
       setError((err as Error).message);
     }
-  }, [month, search, scope, categoryId, onlyPending]);
+  }, [month, search, scope, categoryId, onlyPending, version]);
 
   useEffect(() => {
     void load();
@@ -52,6 +54,29 @@ export default function Movimientos() {
   }, []);
 
   const total = rows.filter((r) => r.type === 'gasto').reduce((a, b) => a + b.amount, 0);
+
+  /*
+   * La lista, partida por día.
+   *
+   * Una lista corrida de cien filas obliga a leer la fecha de cada una para
+   * ubicarse. Agrupada, el día se dice una sola vez y de paso aparece el
+   * subtotal, que es la pregunta que uno se hace mirando un día: "¿cuánto
+   * gastamos el sábado?".
+   *
+   * El servidor ya devuelve ordenado por fecha, así que basta con recorrer y
+   * cortar cuando cambia el día.
+   */
+  const porDia: { dia: string; movimientos: Transaction[]; total: number }[] = [];
+  for (const t of rows) {
+    const ultimo = porDia[porDia.length - 1];
+    const grupo = ultimo?.dia === t.occurredOn ? ultimo : null;
+    if (grupo) {
+      grupo.movimientos.push(t);
+      if (t.type === 'gasto') grupo.total += t.amount;
+    } else {
+      porDia.push({ dia: t.occurredOn, movimientos: [t], total: t.type === 'gasto' ? t.amount : 0 });
+    }
+  }
 
   async function quickCategory(transaction: Transaction, newCategoryId: string) {
     await api.updateTransaction(transaction.id, { categoryId: newCategoryId, reviewed: true });
@@ -71,16 +96,7 @@ export default function Movimientos() {
       <Cabecera
         hogar={onlyPending ? 'Pendientes de revisar' : 'Movimientos'}
         month={onlyPending ? undefined : month}
-        onMonthChange={onlyPending ? undefined : setMonth}
-        accion={
-          <button
-            className="primary small"
-            onClick={() => setAdding(true)}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, flex: 'none' }}
-          >
-            <IconoMas size={16} /> Nuevo
-          </button>
-        }
+        onMonthChange={onlyPending ? undefined : cambiarMes}
       />
 
       {onlyPending && (
@@ -103,34 +119,69 @@ export default function Movimientos() {
         </div>
       )}
 
-      <div className="card">
-        <label className="field" style={{ marginBottom: 8 }}>
-          <span>Buscar</span>
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Comercio o nota"
-            type="search"
-          />
-        </label>
-        <div className="grid2">
-          <label className="field" style={{ marginBottom: 0 }}>
-            <span>Tipo</span>
-            <select value={scope} onChange={(e) => setScope(e.target.value)}>
-              <option value="">Todos</option>
-              <option value="comun">Comunes</option>
-              <option value="personal">Personales</option>
-            </select>
-          </label>
-          <label className="field" style={{ marginBottom: 0 }}>
-            <span>Categoría</span>
-            <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-              <option value="">Todas</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </label>
+      {/*
+        * Los filtros como fichas y no como menús desplegables.
+        *
+        * Un desplegable esconde las opciones y esconde también cuál está
+        * puesta: había que abrirlo para saber si estabas viendo todo o sólo lo
+        * común. Acá se ve de un vistazo lo que hay y lo que está elegido, y
+        * cambiarlo es un toque en vez de tres.
+        */}
+      <div className="card filtros">
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Buscar comercio o nota"
+          type="search"
+          aria-label="Buscar movimientos"
+        />
+
+        <div className="chips-fila" role="group" aria-label="Filtrar por tipo">
+          <button
+            className={`filtro-chip ${!scope && !onlyPending ? 'activo' : ''}`}
+            onClick={() => {
+              setScope('');
+              setParams({});
+            }}
+          >
+            Todos
+          </button>
+          <button
+            className={`filtro-chip ${onlyPending ? 'activo' : ''}`}
+            onClick={() => setParams(onlyPending ? {} : { pendientes: '1' })}
+          >
+            Por revisar
+          </button>
+          <button
+            className={`filtro-chip ${scope === 'comun' ? 'activo' : ''}`}
+            onClick={() => setScope(scope === 'comun' ? '' : 'comun')}
+          >
+            Comunes
+          </button>
+          <button
+            className={`filtro-chip ${scope === 'personal' ? 'activo' : ''}`}
+            onClick={() => setScope(scope === 'personal' ? '' : 'personal')}
+          >
+            Personales
+          </button>
+        </div>
+
+        <div className="chips-fila" role="group" aria-label="Filtrar por categoría">
+          <button
+            className={`filtro-chip ${!categoryId ? 'activo' : ''}`}
+            onClick={() => setCategoryId('')}
+          >
+            Todas
+          </button>
+          {categories.map((c) => (
+            <button
+              key={c.id}
+              className={`filtro-chip ${categoryId === c.id ? 'activo' : ''}`}
+              onClick={() => setCategoryId(categoryId === c.id ? '' : c.id)}
+            >
+              <span aria-hidden="true">{c.emoji}</span> {c.name}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -142,40 +193,49 @@ export default function Movimientos() {
           <strong className="num">{money(total, currency)}</strong>
         </div>
 
-        <div className="list">
-          {rows.length === 0 && <p className="muted">No hay movimientos con estos filtros.</p>}
-          {rows.map((t) => (
-            <button
-              key={t.id}
-              className="item ghost"
-              onClick={() => setDetail(t)}
-              style={{ textAlign: 'left', border: 'none', borderBottom: '1px solid var(--grid)', borderRadius: 0, width: '100%' }}
-            >
-              <FichaCategoria emoji={t.categoryEmoji} color={t.categoryColor} />
-              <div className="body">
-                <div className="title">
-                  {t.merchant ?? t.description ?? 'Movimiento'}
-                  {t.reviewed === 0 && <span className="pill warn" style={{ marginLeft: 6 }}>por revisar</span>}
-                </div>
-                <div className="meta">
-                  {dayLabel(t.occurredOn)}
-                  {/* Se marca sólo cuando no coincide: si la fecha y el mes al
-                      que cuenta son el mismo, decirlo sería ruido. */}
-                  {t.period !== t.occurredOn.slice(0, 7) && ` · cuenta en ${monthLabel(t.period, true)}`}
-                  {' · '}{t.categoryName ?? 'Sin categoría'}
-                  {t.scope === 'personal' && ' · personal'}
-                  {t.type === 'aporte' && ` · aporte de ${t.userName ?? ''}`}
-                  {t.fundedBy !== 'oficial' && t.type === 'gasto' && ` · pagó ${t.userName ?? 'uno de los dos'}`}
-                  {t.source === 'gmail' && ' · ✉'}
-                </div>
-              </div>
-              <div className="amount">
-                {t.type === 'aporte' ? '+' : ''}
-                {money(t.amount, currency)}
-              </div>
-            </button>
-          ))}
-        </div>
+        {rows.length === 0 && <p className="muted">No hay movimientos con estos filtros.</p>}
+
+        {porDia.map((grupo) => (
+          <div key={grupo.dia}>
+            <div className="dia-cabecera">
+              <span>{diaLargo(grupo.dia)}</span>
+              {grupo.total > 0 && <span className="num">{money(grupo.total, currency)}</span>}
+            </div>
+
+            <div className="list">
+              {grupo.movimientos.map((t) => (
+                <button
+                  key={t.id}
+                  className="item ghost fila-movimiento"
+                  onClick={() => setDetail(t)}
+                >
+                  <FichaCategoria emoji={t.categoryEmoji} color={t.categoryColor} />
+                  <div className="body">
+                    <div className="title">
+                      {t.merchant ?? t.description ?? 'Movimiento'}
+                      {t.reviewed === 0 && <span className="pill warn" style={{ marginLeft: 6 }}>por revisar</span>}
+                    </div>
+                    <div className="meta">
+                      {/* El día ya lo dice el encabezado del grupo; repetirlo en
+                          cada fila sería ruido. Lo que sí importa acá es cuando
+                          el mes contable no es el de la fecha. */}
+                      {t.period !== t.occurredOn.slice(0, 7) && `Cuenta en ${monthLabel(t.period, true)} · `}
+                      {t.categoryName ?? 'Sin categoría'}
+                      {t.scope === 'personal' && ' · personal'}
+                      {t.type === 'aporte' && ` · aporte de ${t.userName ?? ''}`}
+                      {t.fundedBy !== 'oficial' && t.type === 'gasto' && ` · pagó ${t.userName ?? 'uno de los dos'}`}
+                      {t.source === 'gmail' && ' · ✉'}
+                    </div>
+                  </div>
+                  <div className="amount">
+                    {t.type === 'aporte' ? '+' : ''}
+                    {money(t.amount, currency)}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
 
       {detail && (
@@ -232,16 +292,12 @@ export default function Movimientos() {
         </Sheet>
       )}
 
-      {(adding || editing) && (
+      {editing && (
         <NuevoMovimiento
           month={month}
           existing={editing}
-          onClose={() => {
-            setAdding(false);
-            setEditing(null);
-          }}
+          onClose={() => setEditing(null)}
           onSaved={() => {
-            setAdding(false);
             setEditing(null);
             void load();
           }}

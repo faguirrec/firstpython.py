@@ -8,6 +8,8 @@ import {
   IconoResumen,
   Logo,
 } from './components/Icons';
+import Aviso from './components/Aviso';
+import BotonAnotar from './components/BotonAnotar';
 import Acceso from './pages/Acceso';
 import Hogar from './pages/Hogar';
 import Resumen from './pages/Resumen';
@@ -70,6 +72,9 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
+
+      <Aviso />
+      <BotonAnotar />
 
       <nav className="tabbar">
         {TABS.map(({ to, Icono, label, end }) => (

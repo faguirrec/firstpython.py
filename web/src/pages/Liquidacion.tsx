@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, type Member, type Projection, type Reserve, type Settlement } from '../lib/api';
 import { useSession } from '../lib/session';
-import { currentMonth, money, monthLabel, percent } from '../lib/format';
+import { money, monthLabel, percent } from '../lib/format';
+import { cambiarMes, useMes } from '../lib/mes';
+import { useVersionDatos } from '../lib/datos';
 import Cabecera from '../components/Cabecera';
 import { SplitBar } from '../components/Charts';
 import Metas from '../components/Metas';
@@ -12,7 +14,8 @@ import { alternarPrivacidad, usePrivacidad } from '../lib/privacidad';
 export default function Liquidacion() {
   const { user, household } = useSession();
   const currency = household?.currency ?? 'CLP';
-  const [month, setMonth] = useState(currentMonth());
+  const month = useMes();
+  const version = useVersionDatos();
   const [settlement, setSettlement] = useState<Settlement | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [incomes, setIncomes] = useState<Record<string, string>>({});
@@ -55,7 +58,7 @@ export default function Liquidacion() {
     } catch (err) {
       setError((err as Error).message);
     }
-  }, [month]);
+  }, [month, version]);
 
   useEffect(() => {
     void load();
@@ -94,7 +97,7 @@ export default function Liquidacion() {
       <Cabecera
         hogar="Reparto"
         month={month}
-        onMonthChange={setMonth}
+        onMonthChange={cambiarMes}
         accion={
           <button
             className="small ghost"

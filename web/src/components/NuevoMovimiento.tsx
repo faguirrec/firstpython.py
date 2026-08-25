@@ -15,7 +15,8 @@ type Props = {
    */
   inicial?: { type?: Transaction['type']; userId?: string; amount?: number };
   onClose: () => void;
-  onSaved: () => void;
+  /** Recibe el movimiento guardado, para poder ofrecer deshacerlo. */
+  onSaved: (guardado?: Transaction) => void;
 };
 
 /**
@@ -84,6 +85,9 @@ export default function NuevoMovimiento({ month, existing, inicial, onClose, onS
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
+  /** El movimiento cuenta en un mes distinto al de su fecha. */
+  const desfasado = form.period !== form.occurredOn.slice(0, 7);
+
   const moneda = household?.currency ?? 'CLP';
   const simbolo = ['CLP', 'ARS', 'COP', 'MXN', 'USD'].includes(moneda) ? '$' : moneda;
 
@@ -119,9 +123,10 @@ export default function NuevoMovimiento({ month, existing, inicial, onClose, onS
                 : null,
         reviewed: true,
       };
-      if (existing) await api.updateTransaction(existing.id, payload);
-      else await api.createTransaction(payload);
-      onSaved();
+      const guardado = existing
+        ? await api.updateTransaction(existing.id, payload)
+        : await api.createTransaction(payload);
+      onSaved(existing ? undefined : guardado);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -245,32 +250,53 @@ export default function NuevoMovimiento({ month, existing, inicial, onClose, onS
           </>
         )}
 
-        <div className="grid2">
-          <label className="field">
-            <span>Fecha</span>
-            <input type="date" value={form.occurredOn} onChange={(e) => set('occurredOn', e.target.value)} required />
-          </label>
-          <label className="field">
-            <span>Cuenta para</span>
-            <select value={form.period} onChange={(e) => set('period', e.target.value)}>
-              {mesesPosibles(form.occurredOn, form.period).map((m) => (
-                <option key={m} value={m}>{monthLabel(m)}</option>
-              ))}
-            </select>
-          </label>
-        </div>
+        {/*
+          * Fecha, mes contable y nota se pliegan.
+          *
+          * En la enorme mayoría de los casos se anota algo de hoy que cuenta
+          * en el mes que uno está mirando, y los tres campos ya vienen con esa
+          * respuesta. Tenerlos siempre a la vista alargaba el formulario y
+          * hacía parecer que había que decidirlos.
+          *
+          * Se abre solo cuando hay algo que mirar: al editar un movimiento
+          * viejo, o cuando el mes no es el de la fecha.
+          */}
+        <details className="plegable" open={Boolean(existing) || desfasado}>
+          <summary>
+            Fecha y detalles
+            <span className="resumen-dato">
+              {' · '}{form.occurredOn === today() ? 'hoy' : form.occurredOn}
+              {desfasado && `, cuenta en ${monthLabel(form.period)}`}
+            </span>
+          </summary>
 
-        {form.period !== form.occurredOn.slice(0, 7) && (
-          <p className="muted" style={{ marginTop: 0 }}>
-            Se pagó en {monthLabel(form.occurredOn.slice(0, 7))} pero cuenta en {monthLabel(form.period)}. La fecha
-            queda como está, para que cuadre con la cartola.
-          </p>
-        )}
+          <div className="grid2">
+            <label className="field">
+              <span>Fecha</span>
+              <input type="date" value={form.occurredOn} onChange={(e) => set('occurredOn', e.target.value)} required />
+            </label>
+            <label className="field">
+              <span>Cuenta para</span>
+              <select value={form.period} onChange={(e) => set('period', e.target.value)}>
+                {mesesPosibles(form.occurredOn, form.period).map((m) => (
+                  <option key={m} value={m}>{monthLabel(m)}</option>
+                ))}
+              </select>
+            </label>
+          </div>
 
-        <label className="field">
-          <span>Nota</span>
-          <input value={form.description} onChange={(e) => set('description', e.target.value)} />
-        </label>
+          {desfasado && (
+            <p className="muted" style={{ marginTop: 0 }}>
+              Se pagó en {monthLabel(form.occurredOn.slice(0, 7))} pero cuenta en {monthLabel(form.period)}. La fecha
+              queda como está, para que cuadre con la cartola.
+            </p>
+          )}
+
+          <label className="field" style={{ marginBottom: 0 }}>
+            <span>Nota</span>
+            <input value={form.description} onChange={(e) => set('description', e.target.value)} />
+          </label>
+        </details>
 
         <button className="primary" disabled={busy} style={{ width: '100%', minHeight: 50, fontSize: '1rem' }}>
           {busy ? 'Guardando…' : existing ? 'Guardar cambios' : 'Confirmar'}

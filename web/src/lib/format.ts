@@ -67,6 +67,32 @@ export function dayLabel(date: string): string {
   return `${d}/${m}`;
 }
 
+/**
+ * El día como encabezado de un grupo de movimientos: "Hoy", "Ayer" o
+ * "lunes 25 de agosto".
+ *
+ * Hoy y ayer llevan nombre propio porque es donde está casi todo lo que uno
+ * viene a revisar, y leer la fecha para reconocerlos es trabajo de más.
+ */
+export function diaLargo(fecha: string): string {
+  const hoy = today();
+  if (fecha === hoy) return 'Hoy';
+
+  const ayer = new Date(`${hoy}T12:00:00`);
+  ayer.setDate(ayer.getDate() - 1);
+  if (fecha === ayer.toISOString().slice(0, 10)) return 'Ayer';
+
+  // Mediodía a propósito: con T00:00 el huso horario puede correr el día.
+  const largo = new Date(`${fecha}T12:00:00`).toLocaleDateString('es-CL', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  });
+  // Sólo la primera letra. En CSS, `capitalize` habría dejado "Miércoles 26 De
+  // Agosto", que en español está mal.
+  return largo.charAt(0).toUpperCase() + largo.slice(1);
+}
+
 export function currentMonth(): string {
   return new Date().toISOString().slice(0, 7);
 }

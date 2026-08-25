@@ -182,6 +182,7 @@ export function CategoryBars({
           </div>
           <div style={{ height: 8, background: 'var(--grid)', borderRadius: 4 }}>
             <div
+              className="barra-crece"
               style={{
                 width: `${Math.max((row.total / max) * 100, 2)}%`,
                 height: '100%',
@@ -214,6 +215,7 @@ export function SplitBar({
         {parts.map((part, i) => (
           <div
             key={part.name}
+            className="barra-crece"
             style={{
               width: `${Math.max(part.share * 100, 4)}%`,
               background: part.color,

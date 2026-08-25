@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { useSession } from '../lib/session';
-import { currentMonth, money, monthLabel } from '../lib/format';
+import { money, monthLabel } from '../lib/format';
+import { cambiarMes, useMes } from '../lib/mes';
 import { CategoryBars, TrendChart, type CategorySlice, type TrendPoint } from '../components/Charts';
 import Cabecera from '../components/Cabecera';
 import Presupuesto from '../components/Presupuesto';
@@ -18,14 +19,14 @@ type Vista = (typeof VISTAS)[number]['key'];
 
 export default function Reportes() {
   const [vista, setVista] = useState<Vista>('presupuesto');
-  const [month, setMonth] = useState(currentMonth());
+  const month = useMes();
 
   return (
     <>
       <Cabecera
         hogar="Análisis"
         month={vista !== 'tendencia' ? month : undefined}
-        onMonthChange={vista !== 'tendencia' ? setMonth : undefined}
+        onMonthChange={vista !== 'tendencia' ? cambiarMes : undefined}
       />
 
       <div className="tabs">
