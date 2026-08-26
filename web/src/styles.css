@@ -348,7 +348,17 @@ a { color: var(--series-1); }
 .right { text-align: right; }
 .row { display: flex; align-items: center; justify-content: space-between; gap: var(--e3); }
 .stack { display: flex; flex-direction: column; gap: var(--e3); }
+/*
+ * Dos columnas iguales, y que de verdad se achiquen.
+ *
+ * Sin `min-width: 0` una celda de grid no baja de su ancho intrínseco, y el
+ * campo de fecha nativo de iOS es mucho más ancho que el de un navegador de
+ * escritorio: se desbordaba y se montaba encima del control de al lado. En
+ * Chromium no se nota, así que el síntoma sólo aparecía en el teléfono.
+ */
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--e3); }
+.grid2 > * { min-width: 0; }
+.grid2 input, .grid2 select { max-width: 100%; }
 .wrap { display: flex; flex-wrap: wrap; gap: var(--e2); }
 
 .pill {
@@ -421,7 +431,10 @@ button:active:not(:disabled) { transform: scale(0.97); }
 button.primary { background: var(--marca); border-color: transparent; color: #fff; font-weight: 600; }
 button.ghost { background: transparent; }
 button.danger { color: var(--critical); }
-button { white-space: nowrap; }
+/* Las etiquetas de los botones no se parten en dos líneas: "Cerrar / mes"
+   se lee como un error de maquetación. Las fichas de categoría quedan fuera:
+   ahí el texto largo es el contenido, no una etiqueta. */
+button:not(.chip) { white-space: nowrap; }
 
 button.small { min-height: var(--tocable); padding: var(--e2) var(--e3); font-size: var(--t-sm); }
 button:disabled { opacity: 0.55; cursor: default; }
@@ -575,7 +588,38 @@ details.table-view summary { font-size: var(--t-sm); color: var(--text-secondary
 }
 
 /* Sección replegada: se ofrece, pero no compite con la opción recomendada. */
-details.plegable > summary { cursor: pointer; list-style-position: outside; }
+/*
+ * El triángulo lo dibujamos nosotros.
+ *
+ * Safari coloca el marcador nativo *fuera* del relleno del contenedor, así que
+ * en la hoja modal aparecía pegado al borde de la pantalla, separado de su
+ * texto. Posicionado a mano queda igual en todos los navegadores, y el
+ * contenido del resumen sigue fluyendo como texto normal.
+ */
+details.plegable > summary {
+  cursor: pointer;
+  position: relative;
+  padding-left: var(--e5);
+  list-style: none;
+}
+
+details.plegable > summary::-webkit-details-marker { display: none; }
+
+details.plegable > summary::before {
+  content: '';
+  position: absolute;
+  left: var(--e2);
+  top: 0.55em;
+  width: 0;
+  height: 0;
+  border-left: 5px solid currentColor;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  opacity: 0.5;
+  transition: transform var(--transicion);
+}
+
+details.plegable[open] > summary::before { transform: rotate(90deg); }
 details.plegable > summary strong {
   display: block;
   font-size: var(--t-lg);
@@ -618,8 +662,53 @@ details.plegable > summary .resumen-dato {
   max-height: 90vh;
   overflow-y: auto;
   border-radius: 18px 18px 0 0;
-  padding: var(--e4) var(--e4) calc(var(--e5) + env(safe-area-inset-bottom));
+  padding: 0 var(--e4);
 }
+
+/*
+ * El título y la equis se quedan arriba mientras se baja por el formulario.
+ *
+ * Antes se iban con el desplazamiento: a media hoja uno ya no sabía qué estaba
+ * llenando ni tenía cómo cerrar sin volver hasta arriba. El fondo es opaco a
+ * propósito —el contenido pasa por debajo—.
+ */
+.sheet > .card-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin: 0 calc(var(--e4) * -1) var(--e3);
+  padding: var(--e4) var(--e4) var(--e3);
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--grid);
+}
+
+/*
+ * Y el botón de confirmar se queda abajo.
+ *
+ * Es el final del gesto, y tenerlo que buscar bajando por el formulario después
+ * de escribir el monto —que es lo único obligatorio— era pedir un viaje de más
+ * en el caso normal.
+ */
+.sheet .pie-hoja {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin: var(--e4) calc(var(--e4) * -1) 0;
+  padding: var(--e3) var(--e4) calc(var(--e3) + env(safe-area-inset-bottom));
+  background: var(--surface-1);
+  border-top: 1px solid var(--grid);
+}
+
+.sheet .pie-hoja button { width: 100%; }
+
+/*
+ * Sitio para el pie al enfocar un campo.
+ *
+ * Cuando el teclado sube, el navegador desplaza el campo enfocado hasta dejarlo
+ * "a la vista" —pero no sabe del pie fijo, así que lo deja justo debajo—.
+ * `scroll-margin-bottom` le dice cuánto espacio dejar libre.
+ */
+.sheet input, .sheet select, .sheet textarea { scroll-margin-bottom: 88px; }
 
 @media (min-width: 640px) {
   .sheet-backdrop { align-items: center; }
@@ -1138,7 +1227,11 @@ details.plegable > summary .resumen-dato {
   flex-direction: column;
   align-items: center;
   gap: var(--e1);
-  min-width: 72px;
+  /* 112px es el ancho donde el nombre más largo del hogar de ejemplo —"Cuentas
+     (luz, agua, gas)"— entra en dos líneas. Más angosto y hay que recortar;
+     más ancho y caben menos fichas de un vistazo. */
+  width: 112px;
+  flex: none;
   padding: var(--e2) var(--e2);
   border-radius: 14px;
   border: 1.5px solid var(--border);
@@ -1148,7 +1241,7 @@ details.plegable > summary .resumen-dato {
   text-align: center;
   scroll-snap-align: start;
   min-height: 0;
-  line-height: 1.15;
+  line-height: 1.2;
   transition: border-color var(--transicion), background-color var(--transicion);
 }
 
@@ -1159,11 +1252,20 @@ details.plegable > summary .resumen-dato {
   font-weight: 600;
 }
 
+/*
+ * El nombre de la categoría, entero.
+ *
+ * Las fichas eran de 72px y el hueco del texto quedaba en 62: se recortaban
+ * los diez nombres, no sólo los largos —"Cuentas (luz, agua, gas)" necesitaba
+ * 146px—. Con la ficha más ancha y dos líneas, entran todos; la fila se
+ * desliza con el pulgar, así que el ancho extra no cuesta nada.
+ */
 .chip span.nombre {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  hyphens: auto;
 }
 
 /* Control segmentado: dos o tres opciones a la vista, sin desplegar nada. */
@@ -1226,4 +1328,4 @@ details.plegable > summary .resumen-dato {
   max-width: 100%;
 }
 
-.chip { min-width: 80px; }
+

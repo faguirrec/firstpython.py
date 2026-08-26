@@ -298,9 +298,14 @@ export default function NuevoMovimiento({ month, existing, inicial, onClose, onS
           </label>
         </details>
 
-        <button className="primary" disabled={busy} style={{ width: '100%', minHeight: 50, fontSize: 'var(--t-lg)' }}>
-          {busy ? 'Guardando…' : existing ? 'Guardar cambios' : 'Confirmar'}
-        </button>
+        {/* Fijo abajo: el monto es lo único obligatorio, así que en el caso
+            normal —anotar y confirmar— no debería hacer falta bajar por todo
+            el formulario para llegar al botón. */}
+        <div className="pie-hoja">
+          <button className="primary" disabled={busy} style={{ minHeight: 50, fontSize: 'var(--t-lg)' }}>
+            {busy ? 'Guardando…' : existing ? 'Guardar cambios' : 'Confirmar'}
+          </button>
+        </div>
       </form>
     </Sheet>
   );
