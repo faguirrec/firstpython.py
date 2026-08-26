@@ -157,7 +157,7 @@ export default function Acceso() {
                   required
                   autoComplete="new-password"
                 />
-                {mismatch && <em style={{ color: 'var(--critical)', fontSize: '0.78rem' }}>No coinciden.</em>}
+                {mismatch && <em style={{ color: 'var(--critical)', fontSize: 'var(--t-sm)' }}>No coinciden.</em>}
               </label>
 
               {!codeFromUrl && (

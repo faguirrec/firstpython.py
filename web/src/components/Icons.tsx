@@ -159,8 +159,8 @@ export function Marca({ size = 34 }: { size?: number }) {
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
       <Logo size={size} />
       <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1 }}>
-        <strong style={{ fontSize: '1.02rem', letterSpacing: '-0.01em' }}>MyHaus</strong>
-        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>según lo que gana cada uno</span>
+        <strong style={{ fontSize: 'var(--t-lg)', letterSpacing: '-0.01em' }}>MyHaus</strong>
+        <span style={{ fontSize: 'var(--t-xs)', color: 'var(--text-muted)' }}>según lo que gana cada uno</span>
       </span>
     </span>
   );

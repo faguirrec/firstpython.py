@@ -171,11 +171,11 @@ export function CategoryBars({
           <div className="row" style={{ marginBottom: 3 }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
               <FichaCategoria emoji={row.emoji ?? null} color={row.color} size={26} />
-              <span style={{ fontSize: '0.86rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: 'var(--t-md)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {row.category}
               </span>
             </span>
-            <span className="num" style={{ fontSize: '0.86rem', whiteSpace: 'nowrap' }}>
+            <span className="num" style={{ fontSize: 'var(--t-md)', whiteSpace: 'nowrap' }}>
               {money(row.total, currency)}
               <span className="muted"> · {Math.round((row.total / grandTotal) * 100)}%</span>
             </span>
@@ -221,7 +221,7 @@ export function SplitBar({
               background: part.color,
               display: 'grid',
               placeItems: 'center',
-              fontSize: '0.7rem',
+              fontSize: 'var(--t-xs)',
               color: '#fff',
               fontWeight: 600,
             }}

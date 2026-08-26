@@ -255,6 +255,30 @@ Dónde publicarlo, cómo dejar la app en `app.myhaus.cl` y cómo mudarse despué
 un servidor propio están en **[HOSTING.md](HOSTING.md)**, con el
 `docker-compose.yml` y el script de respaldo ya listos en `hosting/`.
 
+## El sistema visual
+
+Está todo en `web/src/styles.css`, arriba, en variables. Son pocas a propósito:
+la mitad del trabajo de que una app se vea terminada es no inventar un valor
+nuevo cada vez.
+
+**Tipografía: cuatro tamaños de texto y tres de cifra.** Antes había veintisiete
+declaraciones distintas, doce de ellas entre 0.72 y 0.94rem. Nadie ve la
+diferencia entre 0.82 y 0.84, pero la suma de todas es exactamente lo que hace
+que una pantalla se vea sin resolver. Ahora cada paso se nota. Las cifras van en
+su propia escala: en una app de plata el número es el contenido, no un texto más
+grande.
+
+**Espaciado en múltiplos de cuatro** (`--e1` … `--e6`). Mismo motivo: márgenes
+de 6, 7, 10 y 11 píxeles repartidos por la hoja no se leen como decisiones.
+
+**Nada táctil bajo 44px** (`--tocable`). Es lo que pide Apple y hay razón: por
+debajo el dedo falla y la app se siente frágil sin que uno sepa decir por qué.
+
+**Sin tablas de más de dos columnas.** Cuatro columnas de plata no caben en un
+teléfono: los nombres se parten en tres líneas y las cifras quedan pegadas. El
+reparto, la liquidación, el fondo de reserva y la comparación por categoría usan
+fichas o filas.
+
 ## Estructura
 
 ```

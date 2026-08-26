@@ -61,22 +61,25 @@ export default function Comparacion({ month }: { month: string }) {
     <>
       <div className="card">
         <h2>Comparación con {monthLabel(data.previousMonth)}</h2>
-        <div className="grid2" style={{ marginTop: 10 }}>
+        {/* Etiqueta a la izquierda y cifra a la derecha, una debajo de la otra.
+            En dos columnas, la etiqueta más larga se partía en dos líneas y la
+            otra no, así que las dos cifras quedaban a distinta altura. */}
+        <div className="comparativas">
           <div>
-            <div className="label">Contra el mes anterior</div>
-            <div style={{ fontSize: '1.2rem', fontWeight: 600 }}>
+            <span className="label">Contra el mes anterior</span>
+            <span className="cifra-sm">
               <Delta value={total} pct={data.totalPrevious > 0 ? total / data.totalPrevious : null} currency={currency} />
-            </div>
+            </span>
           </div>
           <div>
-            <div className="label">Contra el promedio</div>
-            <div style={{ fontSize: '1.2rem', fontWeight: 600 }}>
+            <span className="label">Contra el promedio de los meses</span>
+            <span className="cifra-sm">
               <Delta
                 value={vsPromedio}
                 pct={data.totalAverage > 0 ? vsPromedio / data.totalAverage : null}
                 currency={currency}
               />
-            </div>
+            </span>
           </div>
         </div>
         <p className="muted" style={{ marginBottom: 0, marginTop: 10 }}>
@@ -109,26 +112,27 @@ export default function Comparacion({ month }: { month: string }) {
 
       <div className="card">
         <h3>Todas las categorías</h3>
-        <table className="data">
-          <thead>
-            <tr>
-              <th>Categoría</th>
-              <th>{monthLabel(data.previousMonth, true)}</th>
-              <th>{monthLabel(data.month, true)}</th>
-              <th>Promedio</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.categories.map((row) => (
-              <tr key={row.category}>
-                <td>{row.category}</td>
-                <td className="num">{money(row.previous, currency)}</td>
-                <td className="num">{money(row.current, currency)}</td>
-                <td className="num">{money(row.average, currency)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        {/*
+          * Cuatro columnas de plata no caben en un teléfono: cada nombre de
+          * categoría se partía en dos líneas y las filas quedaban de alturas
+          * distintas. Acá la categoría manda la fila, el mes que se mira va a
+          * la derecha en grande, y los dos datos de contexto —el mes anterior y
+          * el promedio— van debajo, que es el papel que cumplen.
+          */}
+        <div className="list">
+          {data.categories.map((row) => (
+            <div className="item" key={row.category}>
+              <div className="body">
+                <div className="title">{row.category}</div>
+                <div className="meta">
+                  {monthLabel(data.previousMonth, true)} {money(row.previous, currency)}
+                  {' · promedio '}{money(row.average, currency)}
+                </div>
+              </div>
+              <div className="amount">{money(row.current, currency)}</div>
+            </div>
+          ))}
+        </div>
       </div>
     </>
   );

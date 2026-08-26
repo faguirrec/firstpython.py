@@ -191,7 +191,7 @@ export default function Presupuesto({ month }: { month: string }) {
               <div className="row" style={{ marginBottom: 4 }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                   <FichaCategoria emoji={c.emoji} color={c.color} size={26} />
-                  <span style={{ fontSize: '0.88rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <span style={{ fontSize: 'var(--t-md)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {c.category}
                   </span>
                 </span>
@@ -206,7 +206,7 @@ export default function Presupuesto({ month }: { month: string }) {
                     onBlur={(e) => void save(c.categoryId, e.target.value)}
                   />
                 ) : (
-                  <span className="num" style={{ fontSize: '0.86rem', whiteSpace: 'nowrap' }}>
+                  <span className="num" style={{ fontSize: 'var(--t-md)', whiteSpace: 'nowrap' }}>
                     {money(c.spent, currency)}
                     <span className="muted"> / {money(c.budget, currency)}</span>
                   </span>

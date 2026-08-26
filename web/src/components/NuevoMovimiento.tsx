@@ -298,7 +298,7 @@ export default function NuevoMovimiento({ month, existing, inicial, onClose, onS
           </label>
         </details>
 
-        <button className="primary" disabled={busy} style={{ width: '100%', minHeight: 50, fontSize: '1rem' }}>
+        <button className="primary" disabled={busy} style={{ width: '100%', minHeight: 50, fontSize: 'var(--t-lg)' }}>
           {busy ? 'Guardando…' : existing ? 'Guardar cambios' : 'Confirmar'}
         </button>
       </form>

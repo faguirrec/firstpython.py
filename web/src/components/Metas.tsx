@@ -57,12 +57,12 @@ export default function Metas() {
               <div key={goal.id}>
                 <div className="row" style={{ marginBottom: 4 }}>
                   <span style={{ minWidth: 0 }}>
-                    <strong style={{ fontSize: '0.92rem' }}>
+                    <strong style={{ fontSize: 'var(--t-md)' }}>
                       {i + 1}. {goal.name}
                     </strong>
                     {goal.complete && <span className="pill good" style={{ marginLeft: 6 }}>✓ lograda</span>}
                   </span>
-                  <span className="num" style={{ fontSize: '0.86rem', whiteSpace: 'nowrap' }}>
+                  <span className="num" style={{ fontSize: 'var(--t-md)', whiteSpace: 'nowrap' }}>
                     {money(goal.funded, currency)}
                     <span className="muted"> / {money(goal.targetAmount, currency)}</span>
                   </span>

@@ -294,24 +294,39 @@ export default function Resumen() {
             <Link to="/liquidacion" className="muted">Ver detalle →</Link>
           </div>
 
-          <div className="list">
+          <div className="fichas-persona">
             {/* Sin tu propia fila: el encabezado de arriba ya dice cómo vas tú,
                 y repetirlo a media pantalla de distancia sólo alarga la vista. */}
             {settlement.members.map((m, i) => ({ m, i })).filter(({ m }) => m.userId !== user?.id).map(({ m, i }) => {
               const debe = m.deviation < -0.5;
               return (
-                <div className="item" key={m.userId}>
-                  <Avatar nombre={m.name} indice={i} />
-                  <div className="body">
-                    <div className="title">{m.name}</div>
-                    <div className="meta">
-                      Le toca {money(m.fairShare, currency)} ({percent(m.incomeShare)}) · lleva puesto{' '}
-                      {money(m.contributed, currency)}
-                    </div>
+                /* La misma ficha que en Reparto: el saldo arriba a la derecha
+                   y los dos datos que lo explican abajo, en columnas. Antes el
+                   detalle se partía en tres líneas al lado de una pastilla y la
+                   fila quedaba descuadrada. */
+                <div className="ficha-persona" key={m.userId}>
+                  <div className="ficha-persona-cabeza">
+                    <span className="quien">
+                      <Avatar nombre={m.name} indice={i} size={26} />
+                      <span>
+                        <strong>{m.name}</strong>
+                        <span className="muted"> · {percent(m.incomeShare)}</span>
+                      </span>
+                    </span>
+                    <span className={`pill ${debe ? 'alert' : 'good'}`}>
+                      {debe ? '▼ debe' : '▲ al día'} {money(Math.abs(m.deviation), currency)}
+                    </span>
                   </div>
-                  <span className={`pill ${debe ? 'alert' : 'good'}`}>
-                    {debe ? '▼ debe' : '▲ al día'} {money(Math.abs(m.deviation), currency)}
-                  </span>
+                  <div className="ficha-persona-datos">
+                    <span>
+                      <span className="label">Le toca</span>
+                      <span className="num">{money(m.fairShare, currency)}</span>
+                    </span>
+                    <span>
+                      <span className="label">Lleva puesto</span>
+                      <span className="num">{money(m.contributed, currency)}</span>
+                    </span>
+                  </div>
                 </div>
               );
             })}

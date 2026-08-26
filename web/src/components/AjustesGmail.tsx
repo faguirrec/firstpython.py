@@ -78,7 +78,7 @@ export default function AjustesGmail() {
                 Google rechaza la autorización.
               </p>
               <div className="row" style={{ gap: 8 }}>
-                <code style={{ fontSize: '0.76rem', wordBreak: 'break-all', flex: 1 }}>{status.redirectUri}</code>
+                <code style={{ fontSize: 'var(--t-sm)', wordBreak: 'break-all', flex: 1 }}>{status.redirectUri}</code>
                 <button
                   className="small"
                   style={{ flex: 'none' }}
