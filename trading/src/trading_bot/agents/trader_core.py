@@ -26,6 +26,8 @@ from ..db import Store
 from ..logging_setup import get_logger
 from ..signals import fuse_signals, technical_signals
 from ..signals.combiner import FusedSignal, aggregate_sentiment
+from ..marketdata import MarketData, MarketDataError
+from ..marketdata.providers import AlpacaData
 from ..signals.indicators import regime_score
 from .risk_sentinel import RiskAssessment, RiskSentinel
 
@@ -78,12 +80,18 @@ class TraderCore:
         risk: RiskSentinel,
         *,
         news=None,
+        data=None,
     ) -> None:
         self.settings = settings
         self.store = store
         self.broker = broker
         self.risk = risk
         self.news = news
+        # Prices may come from a different provider than the one we trade
+        # through; orders and account state always come from the broker.
+        if data is None:
+            data = MarketData(AlpacaData(broker, feed=settings.alpaca_feed))
+        self.data = data
         self._regime_cache: tuple[Any, float | None] = (None, None)
         self.store.ensure_weights(settings.signals.seed_weights)
 
@@ -291,7 +299,7 @@ class TraderCore:
             if self._has_open_exit(int(trade["id"])):
                 continue
 
-            price = position.current_price or self.broker.get_latest_price(symbol) or 0.0
+            price = position.current_price or self._price(symbol) or 0.0
             if price <= 0:
                 continue
             reason = self._exit_reason(trade, price)
@@ -410,11 +418,11 @@ class TraderCore:
                 if signal is None:
                     continue
                 evaluated += 1
-                price = self.broker.get_latest_price(symbol)
+                price = self._price(symbol)
                 if not price or price <= 0:
                     continue
                 candidates.append((signal, price, self._quote(symbol)))
-            except BrokerError as exc:
+            except (BrokerError, MarketDataError) as exc:
                 errors += 1
                 log.warning("signal_failed", extra={"event": {"symbol": symbol, "error": str(exc)}})
 
@@ -548,7 +556,7 @@ class TraderCore:
     # --------------------------------------------------------------- signals
     def _signal_for(self, symbol: str, *, regime: float | None = None) -> FusedSignal | None:
         config = self.settings.signals
-        bars = self.broker.get_bars(symbol, limit=config.bars_lookback)
+        bars = self._bars(symbol, limit=config.bars_lookback)
         if len(bars) < max(config.slow_ma, config.rsi_period) + 2:
             return None
         technical = technical_signals(
@@ -583,18 +591,33 @@ class TraderCore:
         if cached_at is not None and (now - cached_at).total_seconds() < REGIME_CACHE_SECONDS:
             return cached_value
         try:
-            bars = self.broker.get_bars(self.settings.benchmark, limit=60, timeframe="1Day")
-        except BrokerError:
+            bars = self._bars(self.settings.benchmark, limit=60, timeframe="1Day")
+        except (BrokerError, MarketDataError):
             return cached_value
         value = regime_score(bars, self.settings.signals.fast_ma, self.settings.signals.slow_ma)
         self._regime_cache = (now, value)
         return value
 
     # ---------------------------------------------------------------- pricing
-    def _quote(self, symbol: str) -> Quote | None:
+    def _bars(self, symbol: str, *, limit: int = 120, timeframe: str = "15Min") -> list[Bar]:
+        return self.data.get_bars(symbol, limit=limit, timeframe=timeframe)
+
+    def _price(self, symbol: str) -> float | None:
         try:
-            return self.broker.get_latest_quote(symbol)
-        except BrokerError:
+            return self.data.get_latest_price(symbol)
+        except (BrokerError, MarketDataError):
+            return None
+
+    def _quote(self, symbol: str) -> Quote | None:
+        """A real-time quote, or ``None`` when the feed cannot supply one.
+
+        ``None`` is not a failure: it makes ``_limit_price`` and the net-EV check
+        fall back to the conservative default half-spread rather than trust a
+        stale bid/ask.
+        """
+        try:
+            return self.data.get_latest_quote(symbol)
+        except (BrokerError, MarketDataError):
             return None
 
     def _limit_price(self, side: str, reference_price: float, quote: Quote | None) -> float:
@@ -615,11 +638,7 @@ class TraderCore:
 
     # -------------------------------------------------------------- portfolio
     def _snapshot_equity(self, account: AccountSnapshot, positions: Sequence[Position]) -> None:
-        benchmark_price = None
-        try:
-            benchmark_price = self.broker.get_latest_price(self.settings.benchmark)
-        except BrokerError:
-            pass
+        benchmark_price = self._price(self.settings.benchmark)
         self.store.record_equity(
             {
                 "equity": account.equity,

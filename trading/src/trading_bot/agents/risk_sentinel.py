@@ -120,8 +120,14 @@ class RiskSentinel:
         self.store.record_event("kill_switch_released", note, severity="warning")
 
     # ------------------------------------------------------------ account state
-    def account_posture(self, account: AccountSnapshot) -> AccountPosture:
-        """Translate the broker account into the constraints we must respect."""
+    def account_posture(
+        self, account: AccountSnapshot, *, as_of: str | None = None
+    ) -> AccountPosture:
+        """Translate the broker account into the constraints we must respect.
+
+        ``as_of`` is the trading day being evaluated; it defaults to today and is
+        set explicitly when replaying history.
+        """
         blocked = account.trading_blocked or account.account_blocked
         block_reason = ""
         if account.account_blocked:
@@ -134,7 +140,7 @@ class RiskSentinel:
         pdt_restricted = (not account.is_cash_account) and under_threshold
 
         # Trust the broker's count when it has one; our own tally is the floor.
-        local_count = self.store.day_trades_in_window()
+        local_count = self.store.day_trades_in_window(as_of=as_of)
         used = max(account.daytrade_count, local_count)
         if pdt_restricted:
             allowance = self.risk.max_day_trades_window - self.risk.day_trade_safety_buffer
@@ -156,9 +162,11 @@ class RiskSentinel:
         )
 
     # ------------------------------------------------------------ global limits
-    def daily_loss_state(self, account: AccountSnapshot) -> dict[str, Any]:
-        """Today's P&L against the daily loss limit."""
-        start = self.store.first_equity_of_day()
+    def daily_loss_state(
+        self, account: AccountSnapshot, *, as_of: str | None = None
+    ) -> dict[str, Any]:
+        """The day's P&L against the daily loss limit."""
+        start = self.store.first_equity_of_day(as_of)
         start_equity = float(start["equity"]) if start else account.equity
         change = account.equity - start_equity
         limit = -abs(self.risk.max_daily_loss_pct) * start_equity if start_equity > 0 else 0.0
@@ -188,11 +196,15 @@ class RiskSentinel:
         }
 
     def check_trading_allowed(
-        self, account: AccountSnapshot, *, positions: Sequence[Position] = ()
+        self,
+        account: AccountSnapshot,
+        *,
+        positions: Sequence[Position] = (),
+        as_of: str | None = None,
     ) -> tuple[bool, str, dict[str, Any]]:
         """Gate applied before any new entry is even considered."""
-        posture = self.account_posture(account)
-        daily = self.daily_loss_state(account)
+        posture = self.account_posture(account, as_of=as_of)
+        daily = self.daily_loss_state(account, as_of=as_of)
         drawdown = self.drawdown_state(account)
         details: dict[str, Any] = {
             "posture": posture.as_dict(),
@@ -211,7 +223,7 @@ class RiskSentinel:
         if daily["breached"]:
             return False, "daily_loss_limit_reached", details
 
-        trades_today = self.store.count_filled_entries_today()
+        trades_today = self.store.count_filled_entries_today(as_of)
         details["trades_today"] = trades_today
         if trades_today >= self.risk.max_trades_per_day:
             return False, "max_trades_per_day_reached", details
@@ -270,9 +282,12 @@ class RiskSentinel:
         account: AccountSnapshot,
         positions: Sequence[Position] = (),
         half_spread_bps: float | None = None,
+        as_of: str | None = None,
     ) -> RiskAssessment:
         """Full go/no-go for opening a position."""
-        allowed, reason, details = self.check_trading_allowed(account, positions=positions)
+        allowed, reason, details = self.check_trading_allowed(
+            account, positions=positions, as_of=as_of
+        )
         if not allowed:
             return RiskAssessment(False, reason, symbol, side, details=details)
 
@@ -319,7 +334,7 @@ class RiskSentinel:
 
         # An entry we could not exit today without breaking PDT is still fine -
         # it just means the position may have to be held overnight. Record it.
-        posture = self.account_posture(account)
+        posture = self.account_posture(account, as_of=as_of)
         details["can_close_same_day"] = posture.day_trades_remaining > 0
 
         return RiskAssessment(
@@ -334,6 +349,7 @@ class RiskSentinel:
         trade: Mapping[str, Any],
         account: AccountSnapshot,
         exit_reason: str,
+        as_of: str | None = None,
     ) -> RiskAssessment:
         """Exits are permitted by default; only PDT can defer a same-day close.
 
@@ -342,14 +358,14 @@ class RiskSentinel:
         """
         symbol = str(trade.get("symbol", "")).upper()
         quantity = float(trade.get("quantity", 0.0) or 0.0)
-        posture = self.account_posture(account)
+        posture = self.account_posture(account, as_of=as_of)
         details: dict[str, Any] = {"posture": posture.as_dict(), "exit_reason": exit_reason}
 
         if quantity <= 0:
             return RiskAssessment(False, "nothing_to_exit", symbol, "sell", details=details)
 
         opened_day = str(trade.get("opened_day") or "")
-        would_be_day_trade = opened_day == trading_day().isoformat()
+        would_be_day_trade = opened_day == (as_of or trading_day().isoformat())
         details["would_be_day_trade"] = would_be_day_trade
 
         urgent = exit_reason in {"stop_loss", "kill_switch", "drawdown", "daily_loss_limit", "manual"}

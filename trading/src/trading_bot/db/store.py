@@ -396,17 +396,21 @@ class Store:
     def mark_trade_reviewed(self, trade_id: int) -> None:
         self._exec("UPDATE trades SET reviewed = 1 WHERE id = ?", (trade_id,))
 
-    def day_trades_in_window(self, business_days: int = 5) -> int:
+    def day_trades_in_window(
+        self, business_days: int = 5, *, as_of: date | str | None = None
+    ) -> int:
         """Count round trips opened and closed on the same session recently.
 
         This is the bot's own conservative tally; ``account.daytrade_count`` from
-        the broker remains authoritative when available.
+        the broker remains authoritative when available. ``as_of`` anchors the
+        window to a historical date so the backtester sees the same rule.
         """
-        cutoff = (utcnow() - timedelta(days=business_days * 2)).date().isoformat()
+        reference = date.fromisoformat(_day_key(as_of))
+        cutoff = (reference - timedelta(days=business_days * 2)).isoformat()
         row = self._row(
             "SELECT COUNT(*) AS n FROM trades WHERE status='closed'"
-            " AND opened_day = closed_day AND closed_day >= ?",
-            (cutoff,),
+            " AND opened_day = closed_day AND closed_day >= ? AND closed_day <= ?",
+            (cutoff, reference.isoformat()),
         )
         return int(row["n"]) if row else 0
 
@@ -436,24 +440,32 @@ class Store:
         return self._rows("SELECT * FROM equity_snapshots ORDER BY created_at")
 
     def first_equity_of_day(self, day: date | str | None = None) -> dict[str, Any] | None:
+        # `id` breaks ties: two snapshots can share a timestamp, and then
+        # "first" and "last" would otherwise be whatever SQLite felt like.
         return self._row(
-            "SELECT * FROM equity_snapshots WHERE trading_day = ? ORDER BY created_at LIMIT 1",
+            "SELECT * FROM equity_snapshots WHERE trading_day = ?"
+            " ORDER BY created_at, id LIMIT 1",
             (_day_key(day),),
         )
 
     def latest_equity(self) -> dict[str, Any] | None:
-        return self._row("SELECT * FROM equity_snapshots ORDER BY created_at DESC LIMIT 1")
+        return self._row("SELECT * FROM equity_snapshots ORDER BY created_at DESC, id DESC LIMIT 1")
 
     def peak_equity(self) -> float | None:
         row = self._row("SELECT MAX(equity) AS peak FROM equity_snapshots")
         return float(row["peak"]) if row and row["peak"] is not None else None
 
     def daily_equity_curve(self) -> list[dict[str, Any]]:
-        """Last equity snapshot of each trading day, plus the benchmark price."""
+        """Last equity snapshot of each trading day, plus the benchmark price.
+
+        Selected by `id` rather than `created_at`: same-timestamp snapshots would
+        otherwise yield two rows for one day and corrupt the equity curve.
+        """
         return self._rows(
             "SELECT trading_day, equity, benchmark_price, created_at FROM equity_snapshots e"
-            " WHERE created_at = (SELECT MAX(created_at) FROM equity_snapshots x"
-            "                    WHERE x.trading_day = e.trading_day)"
+            " WHERE e.id = (SELECT x.id FROM equity_snapshots x"
+            "               WHERE x.trading_day = e.trading_day"
+            "               ORDER BY x.created_at DESC, x.id DESC LIMIT 1)"
             " ORDER BY trading_day"
         )
 

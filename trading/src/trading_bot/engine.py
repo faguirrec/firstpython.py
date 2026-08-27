@@ -21,6 +21,7 @@ from .clock import iso, local_session, parse_iso, trading_day, utcnow
 from .config import Settings
 from .db import Store
 from .logging_setup import get_logger
+from .marketdata import build_market_data
 from .metrics import compute_metrics, daily_snapshot
 from .reporting import daily_report, final_report, write_dashboard
 
@@ -40,9 +41,12 @@ class TradingEngine:
             settings.alpaca_api_key, settings.alpaca_secret_key, base_url=settings.alpaca_base_url
         )
         self.alerter = Alerter(settings)
+        self.data = build_market_data(settings, self.broker)
         self.risk = RiskSentinel(settings, self.store)
         self.news = NewsPulse(settings, self.store, self.broker)
-        self.trader = TraderCore(settings, self.store, self.broker, self.risk, news=self.news)
+        self.trader = TraderCore(
+            settings, self.store, self.broker, self.risk, news=self.news, data=self.data
+        )
         self.learning = LearningLoop(settings, self.store)
         self.breaker = CircuitBreaker(
             self.store,
@@ -243,6 +247,7 @@ class TradingEngine:
             "checked_at": iso(utcnow()),
             "mode": "paper" if self.settings.is_paper else "live",
             "session": local_session(),
+            "market_data": self.data.describe(),
             "kill_switch": self.store.get_state("kill_switch") or {"active": False},
             "circuit_trading": self.breaker.state().as_dict(),
             "circuit_news": self.news_breaker.state().as_dict(),

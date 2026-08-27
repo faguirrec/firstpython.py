@@ -50,6 +50,19 @@ def build_parser() -> argparse.ArgumentParser:
     dashboard = sub.add_parser("dashboard", help="write the HTML dashboard")
     dashboard.add_argument("--out", default="reports/dashboard.html")
     sub.add_parser("status", help="print account, risk and metrics status")
+
+    backtest = sub.add_parser("backtest", help="replay the strategy over historical bars")
+    _add_data_args(backtest)
+    backtest.add_argument("--warmup", type=int, default=None, help="bars reserved to prime indicators")
+
+    calibrate_cmd = sub.add_parser(
+        "calibrate", help="grid-search the strategy parameters over history"
+    )
+    _add_data_args(calibrate_cmd)
+    calibrate_cmd.add_argument("--min-trades", type=int, default=10,
+                               help="closed trades required before a result counts (default 10)")
+    calibrate_cmd.add_argument("--out-of-sample", type=float, default=0.3,
+                               help="fraction of history held back for validation (0 disables)")
     kill = sub.add_parser("kill-switch", help="engage or release the kill switch")
     kill.add_argument("action", choices=["on", "off", "status"])
     kill.add_argument("--reason", default="manual")
@@ -57,6 +70,16 @@ def build_parser() -> argparse.ArgumentParser:
     flatten.add_argument("--reason", default="manual")
     flatten.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
     return parser
+
+
+def _add_data_args(parser: argparse.ArgumentParser) -> None:
+    """Arguments shared by the history-driven commands."""
+    parser.add_argument("--symbols", default=None, help="comma-separated; defaults to UNIVERSE")
+    parser.add_argument("--source", default="alpaca", choices=["alpaca", "csv", "yfinance"])
+    parser.add_argument("--timeframe", default="1Day", help="1Day, 1Hour, 15Min ...")
+    parser.add_argument("--limit", type=int, default=750, help="bars per symbol (alpaca source)")
+    parser.add_argument("--days", type=int, default=730, help="lookback in days (yfinance source)")
+    parser.add_argument("--csv-dir", default=".", help="directory holding <SYMBOL>.csv")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -120,6 +143,9 @@ def _dispatch(args: argparse.Namespace, settings: Settings, engine: TradingEngin
         _emit({"dashboard": str(path)}, as_json=args.json)
         return 0
 
+    if command in ("backtest", "calibrate"):
+        return _run_history_command(args, settings, engine)
+
     if command == "status":
         _emit(engine.status(), as_json=True)
         return 0
@@ -140,6 +166,100 @@ def _dispatch(args: argparse.Namespace, settings: Settings, engine: TradingEngin
         return 0
 
     return 1
+
+
+def _load_history(args: argparse.Namespace, settings: Settings, engine: TradingEngine):
+    """Load bars for the requested symbols, always including the benchmark."""
+    from .backtest import load_bars
+
+    symbols = [s.strip().upper() for s in args.symbols.split(",")] if args.symbols else list(
+        settings.universe
+    )
+    if settings.benchmark not in symbols:
+        symbols.append(settings.benchmark)
+
+    return load_bars(
+        symbols,
+        source=args.source,
+        broker=engine.broker,
+        timeframe=args.timeframe,
+        limit=args.limit,
+        days=args.days,
+        csv_dir=args.csv_dir,
+    )
+
+
+def _run_history_command(args: argparse.Namespace, settings: Settings, engine: TradingEngine) -> int:
+    from .backtest import calibrate, run_backtest
+
+    bars = _load_history(args, settings, engine)
+    if not bars:
+        print("No se pudieron cargar barras. Revisa --source, las credenciales o los símbolos.")
+        return 1
+
+    if args.command == "backtest":
+        try:
+            result = run_backtest(settings, bars, warmup=args.warmup)
+        except ValueError as exc:
+            print(f"No se pudo simular: {exc}")
+            return 1
+        if args.json:
+            print(json.dumps(result.summary(), indent=2, default=str))
+        else:
+            print(_backtest_text(result, settings))
+        return 0
+
+    report = calibrate(
+        settings,
+        bars,
+        min_trades=args.min_trades,
+        out_of_sample_fraction=args.out_of_sample,
+    )
+    if args.json:
+        print(json.dumps(report.as_dict(), indent=2, default=str))
+    else:
+        print(report.text())
+    return 0
+
+
+def _backtest_text(result: Any, settings: Settings) -> str:
+    summary = result.summary()
+    metrics = result.metrics
+    lines = [
+        f"Backtest {', '.join(summary['symbols'])}",
+        f"  Periodo:        {summary['start']} → {summary['end']}  ({summary['bars']} barras)",
+        f"  Capital inicial:${metrics.start_equity:,.2f}  →  final ${metrics.current_equity:,.2f}",
+        f"  P&L neto:       ${metrics.net_pnl:,.4f}  ({metrics.return_pct * 100:+.2f}%)",
+        f"  Trades:         {metrics.trades_total} "
+        f"({metrics.wins}W/{metrics.losses}L, win rate {metrics.win_rate * 100:.1f}%)",
+        f"  Expectativa:    ${metrics.expectancy:,.5f} por trade",
+        f"  Costos totales: ${metrics.total_fees:,.4f}"
+        + (
+            f"  (fees/P&L bruto: {metrics.fee_to_pnl_ratio:.2f})"
+            if metrics.fee_to_pnl_ratio is not None
+            else ""
+        ),
+        f"  Drawdown máx.:  {metrics.max_drawdown_pct * 100:.2f}%",
+        f"  Benchmark {settings.benchmark}:  "
+        + (
+            f"{metrics.benchmark_return_pct * 100:+.2f}%  "
+            f"(exceso {metrics.excess_return_pct * 100:+.2f}%)"
+            if metrics.benchmark_return_pct is not None
+            else "sin datos"
+        ),
+    ]
+    if summary["top_rejections"]:
+        lines.append("  Motivos de rechazo: " + ", ".join(
+            f"{k}={v}" for k, v in summary["top_rejections"].items()
+        ))
+    if metrics.trades_total < 10:
+        lines.append("")
+        lines.append("  AVISO: menos de 10 trades cerrados; la muestra no permite concluir nada.")
+    lines.append("")
+    lines.append("  El backtest no incluye sentimiento de noticias (no es reproducible")
+    lines.append("  hacia atrás) y asume que el stop se ejecuta antes que el objetivo")
+    lines.append("  cuando ambos caben en la misma barra.")
+    return "\n".join(lines)
 
 
 def _check(settings: Settings, *, as_json: bool = True) -> int:
@@ -167,6 +287,7 @@ def _check(settings: Settings, *, as_json: bool = True) -> int:
                 **posture.as_dict(),
             }
             result["session"] = engine.broker.session()
+            result["market_data"] = engine.data.describe()
             engine.close()
         except Exception as exc:  # noqa: BLE001 - report, do not crash
             result["broker_error"] = str(exc)

@@ -3,7 +3,8 @@ alpaca-py>=0.21,<1.0        # Trading, Market Data and News APIs
 anthropic>=0.40,<1.0        # sentiment classification (NewsPulse)
 apscheduler>=3.10,<4.0      # 24/7 scheduling (a stdlib loop is used if absent)
 
-# Optional analysis helpers. The bot's own hot path is pure stdlib, so these are
-# only needed if you want to explore the SQLite database in a notebook.
+# Optional. The bot's own hot path is pure stdlib; these are only needed to
+# explore the database in a notebook or to pull backtest history from Yahoo.
 pandas>=2.0; python_version >= "3.11"
 numpy>=1.26; python_version >= "3.11"
+yfinance>=0.2                # only for `backtest --source yfinance`

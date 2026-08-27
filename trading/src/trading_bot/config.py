@@ -213,6 +213,11 @@ class Settings:
     alpaca_api_key: str = ""
     alpaca_secret_key: str = ""
     alpaca_base_url: str = PAPER_URL
+    alpaca_feed: str = "iex"
+    market_data_provider: str = "alpaca"
+    market_data_api_key: str = ""
+    market_data_realtime: bool = False
+    market_data_rpm: int = 5
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-sonnet-5"
     news_api_key: str = ""
@@ -249,6 +254,7 @@ class Settings:
             "alpaca_api_key",
             "alpaca_secret_key",
             "anthropic_api_key",
+            "market_data_api_key",
             "news_api_key",
             "telegram_bot_token",
             "smtp_url",
@@ -275,6 +281,11 @@ class Settings:
             alpaca_api_key=env_str("ALPACA_API_KEY"),
             alpaca_secret_key=env_str("ALPACA_SECRET_KEY"),
             alpaca_base_url=base_url,
+            alpaca_feed=env_str("ALPACA_FEED", "iex").lower(),
+            market_data_provider=env_str("MARKET_DATA_PROVIDER", "alpaca").lower(),
+            market_data_api_key=env_str("MARKET_DATA_API_KEY") or env_str("POLYGON_API_KEY"),
+            market_data_realtime=env_bool("MARKET_DATA_REALTIME", False),
+            market_data_rpm=env_int("MARKET_DATA_RPM", 5),
             anthropic_api_key=env_str("ANTHROPIC_API_KEY"),
             anthropic_model=env_str("ANTHROPIC_MODEL", "claude-sonnet-5"),
             news_api_key=env_str("NEWS_API_KEY"),
@@ -307,6 +318,13 @@ class Settings:
             problems.append(f"ALPACA_BASE_URL looks wrong: {self.alpaca_base_url!r}")
         if not self.universe:
             problems.append("UNIVERSE is empty; nothing to trade.")
+        if self.market_data_provider not in ("alpaca", "polygon", "alphavantage", "alpha_vantage"):
+            problems.append(f"MARKET_DATA_PROVIDER desconocido: {self.market_data_provider!r}")
+        if self.market_data_provider not in ("alpaca",) and not self.market_data_api_key:
+            problems.append(
+                f"MARKET_DATA_API_KEY es obligatoria con MARKET_DATA_PROVIDER="
+                f"{self.market_data_provider}."
+            )
         if self.risk.starting_equity <= 0:
             problems.append("STARTING_EQUITY must be positive.")
         if not 0 < self.risk.max_position_pct <= 1:

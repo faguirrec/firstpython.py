@@ -26,6 +26,10 @@ Cuatro agentes, cada uno en su módulo, coordinados por un motor común
 | **RiskSentinel** | `agents/risk_sentinel.py` | Calcula el EV neto, dimensiona la posición, aplica límites duros y respeta PDT / liquidación T+1. Tiene derecho a veto sobre cualquier orden. |
 | **LearningLoop** | `agents/learning_loop.py` | Job nocturno: califica cada trade cerrado contra las señales que lo originaron y ajusta los pesos (estilo bandit). |
 
+Dos módulos de soporte que no son agentes pero deciden qué tan bien funcionan:
+`marketdata/` (de dónde vienen los precios) y `backtest/` (si la estrategia
+tiene edge antes de arriesgar los 30 días).
+
 Flujo de una decisión:
 
 ```
@@ -76,6 +80,94 @@ motivo**. Esos motivos son parte de los datos del experimento.
 * **Fracciones de acción.** Alpaca solo acepta órdenes fraccionarias con
   `time_in_force=day` y dentro del horario regular; el adaptador lo fuerza y
   rechaza el envío fuera de horario en vez de coleccionar rechazos del broker.
+
+---
+
+## Datos de mercado: qué conviene pagar con $30
+
+La ejecución va por Alpaca. De dónde vienen los **precios** es una decisión
+aparte, y `MARKET_DATA_PROVIDER` la hace configurable.
+
+| Proveedor | Plan gratuito | Tiempo real | Costo mensual |
+|---|---|---|---|
+| **Alpaca Basic** (por defecto) | Tiempo real, feed **IEX** | Sí | $0 · SIP completo ~$99/mes |
+| **Polygon.io / Massive** | 5 req/min, **15 min de retraso** | No | Acciones desde ~$29/mes · tiempo real ~$199/mes |
+| **Alpha Vantage** | **25 peticiones por día**, 5/min, **sin bid/ask** | No | Tiempo real desde ~$99,99/mes |
+
+**Veredicto para este piloto: quédate en Alpaca.** Cualquier plan de pago cuesta
+más por mes que todo el capital del experimento, y las alternativas gratuitas
+son peores que la que ya tenemos:
+
+* Alpha Vantage con 25 peticiones diarias no alcanza para un ciclo de 15 minutos
+  sobre 8 símbolos (serían ~200 al día), y su endpoint de cotización no trae
+  bid/ask, así que **no puede fijar el precio de una orden limit**.
+* Polygon gratis sirve para barras, pero con 15 minutos de retraso tampoco puede
+  fijar precios.
+
+Sobre la limitación real de IEX: cubre una fracción del volumen consolidado. Eso
+afecta menos de lo que parece en este diseño:
+
+* El **volumen relativo** compara el volumen IEX contra su propio promedio de 20
+  barras, así que el sesgo se cancela en gran medida.
+* El **spread** visto en IEX puede ser más ancho que el NBBO real. Eso hace el
+  filtro de EV neto *más conservador*, no más permisivo: el error apunta en la
+  dirección segura.
+
+Por eso el módulo existe pero el default no cambia: **subir de feed es un cambio
+de configuración, no una reescritura**, cuando el capital lo justifique.
+
+```bash
+MARKET_DATA_PROVIDER=polygon
+MARKET_DATA_API_KEY=tu_clave
+MARKET_DATA_REALTIME=false   # true solo con un plan de pago en tiempo real
+```
+
+La regla que el código impone: **una orden limit nunca se fija con datos
+rezagados**. Si el proveedor de barras no entrega bid/ask en tiempo real, las
+cotizaciones vuelven a Alpaca; si nadie puede darlas, `get_latest_quote` devuelve
+`None` y el cálculo de costos usa el medio spread por defecto (conservador) en
+vez de confiar en un precio viejo.
+
+---
+
+## Backtesting y calibración
+
+Antes de este módulo, `EDGE_SCALE_BPS=120` y los umbrales de confianza y salida
+eran criterio, no medición. El backtest los convierte en números con evidencia
+detrás — o muestra que no la hay, que también es un resultado.
+
+```bash
+# Simular sobre el historial de la propia cuenta Alpaca
+python -m trading_bot backtest --symbols AAPL,MSFT,NVDA --timeframe 1Day --limit 750
+
+# Sobre CSV propios (<SÍMBOLO>.csv con timestamp,open,high,low,close,volume)
+python -m trading_bot backtest --source csv --csv-dir ./historico
+
+# Barrido de parámetros con validación fuera de muestra
+python -m trading_bot calibrate --min-trades 10 --out-of-sample 0.3
+```
+
+**Por qué este backtest no se miente a sí mismo**
+
+* **Mismo código.** Reproduce el camino real: `technical_signals` → `fuse_signals`
+  → `evaluate_net_ev` → `RiskSentinel`. No hay una copia de la estrategia que
+  pueda divergir de la que opera. Los resultados se escriben en el mismo esquema
+  SQLite, así que `compute_metrics` produce las mismas métricas que en vivo.
+* **Sin lookahead.** En la barra *i* la estrategia ve `bars[:i+1]` y nada más.
+* **Orden intrabarra pesimista.** Si una barra toca el stop y el objetivo, se
+  asume que ejecutó el stop.
+* **Costos siempre cobrados**, y el spread se contabiliza como costo explícito en
+  vez de esconderse dentro del precio de ejecución — si no, `fees / P&L bruto`
+  saldría bonito y falso.
+* **Sin sentimiento.** El sentimiento histórico de noticias no es reproducible
+  después del hecho; incluirlo inflaría el backtest frente a lo que el bot puede
+  saber en vivo.
+* **Fuera de muestra.** La calibración corta el historial cronológicamente y
+  revalida la mejor combinación en el tramo reservado. Si no se sostiene, lo dice:
+  *"trátalo como sobreajuste, no como hallazgo"*.
+
+Un barrido completo (108 combinaciones × ~600 barras × 3 símbolos) toma cerca de
+un minuto.
 
 ---
 
@@ -143,6 +235,8 @@ python -m trading_bot nightly            # cierre completo: aprendizaje + report
 python -m trading_bot report             # reporte del día
 python -m trading_bot report --final     # reporte final del experimento
 python -m trading_bot dashboard          # regenera reports/dashboard.html
+python -m trading_bot backtest           # simula la estrategia sobre historial
+python -m trading_bot calibrate          # barrido de parámetros con validación
 python -m trading_bot run                # scheduler 24/7
 ```
 
@@ -265,6 +359,8 @@ trading/
 │   ├── brokers/         adaptador de Alpaca + tipos neutrales de broker
 │   ├── db/              esquema SQL y capa de persistencia
 │   ├── signals/         indicadores técnicos y fusión ponderada
+│   ├── marketdata/      proveedores de precios (Alpaca · Polygon · Alpha Vantage)
+│   ├── backtest/        simulación histórica y calibración de parámetros
 │   ├── costs.py         modelo de fees y valor esperado neto
 │   ├── metrics.py       métricas de desempeño
 │   ├── reporting.py     reportes y dashboard HTML
@@ -297,3 +393,7 @@ trading/
   live.
 * Con pocos trades cerrados, el ciclo de aprendizaje ajusta pesos sobre muestras
   muy pequeñas. El reporte final lo señala explícitamente cuando ocurre.
+* **Corre `backtest` y `calibrate` antes de arrancar los 30 días.** Un backtest
+  favorable no es una promesa, pero uno desfavorable sí es una advertencia: si la
+  estrategia no cubre sus costos sobre años de historial, tampoco lo hará en 30
+  días con $30.
