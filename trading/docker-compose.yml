@@ -1,0 +1,15 @@
+services:
+  trading-bot:
+    build: .
+    container_name: trading-bot
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: /app/data/trading_bot.db
+      LOG_FILE: /app/logs/trading_bot.jsonl
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./reports:/app/reports
+    # El scheduler distingue sesiones por sí mismo; el contenedor corre 24/7.
+    command: ["python", "-m", "trading_bot", "run"]
