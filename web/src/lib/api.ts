@@ -48,6 +48,9 @@ export type MemberBreakdown = {
   transferred: number;
   paidOutOfPocket: number;
   contributed: number;
+  /** Saldo que viene de un mes anterior, firmado. Negativo = viene debiendo. */
+  carriedOver: number;
+  carriedFrom: string | null;
   deviation: number;
 };
 
@@ -190,6 +193,9 @@ export type Projection = {
     share: number;
     base: number;
     contingency: number;
+    /** Saldo arrastrado del mes anterior, firmado. */
+    carriedOver: number;
+    carriedFrom: string | null;
     /** Lo que le toca poner en el mes, completo. */
     amount: number;
     /** Lo que ya puso. */
@@ -411,7 +417,11 @@ export const api = {
   saveIncome: (body: { month: string; userId?: string; amount: number; note?: string | null }) =>
     put<{ ok: true }>('/finance/incomes', body),
   settlement: (month: string) => get<Settlement>(`/finance/settlement?month=${month}`),
-  closeSettlement: (month: string) => post<{ ok: true }>('/finance/settlement/close', { month }),
+  closeSettlement: (month: string, arrastrar = false) =>
+    post<{ ok: true; arrastre: { arrastrado: number; hacia: string } | null }>(
+      '/finance/settlement/close',
+      { month, arrastrar },
+    ),
   reopenSettlement: (month: string) => del<{ ok: true }>(`/finance/settlement/close?month=${month}`),
   projection: (month: string, budget?: number, contingency?: number) =>
     get<Projection>(

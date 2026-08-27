@@ -1,4 +1,4 @@
-import { db } from '../lib/db.js';
+import { db, uid } from '../lib/db.js';
 
 export type MemberBreakdown = {
   userId: string;
@@ -15,8 +15,19 @@ export type MemberBreakdown = {
   paidOutOfPocket: number;
   /** transferred + paidOutOfPocket */
   contributed: number;
-  /** contributed - fairShare. Positivo = puso de más. */
+  /**
+   * Saldo que viene arrastrado de un mes anterior, firmado.
+   *
+   * Negativo es "quedó debiendo el mes pasado y todavía no lo salda". No es un
+   * aporte ni un gasto: es un ajuste entre las dos personas, y por eso se
+   * muestra aparte en vez de sumarse a `contributed`. Confundirlo con lo que
+   * puso de verdad haría imposible cuadrar con la cartola.
+   */
+  carriedOver: number;
+  /** contributed + carriedOver - fairShare. Positivo = puso de más. */
   deviation: number;
+  /** De qué mes viene el arrastre, para poder decirlo en pantalla. */
+  carriedFrom: string | null;
 };
 
 export type Settlement = {
@@ -97,6 +108,89 @@ export function contributedBy(householdId: string, userId: string, period: strin
  *   que corresponde cuando el resultado no es para una persona en particular
  *   —el reporte mensual, que llega igual a los dos—.
  */
+/* --------------------- Saldos que pasan de un mes a otro ------------------ */
+
+/**
+ * Un saldo arrastrado, tal como lo ve el mes que lo recibe.
+ */
+export type Arrastre = { amount: number; from: string };
+
+/** El mes siguiente a uno dado. */
+function mesSiguiente(mes: string): string {
+  const [anio, m] = mes.split('-').map(Number);
+  return m === 12 ? `${anio + 1}-01` : `${anio}-${String(m + 1).padStart(2, '0')}`;
+}
+
+/** Lo que cada persona trae arrastrado hacia este mes. */
+export function arrastresHacia(householdId: string, periodo: string): Map<string, Arrastre> {
+  const filas = db
+    .prepare(
+      `SELECT user_id AS userId, amount, from_period AS desde
+         FROM carryovers WHERE household_id = ? AND to_period = ?`,
+    )
+    .all(householdId, periodo) as { userId: string; amount: number; desde: string }[];
+
+  const mapa = new Map<string, Arrastre>();
+  for (const f of filas) {
+    // Si por lo que sea hubiera más de uno para la misma persona, se suman.
+    const previo = mapa.get(f.userId);
+    mapa.set(f.userId, { amount: (previo?.amount ?? 0) + f.amount, from: previo?.from ?? f.desde });
+  }
+  return mapa;
+}
+
+/**
+ * Pasa al mes siguiente el desbalance con el que cierra un mes.
+ *
+ * Es la alternativa a transferirse la diferencia: en vez de que quien debe le
+ * pase la plata al otro hoy, el saldo queda anotado y el mes que viene ajusta
+ * cuánto le toca poner a cada uno.
+ *
+ * Lo que se arrastra es la desviación de cada uno, que mezcla dos cosas: lo que
+ * una persona le debe a la otra, y lo que al hogar entero le sobró o le faltó
+ * en la cuenta. Las dos tienen que viajar. Si entre los dos pusieron $430 de
+ * más, ese excedente está en la cuenta y el mes siguiente hay que juntar $430
+ * menos; por eso los arrastres suman cero sólo cuando el mes cerró financiado
+ * justo. No hay doble conteo con el fondo de reserva: el arrastre no crea
+ * movimientos, sólo cambia cuánto se le pide a cada uno.
+ *
+ * Se calcula sobre el reparto **sin** contar lo que ya venía arrastrado hacia
+ * este mes: eso ya está incorporado en la desviación, así que arrastrar la
+ * desviación resultante mueve el saldo completo hacia adelante, sin duplicarlo.
+ */
+export function pasarSaldoAlMesSiguiente(
+  householdId: string,
+  mes: string,
+  currency = 'CLP',
+): { arrastrado: number; hacia: string } {
+  const cierre = computeSettlement(householdId, mes, currency);
+  const destino = mesSiguiente(mes);
+
+  // Se reemplaza lo que hubiera de un cierre anterior del mismo mes.
+  db.prepare('DELETE FROM carryovers WHERE household_id = ? AND from_period = ?').run(householdId, mes);
+
+  const insertar = db.prepare(
+    `INSERT INTO carryovers (id, household_id, from_period, to_period, user_id, amount)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  );
+
+  let arrastrado = 0;
+  for (const m of cierre.members) {
+    // Un desbalance de céntimos es redondeo, no una deuda que valga la pena
+    // arrastrar: anotarlo llenaría los meses de líneas de un peso.
+    if (Math.abs(m.deviation) < 1) continue;
+    insertar.run(uid(), householdId, mes, destino, m.userId, round2(m.deviation));
+    if (m.deviation < 0) arrastrado += -m.deviation;
+  }
+
+  return { arrastrado: round2(arrastrado), hacia: destino };
+}
+
+/** Deshace el arrastre de un mes. Se usa al reabrirlo. */
+export function quitarSaldoArrastrado(householdId: string, mes: string): void {
+  db.prepare('DELETE FROM carryovers WHERE household_id = ? AND from_period = ?').run(householdId, mes);
+}
+
 export function computeSettlement(
   householdId: string,
   month: string,
@@ -139,6 +233,8 @@ export function computeSettlement(
   const rawIncomes = members.map((m) => incomeForMonth(householdId, m.userId, month));
   const totalIncome = rawIncomes.reduce((a, b) => a + b, 0);
 
+  const arrastres = arrastresHacia(householdId, periodo);
+
   const breakdown: MemberBreakdown[] = members.map((m, i) => {
     const income = rawIncomes[i];
     // Sin sueldos declarados el reparto proporcional no está definido: se cae a 50/50.
@@ -165,6 +261,7 @@ export function computeSettlement(
 
     const fairShare = round2(totalShared * incomeShare);
     const contributed = round2(transferred + paidOutOfPocket);
+    const arrastre = arrastres.get(m.userId);
 
     return {
       userId: m.userId,
@@ -175,7 +272,9 @@ export function computeSettlement(
       transferred: round2(transferred),
       paidOutOfPocket: round2(paidOutOfPocket),
       contributed,
-      deviation: round2(contributed - fairShare),
+      carriedOver: round2(arrastre?.amount ?? 0),
+      carriedFrom: arrastre?.from ?? null,
+      deviation: round2(contributed + (arrastre?.amount ?? 0) - fairShare),
     };
   });
 
@@ -250,6 +349,16 @@ export type Projection = {
     contingency: number;
     /** base + contingency: lo que transfiere a la cuenta del hogar. */
     amount: number;
+    /**
+     * Saldo arrastrado del mes anterior, firmado. Negativo suma a lo que le
+     * toca poner; positivo lo descuenta.
+     */
+    carriedOver: number;
+    carriedFrom: string | null;
+    /** Lo que ya puso este mes. */
+    contributed: number;
+    /** Lo que le falta, ya contando el arrastre. */
+    pending: number;
   }[];
 };
 
@@ -335,6 +444,7 @@ export function projectContributions(
 
   const incomes = members.map((m) => incomeForMonth(householdId, m.userId, month));
   const totalIncome = incomes.reduce((a, b) => a + b, 0);
+  const arrastres = arrastresHacia(householdId, month);
 
   return {
     baseBudget: round2(baseBudget),
@@ -348,6 +458,9 @@ export function projectContributions(
       // Lo que ya puso, para que la pantalla pueda decir cuánto falta y no
       // repetir el total del mes como si no hubiera pasado nada.
       const contributed = contributedBy(householdId, m.userId, month);
+      // Y lo que quedó debiendo del mes pasado, que también hay que poner.
+      const arrastre = arrastres.get(m.userId);
+      const saldo = arrastre?.amount ?? 0;
       return {
         userId: m.userId,
         name: m.name,
@@ -355,8 +468,10 @@ export function projectContributions(
         base: round2(baseBudget! * share),
         contingency: round2(contingencyAmount * share),
         amount,
+        carriedOver: round2(saldo),
+        carriedFrom: arrastre?.from ?? null,
         contributed,
-        pending: round2(Math.max(amount - contributed, 0)),
+        pending: round2(Math.max(amount - contributed - saldo, 0)),
       };
     }),
   };

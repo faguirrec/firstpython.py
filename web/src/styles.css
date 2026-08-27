@@ -865,6 +865,19 @@ details.plegable > summary .resumen-dato {
 .ficha-persona-datos .num { font-size: var(--t-md); font-weight: 600; }
 .ficha-persona-datos .muted { font-size: var(--t-xs); }
 
+/* Lo que alguien trae debiendo —o a favor— de un mes anterior. Se separa del
+   resto con una línea: no es plata que se movió este mes, es un ajuste. */
+.arrastre {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--e3);
+  padding-top: var(--e2);
+  border-top: 1px dashed var(--grid);
+  font-size: var(--t-sm);
+  color: var(--text-secondary);
+}
+
 /* --------------------------- Primeros pasos ------------------------------ */
 
 /* Se despega del resto con el color de marca: es lo primero que hay que hacer,

@@ -98,11 +98,18 @@ export default function Liquidacion() {
   const faltaAlgunSueldo =
     members.length < 2 || members.some((m) => !incomes[m.id] || Number(incomes[m.id]) <= 0);
 
-  /* Un desajuste menor al 1% del gasto del mes es redondeo, no déficit. */
+  /* ¿Hay algo que arrastrar? Con el mes cuadrado no tiene sentido ofrecerlo. */
+  const hayDesbalance = Boolean(settlement?.members.some((m) => Math.abs(m.deviation) >= 1));
+
+  /* Un desajuste chico frente a lo que gasta el hogar es redondeo, no déficit. */
   const enRojoDeVerdad =
     reserve != null &&
     reserve.balance < 0 &&
-    Math.abs(reserve.balance) > (settlement?.totalSharedExpenses ?? 0) * 0.01;
+    // El 1% de lo que gasta el hogar en un mes típico, y nunca menos de mil
+    // pesos. Antes se medía contra el gasto del mes que se está mirando, que en
+    // uno recién abierto es cero: ahí cualquier saldo negativo pasaba a ser una
+    // alarma, incluso el redondeo de meses anteriores.
+    Math.abs(reserve.balance) > Math.max(reserve.monthlyAverage * 0.01, 1000);
 
   return (
     <>
@@ -269,6 +276,19 @@ export default function Liquidacion() {
                       <span className="num">{money(row.contributed, currency)}</span>
                     </span>
                   </div>
+
+                  {/* El arrastre va en su propia línea y no sumado a "puso": lo
+                      que puso es lo que transfirió, y mezclarlo haría imposible
+                      cuadrar con la cartola. */}
+                  {row.carriedOver !== 0 && (
+                    <div className="arrastre">
+                      {row.carriedOver < 0 ? 'Venía debiendo de' : 'Tenía a favor de'}{' '}
+                      {monthLabel(row.carriedFrom ?? '', true)}
+                      <strong className="num">
+                        {row.carriedOver < 0 ? '−' : '+'}{money(Math.abs(row.carriedOver), currency)}
+                      </strong>
+                    </div>
+                  )}
 
                   {row.pending > 0 && (
                     <button
@@ -446,6 +466,16 @@ export default function Liquidacion() {
                     )}
                   </span>
                 </div>
+
+                {m.carriedOver !== 0 && (
+                  <div className="arrastre">
+                    {m.carriedOver < 0 ? 'Venía debiendo de' : 'Tenía a favor de'}{' '}
+                    {monthLabel(m.carriedFrom ?? '', true)}
+                    <strong className="num">
+                      {m.carriedOver < 0 ? '−' : '+'}{money(Math.abs(m.carriedOver), currency)}
+                    </strong>
+                  </div>
+                )}
               </div>
             ))}
 
@@ -489,22 +519,68 @@ export default function Liquidacion() {
             )}
           </div>
 
-          <div className="row" style={{ marginTop: 12 }}>
-            <span className="muted">
-              Saldo de la cuenta del hogar: {money(settlement.officialAccountBalance, currency)}
-            </span>
+          <p className="muted" style={{ marginTop: 12, marginBottom: 8 }}>
+            Saldo de la cuenta del hogar: {money(settlement.officialAccountBalance, currency)}
+          </p>
+
+          {settlement.settledAt ? (
             <button
-              className={settlement.settledAt ? 'ghost small' : 'primary small'}
+              className="ghost small"
               onClick={async () => {
-                if (settlement.settledAt) await api.reopenSettlement(month);
-                else await api.closeSettlement(month);
-                setMessage(settlement.settledAt ? 'Mes reabierto.' : 'Mes cerrado y guardado.');
+                await api.reopenSettlement(month);
+                setMessage('Mes reabierto. Si habías pasado el saldo al mes siguiente, se deshizo.');
                 await load();
               }}
             >
-              {settlement.settledAt ? 'Reabrir mes' : 'Cerrar mes'}
+              Reabrir mes
             </button>
-          </div>
+          ) : (
+            <>
+              <button
+                className="primary"
+                style={{ width: '100%' }}
+                onClick={async () => {
+                  await api.closeSettlement(month, false);
+                  setMessage('Mes cerrado y guardado.');
+                  await load();
+                }}
+              >
+                Ya nos transferimos
+              </button>
+
+              {/*
+                * La otra forma de cerrar.
+                *
+                * Sólo aparece si hay algo que arrastrar: con el mes cuadrado,
+                * ofrecer "pasar el saldo" sería ofrecer pasar cero. La suma de
+                * lo que se arrastra es cero entre los dos, así que no cambia
+                * cuánto gastó el hogar, sólo quién pone qué el mes que viene.
+                */}
+              {hayDesbalance && (
+                <>
+                  <button
+                    className="small"
+                    style={{ width: '100%', marginTop: 8 }}
+                    onClick={async () => {
+                      const r = await api.closeSettlement(month, true);
+                      setMessage(
+                        r.arrastre
+                          ? `Mes cerrado. ${money(r.arrastre.arrastrado, currency)} pasan a ${monthLabel(r.arrastre.hacia)}.`
+                          : 'Mes cerrado.',
+                      );
+                      await load();
+                    }}
+                  >
+                    Dejarlo para el próximo mes
+                  </button>
+                  <p className="muted" style={{ marginTop: 8, marginBottom: 0 }}>
+                    En vez de transferirse la diferencia hoy, queda anotada y el mes que viene
+                    ajusta cuánto pone cada uno. Se deshace reabriendo el mes.
+                  </p>
+                </>
+              )}
+            </>
+          )}
         </div>
       )}
     </>

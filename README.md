@@ -33,6 +33,20 @@ caracteres. Quien lo recibe crea su cuenta y entra al hogar en un solo paso. Los
 dos ven exactamente los mismos datos. El hogar acepta exactamente dos
 integrantes, y el código se puede anular y regenerar.
 
+**Gastos de emergencia y deudas que pasan de mes.** Un gasto común lo puede
+pagar cualquiera de su bolsillo —"¿Quién lo pagó?" al anotarlo— y se reparte en
+la misma proporción que todo lo demás: si Bruno desembolsa $300.000 por una
+urgencia, a Ana le toca su 60% y queda debiéndole $180.000.
+
+Al cerrar el mes esa diferencia se puede resolver de dos formas, y la elección
+es del hogar:
+
+- **Ya nos transferimos** — el mes queda limpio, como siempre.
+- **Dejarlo para el próximo mes** — la deuda queda anotada y el mes siguiente
+  ajusta cuánto pone cada uno. Se muestra en su propia línea, nunca sumada a lo
+  que la persona transfirió: mezclarlas haría imposible cuadrar con la cartola.
+  Reabrir el mes lo deshace.
+
 **Fondo de contingencia.** Un porcentaje configurable sobre el gasto estimado
 que cada uno aporta en su misma proporción. No cuenta como gasto: se acumula en
 la cuenta del hogar como reserva para imprevistos, y la app muestra cuántos

@@ -190,6 +190,33 @@ CREATE TABLE IF NOT EXISTS email_log (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_email_log_unico
   ON email_log (household_id, kind, reference, recipient);
 
+-- Saldos que un mes le pasa al siguiente.
+--
+-- Cuando un mes cierra desbalanceado, la deuda entre las dos personas puede
+-- resolverse con una transferencia —lo de siempre— o arrastrarse al mes que
+-- viene. Esto último no es un gasto ni un aporte: es un ajuste entre ellos, así
+-- que vive aparte de la tabla de movimientos, donde contaminaría los totales
+-- del hogar.
+--
+-- El monto va firmado: negativo es "viene debiendo". La suma de los arrastres
+-- de un mismo mes es siempre cero, porque lo que uno debe el otro lo tiene a
+-- favor.
+CREATE TABLE IF NOT EXISTS carryovers (
+  id           TEXT PRIMARY KEY,
+  household_id TEXT NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+  -- El mes que se cerró y de donde viene el saldo.
+  from_period  TEXT NOT NULL,
+  -- El mes que lo recibe. Normalmente el siguiente.
+  to_period    TEXT NOT NULL,
+  user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  amount       REAL NOT NULL,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  -- Cerrar dos veces el mismo mes no puede duplicar el arrastre.
+  UNIQUE (household_id, from_period, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_arrastre_destino ON carryovers (household_id, to_period);
+
 -- Cierre de mes: deja congelado quién le debía a quién.
 CREATE TABLE IF NOT EXISTS settlements (
   household_id TEXT NOT NULL REFERENCES households(id) ON DELETE CASCADE,

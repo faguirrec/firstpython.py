@@ -8,7 +8,9 @@ import {
   computePersonalSummary,
   computeReserve,
   computeSettlement,
+  pasarSaldoAlMesSiguiente,
   projectContributions,
+  quitarSaldoArrastrado,
   saveTarget,
   storedTarget,
   targetIsInherited,
@@ -102,13 +104,41 @@ financeRouter.get('/settlement', (req, res) => {
   res.json(computeSettlement(req.household!.id, month.data, req.household!.currency, req.user!.id));
 });
 
-/** Congela el resultado del mes para dejar registro de lo acordado. */
+/**
+ * Congela el resultado del mes para dejar registro de lo acordado.
+ *
+ * Con `arrastrar`, además, el desbalance pasa al mes siguiente en vez de
+ * saldarse con una transferencia hoy. Las dos formas son válidas y la elección
+ * es del hogar: transferirse deja el mes limpio, arrastrar evita mover plata
+ * por una diferencia que se va a compensar sola el mes que viene.
+ */
 financeRouter.post('/settlement/close', (req, res) => {
-  const parsed = z.object({ month: monthSchema }).safeParse(req.body);
+  const parsed = z
+    .object({ month: monthSchema, arrastrar: z.boolean().default(false) })
+    .safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.issues[0].message });
     return;
   }
+
+  /*
+   * El arrastre va primero, y el snapshot después.
+   *
+   * El snapshot tiene que quedar con el mes tal como se cerró; calcularlo antes
+   * de arrastrar daría lo mismo porque el arrastre sale *hacia* el mes que
+   * viene, pero el orden importa si alguna vez se cierra dos veces: así el
+   * registro guardado y lo arrastrado siempre cuentan la misma historia.
+   */
+  let arrastre: { arrastrado: number; hacia: string } | null = null;
+  if (parsed.data.arrastrar) {
+    arrastre = pasarSaldoAlMesSiguiente(req.household!.id, parsed.data.month, req.household!.currency);
+  } else {
+    // Cerrar sin arrastrar borra un arrastre anterior del mismo mes: si alguien
+    // reabre, se transfiere de verdad y vuelve a cerrar, el saldo no puede
+    // seguir apareciendo en el mes siguiente.
+    quitarSaldoArrastrado(req.household!.id, parsed.data.month);
+  }
+
   const snapshot = computeSettlement(req.household!.id, parsed.data.month, req.household!.currency);
   db.prepare(
     `INSERT INTO settlements (household_id, month, snapshot, settled_at)
@@ -116,7 +146,7 @@ financeRouter.post('/settlement/close', (req, res) => {
      ON CONFLICT (household_id, month)
      DO UPDATE SET snapshot = excluded.snapshot, settled_at = excluded.settled_at`,
   ).run(req.household!.id, parsed.data.month, JSON.stringify(snapshot));
-  res.json({ ok: true, snapshot });
+  res.json({ ok: true, snapshot, arrastre });
 });
 
 financeRouter.delete('/settlement/close', (req, res) => {
@@ -126,6 +156,9 @@ financeRouter.delete('/settlement/close', (req, res) => {
     return;
   }
   db.prepare('DELETE FROM settlements WHERE household_id = ? AND month = ?').run(req.household!.id, month.data);
+  // Reabrir el mes deshace lo que se arrastró al cerrarlo: si no, el saldo
+  // quedaría contado dos veces —abierto acá y arrastrado allá—.
+  quitarSaldoArrastrado(req.household!.id, month.data);
   res.json({ ok: true });
 });
 
