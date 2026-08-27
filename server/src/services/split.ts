@@ -162,11 +162,30 @@ export function pasarSaldoAlMesSiguiente(
   householdId: string,
   mes: string,
   currency = 'CLP',
-): { arrastrado: number; hacia: string } {
+  /**
+   * Cuánto del excedente se queda el hogar para ahorrar, en vez de devolverlo
+   * como crédito. Null usa la sugerencia según el tope configurado.
+   */
+  alAhorro: number | null = null,
+): { arrastrado: number; hacia: string; ahorrado: number } {
   const cierre = computeSettlement(householdId, mes, currency);
   const destino = mesSiguiente(mes);
 
-  // Se reemplaza lo que hubiera de un cierre anterior del mismo mes.
+  const reparto = repartoDelExcedente(householdId, mes, currency);
+  // Se acepta lo que pida quien cierra, dentro de lo que hay: guardar más que
+  // el excedente sería prometer plata que no está en la cuenta.
+  const guardado = Math.min(Math.max(alAhorro ?? reparto.sugeridoAlAhorro, 0), reparto.excedente);
+
+  /*
+   * Los créditos se recortan a prorrata; las deudas no se tocan.
+   *
+   * Quien debe, debe: lo que el hogar decida ahorrar no puede cambiarle el
+   * saldo a quien puso de menos. El recorte cae sólo sobre los créditos, y
+   * repartido en proporción a cada uno para que ahorrar no favorezca a ninguno.
+   */
+  const totalCreditos = cierre.members.reduce((a, m) => a + Math.max(m.deviation, 0), 0);
+  const factor = totalCreditos > 0 ? Math.max(totalCreditos - guardado, 0) / totalCreditos : 1;
+
   db.prepare('DELETE FROM carryovers WHERE household_id = ? AND from_period = ?').run(householdId, mes);
 
   const insertar = db.prepare(
@@ -176,14 +195,71 @@ export function pasarSaldoAlMesSiguiente(
 
   let arrastrado = 0;
   for (const m of cierre.members) {
+    const saldo = m.deviation > 0 ? round2(m.deviation * factor) : round2(m.deviation);
     // Un desbalance de céntimos es redondeo, no una deuda que valga la pena
     // arrastrar: anotarlo llenaría los meses de líneas de un peso.
-    if (Math.abs(m.deviation) < 1) continue;
-    insertar.run(uid(), householdId, mes, destino, m.userId, round2(m.deviation));
-    if (m.deviation < 0) arrastrado += -m.deviation;
+    if (Math.abs(saldo) < 1) continue;
+    insertar.run(uid(), householdId, mes, destino, m.userId, saldo);
+    if (saldo < 0) arrastrado += -saldo;
   }
 
-  return { arrastrado: round2(arrastrado), hacia: destino };
+  return { arrastrado: round2(arrastrado), hacia: destino, ahorrado: round2(guardado) };
+}
+
+/**
+ * Qué hacer con lo que sobró en la cuenta al cerrar el mes.
+ *
+ * El excedente del mes es exactamente la suma de las desviaciones de los dos:
+ * lo que pusieron menos lo que les tocaba. Si es positivo, esa plata está en la
+ * cuenta y hay que decidir si se queda —y pasa a financiar las metas por medio
+ * del fondo de reserva— o vuelve como crédito a quien la puso.
+ *
+ * La sugerencia usa un porcentaje del **gasto mensual**, no del excedente: así
+ * el ahorro es una cifra estable mes a mes en vez de una que sube y baja según
+ * lo que haya sobrado.
+ */
+export function repartoDelExcedente(
+  householdId: string,
+  mes: string,
+  currency = 'CLP',
+): {
+  excedente: number;
+  /** Tope de ahorro para el mes, según el porcentaje del hogar. */
+  tope: number;
+  savingsPct: number;
+  sugeridoAlAhorro: number;
+  sugeridoComoCredito: number;
+  /** A quién se le devolvería, y cuánto, con la sugerencia. */
+  creditos: { userId: string; name: string; amount: number }[];
+} {
+  const cierre = computeSettlement(householdId, mes, currency);
+  const excedente = round2(cierre.members.reduce((a, m) => a + m.deviation, 0));
+
+  const fila = db
+    .prepare('SELECT savings_pct AS pct FROM households WHERE id = ?')
+    .get(householdId) as { pct: number } | undefined;
+  const savingsPct = fila?.pct ?? 10;
+
+  // El gasto del mes que se cierra; si no hubo, el promedio reciente.
+  const base = cierre.totalSharedExpenses > 0 ? cierre.totalSharedExpenses : computeReserve(householdId).monthlyAverage;
+  const tope = round2(base * (savingsPct / 100));
+
+  const sugeridoAlAhorro = round2(Math.min(Math.max(excedente, 0), tope));
+  const sugeridoComoCredito = round2(Math.max(excedente, 0) - sugeridoAlAhorro);
+
+  const totalCreditos = cierre.members.reduce((a, m) => a + Math.max(m.deviation, 0), 0);
+  const factor = totalCreditos > 0 ? Math.max(totalCreditos - sugeridoAlAhorro, 0) / totalCreditos : 1;
+
+  return {
+    excedente,
+    tope,
+    savingsPct,
+    sugeridoAlAhorro,
+    sugeridoComoCredito,
+    creditos: cierre.members
+      .filter((m) => m.deviation > 0)
+      .map((m) => ({ userId: m.userId, name: m.name, amount: round2(m.deviation * factor) })),
+  };
 }
 
 /** Deshace el arrastre de un mes. Se usa al reabrirlo. */
@@ -480,6 +556,17 @@ export function projectContributions(
 export type Reserve = {
   /** Saldo acumulado de la cuenta del hogar: todo lo aportado menos lo gastado desde ella. */
   balance: number;
+  /**
+   * Parte del saldo que ya está prometida como crédito a alguien.
+   *
+   * Cuando un mes cierra y alguien puso de más, esa plata sigue en la cuenta
+   * pero deja de ser del hogar: el mes siguiente esa persona transfiere menos.
+   * Contarla como reserva la promete dos veces —una al fondo y otra a quien la
+   * puso— y las metas se verían financiadas con plata que hay que devolver.
+   */
+  committed: number;
+  /** balance - committed: lo que de verdad puede financiar metas. */
+  free: number;
   totalContributed: number;
   totalSpentFromAccount: number;
   /** Gasto común promedio de los últimos meses, para medir la reserva en meses. */
@@ -621,12 +708,37 @@ export function computeReserve(householdId: string): Reserve {
   const monthlyAverage = recent.length ? recent.reduce((a, b) => a + b.spent, 0) / recent.length : 0;
   const balance = round2(totalContributed - totalSpent);
 
+  /*
+   * Créditos que el hogar todavía le debe a alguien.
+   *
+   * Sólo cuentan los que apuntan a este mes o a uno futuro: los de meses
+   * pasados ya se aplicaron —esa persona transfirió menos y la cuenta recibió
+   * menos—, así que su efecto está en el saldo y restarlos otra vez sería
+   * descontarlos dos veces.
+   */
+  const ahora = new Date().toISOString().slice(0, 7);
+  const committed = round2(
+    (
+      db
+        .prepare(
+          `SELECT COALESCE(SUM(amount), 0) AS total FROM carryovers
+            WHERE household_id = ? AND amount > 0 AND to_period >= ?`,
+        )
+        .get(householdId, ahora) as { total: number }
+    ).total,
+  );
+  const free = round2(balance - committed);
+
   return {
     balance,
+    committed,
+    free,
     totalContributed: round2(totalContributed),
     totalSpentFromAccount: round2(totalSpent),
     monthlyAverage: round2(monthlyAverage),
-    monthsCovered: monthlyAverage > 0 ? Math.round((balance / monthlyAverage) * 10) / 10 : 0,
+    // Los meses de gastos se miden contra lo que de verdad está libre: contar
+    // plata prometida diría que hay más colchón del que hay.
+    monthsCovered: monthlyAverage > 0 ? Math.round((free / monthlyAverage) * 10) / 10 : 0,
     history,
   };
 }

@@ -11,6 +11,7 @@ import {
   pasarSaldoAlMesSiguiente,
   projectContributions,
   quitarSaldoArrastrado,
+  repartoDelExcedente,
   saveTarget,
   storedTarget,
   targetIsInherited,
@@ -105,6 +106,22 @@ financeRouter.get('/settlement', (req, res) => {
 });
 
 /**
+ * Qué hacer con lo que sobró: cuánto se sugiere ahorrar y cuánto devolver.
+ *
+ * Va aparte del cierre para que la pantalla pueda mostrar la propuesta antes de
+ * confirmar nada. Decidir a dónde va la plata que sobró es lo bastante
+ * importante como para verlo escrito antes de apretar el botón.
+ */
+financeRouter.get('/settlement/excedente', (req, res) => {
+  const month = monthSchema.safeParse(req.query.month ?? currentMonth());
+  if (!month.success) {
+    res.status(400).json({ error: month.error.issues[0].message });
+    return;
+  }
+  res.json(repartoDelExcedente(req.household!.id, month.data, req.household!.currency));
+});
+
+/**
  * Congela el resultado del mes para dejar registro de lo acordado.
  *
  * Con `arrastrar`, además, el desbalance pasa al mes siguiente en vez de
@@ -114,7 +131,12 @@ financeRouter.get('/settlement', (req, res) => {
  */
 financeRouter.post('/settlement/close', (req, res) => {
   const parsed = z
-    .object({ month: monthSchema, arrastrar: z.boolean().default(false) })
+    .object({
+      month: monthSchema,
+      arrastrar: z.boolean().default(false),
+      /** Cuánto del excedente se queda el hogar. Sin esto, la sugerencia. */
+      alAhorro: z.number().min(0).nullable().default(null),
+    })
     .safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.issues[0].message });
@@ -129,9 +151,14 @@ financeRouter.post('/settlement/close', (req, res) => {
    * viene, pero el orden importa si alguna vez se cierra dos veces: así el
    * registro guardado y lo arrastrado siempre cuentan la misma historia.
    */
-  let arrastre: { arrastrado: number; hacia: string } | null = null;
+  let arrastre: { arrastrado: number; hacia: string; ahorrado: number } | null = null;
   if (parsed.data.arrastrar) {
-    arrastre = pasarSaldoAlMesSiguiente(req.household!.id, parsed.data.month, req.household!.currency);
+    arrastre = pasarSaldoAlMesSiguiente(
+      req.household!.id,
+      parsed.data.month,
+      req.household!.currency,
+      parsed.data.alAhorro,
+    );
   } else {
     // Cerrar sin arrastrar borra un arrastre anterior del mismo mes: si alguien
     // reabre, se transfiere de verdad y vuelve a cerrar, el saldo no puede

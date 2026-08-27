@@ -878,6 +878,34 @@ details.plegable > summary .resumen-dato {
   color: var(--text-secondary);
 }
 
+/* Separador entre dos caminos alternativos. La línea a los lados deja claro
+   que son opciones excluyentes y no dos pasos seguidos. */
+.o-bien {
+  display: flex;
+  align-items: center;
+  gap: var(--e3);
+  margin: var(--e4) 0;
+  color: var(--text-muted);
+  font-size: var(--t-sm);
+}
+
+.o-bien::before, .o-bien::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--grid);
+}
+
+/* El reparto de lo que sobró, al cerrar el mes. Se separa del resto porque es
+   una decisión, no un dato: hay que mirarla antes de apretar el botón. */
+.reparto-excedente {
+  margin: var(--e3) 0;
+  padding: var(--e4);
+  border: 1px solid color-mix(in srgb, var(--good) 35%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--good) 7%, var(--surface-1));
+}
+
 /* --------------------------- Primeros pasos ------------------------------ */
 
 /* Se despega del resto con el color de marca: es lo primero que hay que hacer,

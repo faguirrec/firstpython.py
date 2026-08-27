@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api, type Member, type Projection, type Reserve, type Settlement } from '../lib/api';
+import { api, type Member, type Projection, type RepartoExcedente, type Reserve, type Settlement } from '../lib/api';
 import { useSession } from '../lib/session';
 import { money, monthLabel, percent } from '../lib/format';
 import { cambiarMes, useMes } from '../lib/mes';
@@ -26,6 +26,9 @@ export default function Liquidacion() {
   /** Quiénes tienen sueldo declarado para *este* mes y no heredado. */
   const [propios, setPropios] = useState<Set<string>>(new Set());
   const [aporteDe, setAporteDe] = useState<{ userId: string; amount: number } | null>(null);
+  /** Qué hacer con lo que sobró, y cuánto de eso decide guardar el hogar. */
+  const [excedente, setExcedente] = useState<RepartoExcedente | null>(null);
+  const [alAhorro, setAlAhorro] = useState('');
   const privado = usePrivacidad();
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -33,17 +36,21 @@ export default function Liquidacion() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [s, h, i, p, r] = await Promise.all([
+      const [s, h, i, p, r, e] = await Promise.all([
         api.settlement(month),
         api.household(),
         api.incomes(),
         api.projection(month),
         api.reserve(),
+        api.excedenteDelMes(month),
       ]);
       setSettlement(s);
       setMembers(h.members);
       setProjection(p);
       setReserve(r);
+      setExcedente(e);
+      // La propuesta del hogar, editable antes de confirmar.
+      setAlAhorro(String(Math.round(e.sugeridoAlAhorro)));
       /*
        * Las casillas parten con el sueldo que el cálculo está usando de verdad,
        * que puede venir arrastrado de un mes anterior. Antes sólo se llenaban
@@ -97,6 +104,12 @@ export default function Liquidacion() {
      que hay que resolver y esconderlo sería esconder el trabajo pendiente. */
   const faltaAlgunSueldo =
     members.length < 2 || members.some((m) => !incomes[m.id] || Number(incomes[m.id]) <= 0);
+
+  /* Lo que el hogar decide guardar, acotado a lo que de verdad sobró. */
+  const ahorroElegido = Math.min(
+    Math.max(Number(alAhorro.replace(/[^\d.-]/g, '')) || 0, 0),
+    excedente?.excedente ?? 0,
+  );
 
   /* ¿Hay algo que arrastrar? Con el mes cuadrado no tiene sentido ofrecerlo. */
   const hayDesbalance = Boolean(settlement?.members.some((m) => Math.abs(m.deviation) >= 1));
@@ -366,7 +379,29 @@ export default function Liquidacion() {
           >
             {money(reserve.balance, currency)}
           </div>
-          <p className="muted" style={{ marginTop: 4 }}>
+          {/* Lo prometido a alguien no es reserva: decirlo evita que la cifra
+              grande de arriba se lea como plata disponible cuando parte hay
+              que devolverla. */}
+          {reserve.committed > 0 && (
+            <div className="arrastre" style={{ marginTop: 8 }}>
+              Comprometido como crédito
+              <strong className="num">−{money(reserve.committed, currency)}</strong>
+            </div>
+          )}
+          {reserve.committed > 0 && (
+            <div className="ficha-persona-datos" style={{ marginTop: 8 }}>
+              <span>
+                <span className="label">Libre para metas</span>
+                <span className="num">{money(reserve.free, currency)}</span>
+              </span>
+              <span>
+                <span className="label">Cubre</span>
+                <span className="num">{reserve.monthsCovered} meses</span>
+              </span>
+            </div>
+          )}
+
+          <p className="muted" style={{ marginTop: 8 }}>
             {enRojoDeVerdad
               ? 'La cuenta del hogar está en rojo: se ha gastado más de lo aportado.'
               : reserve.balance < 0
@@ -547,27 +582,79 @@ export default function Liquidacion() {
               >
                 Ya nos transferimos
               </button>
+              {/* Cerrar sin arrastrar deja el excedente donde está: en la
+                  cuenta, o sea del hogar. Decirlo evita que el bloque de abajo
+                  parezca que también manda a este botón. */}
+              {excedente && excedente.excedente > 0 && (
+                <p className="muted" style={{ marginTop: 8, marginBottom: 0 }}>
+                  Los {money(excedente.excedente, currency)} que sobraron se quedan en el hogar.
+                </p>
+              )}
 
               {/*
                 * La otra forma de cerrar.
                 *
                 * Sólo aparece si hay algo que arrastrar: con el mes cuadrado,
-                * ofrecer "pasar el saldo" sería ofrecer pasar cero. La suma de
-                * lo que se arrastra es cero entre los dos, así que no cambia
-                * cuánto gastó el hogar, sólo quién pone qué el mes que viene.
+                * ofrecer "pasar el saldo" sería ofrecer pasar cero.
                 */}
               {hayDesbalance && (
                 <>
+                  {/*
+                    * Lo que sobró en la cuenta tiene dos destinos posibles y hay
+                    * que elegir uno: quedarse en el hogar —donde financia las
+                    * metas por medio de la reserva— o volver como crédito a
+                    * quien lo puso. Sin decidirlo, la misma plata quedaba
+                    * prometida a los dos lados a la vez.
+                    */}
+                  <div className="o-bien">o</div>
+
+                  {excedente && excedente.excedente > 0 && (
+                    <div className="reparto-excedente">
+                      <div className="label">Sobraron en la cuenta</div>
+                      <div className="cifra-md num">{money(excedente.excedente, currency)}</div>
+
+                      <label className="field" style={{ marginTop: 12, marginBottom: 8 }}>
+                        <span>Cuánto se queda el hogar para ahorrar</span>
+                        <input
+                          inputMode="decimal"
+                          value={alAhorro}
+                          onChange={(e) => setAlAhorro(e.target.value)}
+                        />
+                      </label>
+
+                      <div className="ficha-persona-datos">
+                        <span>
+                          <span className="label">Al ahorro</span>
+                          <span className="num">{money(ahorroElegido, currency)}</span>
+                        </span>
+                        <span>
+                          <span className="label">De vuelta</span>
+                          <span className="num">
+                            {money(Math.max(excedente.excedente - ahorroElegido, 0), currency)}
+                          </span>
+                        </span>
+                      </div>
+
+                      <p className="muted" style={{ marginTop: 10, marginBottom: 0 }}>
+                        La sugerencia es el {excedente.savingsPct}% del gasto del mes
+                        ({money(excedente.tope, currency)}), y se ajusta en Ajustes → Hogar. Lo que
+                        se queda el hogar financia las metas de ahorro; el resto le baja el aporte
+                        del próximo mes a quien puso de más.
+                      </p>
+                    </div>
+                  )}
+
                   <button
                     className="small"
                     style={{ width: '100%', marginTop: 8 }}
                     onClick={async () => {
-                      const r = await api.closeSettlement(month, true);
-                      setMessage(
-                        r.arrastre
-                          ? `Mes cerrado. ${money(r.arrastre.arrastrado, currency)} pasan a ${monthLabel(r.arrastre.hacia)}.`
-                          : 'Mes cerrado.',
-                      );
+                      const r = await api.closeSettlement(month, true, ahorroElegido);
+                      const partes = [];
+                      if (r.arrastre?.ahorrado) partes.push(`${money(r.arrastre.ahorrado, currency)} al ahorro`);
+                      if (r.arrastre?.arrastrado) {
+                        partes.push(`${money(r.arrastre.arrastrado, currency)} de deuda a ${monthLabel(r.arrastre.hacia)}`);
+                      }
+                      setMessage(partes.length ? `Mes cerrado: ${partes.join(' y ')}.` : 'Mes cerrado.');
                       await load();
                     }}
                   >

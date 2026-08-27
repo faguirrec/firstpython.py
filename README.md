@@ -47,6 +47,19 @@ es del hogar:
   que la persona transfirió: mezclarlas haría imposible cuadrar con la cartola.
   Reabrir el mes lo deshace.
 
+**Qué pasa con lo que sobra.** Si un mes cierra con plata de más en la cuenta,
+esa plata tiene dos destinos posibles y hay que elegir: se queda en el hogar
+—donde financia las metas de ahorro por medio de la reserva— o vuelve como
+crédito a quien puso de más, bajándole el aporte del mes siguiente. La app
+propone guardar hasta un porcentaje del gasto del mes (10% por defecto,
+configurable) y devolver el resto, y el número se puede cambiar antes de
+confirmar.
+
+> Antes no había regla y la misma plata quedaba prometida en tres lugares a la
+> vez: al fondo de reserva, a las metas y al crédito del mes siguiente. Ahora el
+> fondo distingue lo **libre** de lo **comprometido** con alguien, y las metas
+> se financian sólo con lo libre.
+
 **Fondo de contingencia.** Un porcentaje configurable sobre el gasto estimado
 que cada uno aporta en su misma proporción. No cuenta como gasto: se acumula en
 la cuenta del hogar como reserva para imprevistos, y la app muestra cuántos

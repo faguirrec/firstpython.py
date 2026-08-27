@@ -7,6 +7,8 @@ export type Household = {
   currency: string;
   officialAccount: string;
   contingencyPct: number;
+  /** Tope de ahorro al cerrar el mes, como % del gasto mensual. */
+  savingsPct: number;
   sendMonthlyReport: number;
 };
 
@@ -325,8 +327,23 @@ export type Comparison = {
   biggestDecreases: CategoryChange[];
 };
 
+/** Qué hacer con lo que sobró en la cuenta al cerrar el mes. */
+export type RepartoExcedente = {
+  excedente: number;
+  /** Tope de ahorro del mes: un porcentaje del gasto. */
+  tope: number;
+  savingsPct: number;
+  sugeridoAlAhorro: number;
+  sugeridoComoCredito: number;
+  creditos: { userId: string; name: string; amount: number }[];
+};
+
 export type Reserve = {
   balance: number;
+  /** Parte del saldo ya prometida como crédito a alguien. */
+  committed: number;
+  /** balance - committed: lo que de verdad puede financiar metas. */
+  free: number;
   totalContributed: number;
   totalSpentFromAccount: number;
   monthlyAverage: number;
@@ -417,10 +434,12 @@ export const api = {
   saveIncome: (body: { month: string; userId?: string; amount: number; note?: string | null }) =>
     put<{ ok: true }>('/finance/incomes', body),
   settlement: (month: string) => get<Settlement>(`/finance/settlement?month=${month}`),
-  closeSettlement: (month: string, arrastrar = false) =>
-    post<{ ok: true; arrastre: { arrastrado: number; hacia: string } | null }>(
+  excedenteDelMes: (month: string) =>
+    get<RepartoExcedente>(`/finance/settlement/excedente?month=${month}`),
+  closeSettlement: (month: string, arrastrar = false, alAhorro: number | null = null) =>
+    post<{ ok: true; arrastre: { arrastrado: number; hacia: string; ahorrado: number } | null }>(
       '/finance/settlement/close',
-      { month, arrastrar },
+      { month, arrastrar, alAhorro },
     ),
   reopenSettlement: (month: string) => del<{ ok: true }>(`/finance/settlement/close?month=${month}`),
   projection: (month: string, budget?: number, contingency?: number) =>

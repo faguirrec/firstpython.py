@@ -191,7 +191,10 @@ export function computeGoals(householdId: string, ambito: Ambito = HOGAR): Goals
   // persona, con lo que a esa persona le ha sobrado.
   const reserve =
     ambito.tipo === 'hogar'
-      ? computeReserve(householdId).balance
+      ? // Lo libre, no el saldo entero: la parte prometida como crédito a
+        // alguien hay que devolverla, y financiar metas con eso sería contarla
+        // dos veces.
+        computeReserve(householdId).free
       : computePersonalSavings(householdId, ambito.userId);
 
   const rows = db

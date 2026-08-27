@@ -120,7 +120,7 @@ householdRouter.get('/', requireHousehold, (req, res) => {
   const household = db
     .prepare(
       `SELECT id, name, currency, official_account AS officialAccount, contingency_pct AS contingencyPct,
-              send_monthly_report AS sendMonthlyReport
+              savings_pct AS savingsPct, send_monthly_report AS sendMonthlyReport
          FROM households WHERE id = ?`,
     )
     .get(req.household!.id);
@@ -151,6 +151,7 @@ householdRouter.patch('/', requireHousehold, (req, res) => {
       currency: z.string().length(3).optional(),
       officialAccount: z.string().max(80).optional(),
       contingencyPct: z.number().min(0).max(100).optional(),
+      savingsPct: z.number().min(0).max(100).optional(),
       sendMonthlyReport: z.boolean().optional(),
     })
     .safeParse(req.body);
@@ -158,13 +159,14 @@ householdRouter.patch('/', requireHousehold, (req, res) => {
     res.status(400).json({ error: parsed.error.issues[0].message });
     return;
   }
-  const { name, currency, officialAccount, contingencyPct, sendMonthlyReport } = parsed.data;
+  const { name, currency, officialAccount, contingencyPct, savingsPct, sendMonthlyReport } = parsed.data;
   db.prepare(
     `UPDATE households
         SET name = COALESCE(?, name),
             currency = COALESCE(?, currency),
             official_account = COALESCE(?, official_account),
             contingency_pct = COALESCE(?, contingency_pct),
+            savings_pct = COALESCE(?, savings_pct),
             send_monthly_report = COALESCE(?, send_monthly_report)
       WHERE id = ?`,
   ).run(
@@ -172,6 +174,7 @@ householdRouter.patch('/', requireHousehold, (req, res) => {
     currency?.toUpperCase() ?? null,
     officialAccount ?? null,
     contingencyPct ?? null,
+    savingsPct ?? null,
     sendMonthlyReport === undefined ? null : sendMonthlyReport ? 1 : 0,
     req.household!.id,
   );

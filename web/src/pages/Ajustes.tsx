@@ -166,6 +166,35 @@ function PanelHogar() {
             Con 10%, si el gasto estimado del mes es $1.000.000 se juntan $1.100.000 y quedan $100.000 de reserva.
           </em>
         </label>
+
+        {/*
+          * Dos porcentajes distintos y conviene no confundirlos: la
+          * contingencia se junta *antes*, de más, todos los meses; el ahorro
+          * decide qué pasa con lo que sobró *después* de pagar todo.
+          */}
+        <h3 style={{ marginTop: 20 }}>Ahorro al cerrar el mes</h3>
+        <p className="muted" style={{ marginTop: 4 }}>
+          Cuando un mes cierra con plata de más en la cuenta, hasta este tope se queda en el hogar
+          para financiar las metas de ahorro. Lo que pase del tope vuelve como crédito a quien puso
+          de más: le baja el aporte del mes siguiente.
+        </p>
+        <label className="field" style={{ marginBottom: 0 }}>
+          <span>Tope de ahorro: {household.savingsPct}% del gasto del mes</span>
+          <input
+            type="range"
+            min={0}
+            max={50}
+            step={1}
+            defaultValue={household.savingsPct}
+            onChange={(e) => setHousehold({ ...household, savingsPct: Number(e.target.value) })}
+            onMouseUp={(e) => void save({ savingsPct: Number((e.target as HTMLInputElement).value) })}
+            onTouchEnd={(e) => void save({ savingsPct: Number((e.target as HTMLInputElement).value) })}
+          />
+          <em className="muted">
+            Con 10% y un gasto de $1.400.000 al mes, se guardan hasta $140.000 de lo que sobre.
+            En cero, todo lo que sobra vuelve a quien lo puso.
+          </em>
+        </label>
       </div>
 
       <PanelCorreo household={household} onSave={save} />

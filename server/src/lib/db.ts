@@ -240,6 +240,15 @@ function addColumn(table: string, column: string, definition: string): void {
 }
 
 addColumn('households', 'contingency_pct', 'REAL NOT NULL DEFAULT 10');
+
+/*
+ * Cuánto de lo que sobra al cerrar el mes se queda el hogar para ahorrar.
+ *
+ * Es un porcentaje del gasto mensual, no del excedente: así el ahorro es una
+ * cifra estable —"guardamos $140.000 al mes"— y no una que sube y baja con lo
+ * que haya sobrado. Lo que pase de ese tope vuelve como crédito a quien lo puso.
+ */
+addColumn('households', 'savings_pct', 'REAL NOT NULL DEFAULT 10');
 addColumn('invites', 'revoked', 'INTEGER NOT NULL DEFAULT 0');
 addColumn('households', 'send_monthly_report', 'INTEGER NOT NULL DEFAULT 1');
 addColumn('categories', 'emoji', "TEXT NOT NULL DEFAULT '📦'");
