@@ -352,6 +352,10 @@ export default function Liquidacion() {
             month={month}
             currency={currency}
             cuenta={household?.officialAccount ?? 'la cuenta del hogar'}
+            onCuadrado={() => {
+              setMessage('Saldo cuadrado con el banco.');
+              void load();
+            }}
           />
 
           <details className="card plegable">

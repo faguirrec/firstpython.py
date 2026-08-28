@@ -342,6 +342,9 @@ export type RepartoExcedente = {
 
 export type Reserve = {
   balance: number;
+  /** Plata que ya estaba en la cuenta antes de la app, o cuadrada a mano. */
+  adjustment: number;
+  adjustedAt: string | null;
   /** Parte del saldo ya prometida como crédito a alguien. */
   committed: number;
   /** balance - committed: lo que de verdad puede financiar metas. */
@@ -451,6 +454,8 @@ export const api = {
         (contingency != null ? `&contingency=${contingency}` : ''),
     ),
   reserve: () => get<Reserve>('/finance/reserve'),
+  cuadrarCuenta: (saldoReal: number) =>
+    put<{ ok: true; diferencia: number; reserve: Reserve }>('/finance/reserve/cuadrar', { saldoReal }),
 
   monthlyReport: (months = 12) =>
     get<{ months: { month: string; shared: number; personal: number; contributions: number; income: number }[] }>(

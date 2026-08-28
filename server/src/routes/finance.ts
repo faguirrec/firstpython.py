@@ -330,6 +330,37 @@ financeRouter.put('/target', (req, res) => {
   res.json({ ok: true });
 });
 
+/**
+ * Cuadrar el saldo de la cuenta contra la cartola del banco.
+ *
+ * Se recibe lo que dice el banco y se guarda la diferencia como ajuste, para
+ * que de ahí en adelante los dos números coincidan. Sirve para dos cosas: lo
+ * que había en la cuenta antes de empezar a usar la app —que la app no puede
+ * saber— y cualquier diferencia que después de buscarla decidan no perseguir.
+ *
+ * El ajuste no es aporte de nadie: es plata del hogar anterior al reparto, así
+ * que no toca la liquidación ni le cuenta a ninguno de los dos.
+ */
+financeRouter.put('/reserve/cuadrar', (req, res) => {
+  const parsed = z.object({ saldoReal: z.number() }).safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0].message });
+    return;
+  }
+
+  const antes = computeReserve(req.household!.id);
+  // La diferencia se suma al ajuste que ya hubiera: cuadrar dos veces no puede
+  // borrar lo que se declaró la primera.
+  const diferencia = Math.round((parsed.data.saldoReal - antes.balance) * 100) / 100;
+  db.prepare(
+    `UPDATE households
+        SET balance_adjustment = balance_adjustment + ?, balance_adjusted_at = datetime('now')
+      WHERE id = ?`,
+  ).run(diferencia, req.household!.id);
+
+  res.json({ ok: true, diferencia, reserve: computeReserve(req.household!.id) });
+});
+
 /* ----------------------------- Gastos fijos ------------------------------ */
 
 /** Lo declarado y, cruzado con los movimientos del mes, qué falta por pagar. */

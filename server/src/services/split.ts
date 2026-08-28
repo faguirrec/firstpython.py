@@ -574,8 +574,18 @@ export function projectContributions(
 }
 
 export type Reserve = {
-  /** Saldo acumulado de la cuenta del hogar: todo lo aportado menos lo gastado desde ella. */
+  /**
+   * Lo que debería haber hoy en la cuenta del hogar: el ajuste inicial, más
+   * todo lo aportado, menos todo lo que se pagó con ella.
+   */
   balance: number;
+  /**
+   * Plata que ya estaba en la cuenta antes de usar la app, más lo que se haya
+   * cuadrado a mano contra la cartola. No es aporte de nadie.
+   */
+  adjustment: number;
+  /** Cuándo se cuadró por última vez, si se hizo. */
+  adjustedAt: string | null;
   /**
    * Parte del saldo que ya está prometida como crédito a alguien.
    *
@@ -719,7 +729,17 @@ export function computeReserve(householdId: string): Reserve {
     )
     .all(householdId) as { month: string; contributed: number; spent: number }[];
 
-  let running = 0;
+  const ajuste = db
+    .prepare(
+      `SELECT balance_adjustment AS monto, balance_adjusted_at AS cuando
+         FROM households WHERE id = ?`,
+    )
+    .get(householdId) as { monto: number; cuando: string | null } | undefined;
+  const adjustment = ajuste?.monto ?? 0;
+
+  // El acumulado arranca en lo que ya había: si no, la última fila del
+  // histórico no coincidiría con el saldo que muestra la tarjeta.
+  let running = adjustment;
   const history = rows.map((r) => {
     running += r.contributed - r.spent;
     return { month: r.month, contributed: round2(r.contributed), spent: round2(r.spent), balance: round2(running) };
@@ -730,7 +750,7 @@ export function computeReserve(householdId: string): Reserve {
 
   const recent = rows.slice(-3);
   const monthlyAverage = recent.length ? recent.reduce((a, b) => a + b.spent, 0) / recent.length : 0;
-  const balance = round2(totalContributed - totalSpent);
+  const balance = round2(adjustment + totalContributed - totalSpent);
 
   /*
    * Créditos que el hogar todavía le debe a alguien.
@@ -755,6 +775,8 @@ export function computeReserve(householdId: string): Reserve {
 
   return {
     balance,
+    adjustment: round2(adjustment),
+    adjustedAt: ajuste?.cuando ?? null,
     committed,
     free,
     totalContributed: round2(totalContributed),

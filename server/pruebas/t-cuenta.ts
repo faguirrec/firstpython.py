@@ -78,5 +78,51 @@ db.prepare(
 ok('un hogar sin gastos personales cuadra igual que siempre',
    computeReserve(limpio).balance === 200_000, computeReserve(limpio).balance);
 
+/* --------------------------- Cuadrar con el banco ------------------------- */
+
+/**
+ * La app suma desde cero el día que el hogar empieza a usarla. Si la cuenta ya
+ * tenía plata, el número queda corrido para siempre y hasta ahora no había
+ * dónde decirlo.
+ */
+const conAjuste = uid();
+db.prepare('INSERT INTO households (id,name,currency) VALUES (?,?,?)').run(conAjuste, 'Con historia', 'CLP');
+db.prepare('INSERT INTO household_members (household_id,user_id,role) VALUES (?,?,?)').run(conAjuste, ana, 'member');
+db.prepare(
+  `INSERT INTO transactions (id,household_id,occurred_on,period,amount,type,scope,funded_by,user_id,source,reviewed)
+   VALUES (?,?,?,?,?,'aporte','comun','oficial',?,'manual',1)`,
+).run(uid(), conAjuste, `${M}-10`, M, 50_000, ana);
+
+ok('sin ajuste, el saldo es sólo lo que la app vio',
+   computeReserve(conAjuste).balance === 50_000, computeReserve(conAjuste).balance);
+
+// El banco dice 131.000: había 81.000 antes de empezar.
+db.prepare(
+  `UPDATE households SET balance_adjustment = balance_adjustment + ?, balance_adjusted_at = datetime('now')
+    WHERE id = ?`,
+).run(131_000 - computeReserve(conAjuste).balance, conAjuste);
+
+const cuadrado = computeReserve(conAjuste);
+ok('tras cuadrar, el saldo es el del banco', cuadrado.balance === 131_000, cuadrado.balance);
+ok('y queda anotado cuánto se ajustó', cuadrado.adjustment === 81_000, cuadrado.adjustment);
+ok('con la fecha del cuadre', Boolean(cuadrado.adjustedAt), cuadrado.adjustedAt);
+ok('la última fila del histórico coincide con el saldo',
+   cuadrado.history[cuadrado.history.length - 1].balance === 131_000,
+   cuadrado.history.map((h) => `${h.month}:${h.balance}`));
+
+// El ajuste es del hogar, no de nadie: no puede aparecer en la liquidación.
+const liq = computeSettlement(conAjuste, M);
+ok('el ajuste no le cuenta a nadie como aporte',
+   liq.members.every((m) => m.transferred === 50_000 || m.transferred === 0),
+   liq.members.map((m) => `${m.name}:${m.transferred}`));
+
+// Cuadrar de nuevo suma sobre lo anterior, no lo pisa.
+db.prepare(
+  `UPDATE households SET balance_adjustment = balance_adjustment + ? WHERE id = ?`,
+).run(140_000 - computeReserve(conAjuste).balance, conAjuste);
+ok('cuadrar dos veces no borra el ajuste anterior',
+   computeReserve(conAjuste).balance === 140_000 && computeReserve(conAjuste).adjustment === 90_000,
+   computeReserve(conAjuste));
+
 console.log(fallas === 0 ? '\nTodo bien.' : `\n${fallas} fallas.`);
 process.exit(fallas === 0 ? 0 : 1);

@@ -249,6 +249,22 @@ addColumn('households', 'contingency_pct', 'REAL NOT NULL DEFAULT 10');
  * que haya sobrado. Lo que pase de ese tope vuelve como crédito a quien lo puso.
  */
 addColumn('households', 'savings_pct', 'REAL NOT NULL DEFAULT 10');
+
+/*
+ * Ajuste del saldo de la cuenta.
+ *
+ * La app calcula lo que debería haber en el banco sumando aportes y restando
+ * gastos, y parte de cero el día que el hogar empieza a usarla. Si la cuenta ya
+ * tenía plata antes —lo normal—, el número queda corrido por esa cantidad para
+ * siempre, sin forma de arreglarlo.
+ *
+ * Acá vive lo que había al empezar, y también cualquier diferencia que al
+ * cuadrar contra la cartola decidan no perseguir. No es un aporte de nadie: es
+ * plata del hogar que existía antes del reparto, así que no toca la liquidación
+ * ni le cuenta a ninguno de los dos.
+ */
+addColumn('households', 'balance_adjustment', 'REAL NOT NULL DEFAULT 0');
+addColumn('households', 'balance_adjusted_at', 'TEXT');
 addColumn('invites', 'revoked', 'INTEGER NOT NULL DEFAULT 0');
 addColumn('households', 'send_monthly_report', 'INTEGER NOT NULL DEFAULT 1');
 addColumn('categories', 'emoji', "TEXT NOT NULL DEFAULT '📦'");

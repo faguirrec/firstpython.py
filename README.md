@@ -52,6 +52,13 @@ hogar, con el detalle de lo que venía de antes, lo que entró y lo que salió e
 mes. Es el número que tiene que cuadrar con la cartola del banco, y por eso
 cuenta **todo** lo que se pagó con esa cuenta, sea común o personal.
 
+**Cuadrar con el banco.** La app suma desde cero el día que el hogar empieza a
+usarla, así que si la cuenta ya tenía plata, el número nace corrido. En la
+tarjeta del saldo se escribe lo que dice la cartola y la diferencia queda
+anotada como ajuste, de manera que los dos números coincidan de ahí en
+adelante. El ajuste es plata del hogar anterior al reparto: no le cuenta a
+ninguno de los dos ni toca la liquidación.
+
 > Un gasto marcado como personal lo paga su dueño salvo que digan lo contrario.
 > Al revés —que era el comportamiento anterior— comprarse algo propio salía del
 > pozo común sin que nadie respondiera por esa plata, y el saldo quedaba

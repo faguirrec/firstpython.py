@@ -1,6 +1,7 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { api, type Reserve, type Settlement } from '../lib/api';
 import { money, monthLabel } from '../lib/format';
-import type { Reserve, Settlement } from '../lib/api';
 
 /**
  * Cuánta plata debería haber en la cuenta del hogar.
@@ -21,6 +22,7 @@ export default function SaldoCuenta({
   currency,
   cuenta,
   compacto = false,
+  onCuadrado,
 }: {
   reserve: Reserve;
   settlement: Settlement | null;
@@ -28,7 +30,16 @@ export default function SaldoCuenta({
   currency: string;
   cuenta: string;
   compacto?: boolean;
+  /** Se llama tras cuadrar, para que la pantalla recargue sus cifras. */
+  onCuadrado?: () => void;
 }) {
+  const [saldoReal, setSaldoReal] = useState('');
+  const [cuadrando, setCuadrando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const declarado = Number(saldoReal.replace(/[^\d.-]/g, ''));
+  const hayCifra = saldoReal.trim() !== '' && Number.isFinite(declarado);
+  const diferencia = hayCifra ? declarado - reserve.balance : 0;
   const delMes = reserve.history.find((h) => h.month === month);
   const entro = delMes?.contributed ?? 0;
   const salio = delMes?.spent ?? 0;
@@ -75,6 +86,12 @@ export default function SaldoCuenta({
       </p>
 
       <div className="cuenta-detalle">
+        {reserve.adjustment !== 0 && (
+          <div>
+            <span>Ya estaba en la cuenta al empezar</span>
+            <strong className="num">{money(reserve.adjustment, currency)}</strong>
+          </div>
+        )}
         <div>
           <span>Venía de antes de {monthLabel(month, true)}</span>
           <strong className="num">{money(anterior, currency)}</strong>
@@ -103,6 +120,79 @@ export default function SaldoCuenta({
           </div>
         </div>
       )}
+
+      {/*
+        * Cuadrar contra la cartola.
+        *
+        * La app suma desde cero el día que el hogar empezó a usarla, así que si
+        * la cuenta ya tenía plata, el número queda corrido para siempre y no
+        * había dónde decirlo. Esto guarda la diferencia como ajuste; no es
+        * aporte de nadie y no toca la liquidación.
+        */}
+      <details className="plegable" style={{ marginTop: 16 }}>
+        <summary>
+          <strong>Cuadrar con el banco</strong>
+          <span className="resumen-dato">
+            {reserve.adjustment !== 0
+              ? ` · ajustado en ${money(reserve.adjustment, currency)}`
+              : ' · nunca se ha cuadrado'}
+          </span>
+        </summary>
+
+        <p className="muted" style={{ marginTop: 8 }}>
+          Entra a tu banco y escribe el saldo que aparece ahí. La diferencia queda anotada como
+          ajuste, para que de aquí en adelante los dos números coincidan.
+        </p>
+
+        <label className="field">
+          <span>¿Cuánto dice el banco?</span>
+          <input
+            inputMode="decimal"
+            value={saldoReal}
+            onChange={(e) => setSaldoReal(e.target.value)}
+            placeholder="131000"
+          />
+        </label>
+
+        {hayCifra && Math.abs(diferencia) >= 1 && (
+          <p className="muted" style={{ marginTop: 0 }}>
+            Faltan {money(Math.abs(diferencia), currency)}{' '}
+            {diferencia > 0 ? 'por sumar' : 'por restar'}. Lo más común es que sean movimientos que
+            todavía no entraron —las compras con tarjeta, si el correo del banco no se está
+            leyendo— o plata que ya estaba en la cuenta antes de usar la app.
+          </p>
+        )}
+
+        {error && <div className="error">{error}</div>}
+
+        <button
+          className="small"
+          disabled={!hayCifra || cuadrando}
+          onClick={async () => {
+            setCuadrando(true);
+            setError(null);
+            try {
+              await api.cuadrarCuenta(declarado);
+              setSaldoReal('');
+              onCuadrado?.();
+            } catch (err) {
+              setError((err as Error).message);
+            } finally {
+              setCuadrando(false);
+            }
+          }}
+        >
+          {cuadrando ? 'Cuadrando…' : 'Anotar la diferencia'}
+        </button>
+
+        {reserve.adjustment !== 0 && (
+          <p className="muted" style={{ marginTop: 10, marginBottom: 0 }}>
+            Hoy hay {money(reserve.adjustment, currency)} de ajuste
+            {reserve.adjustedAt && `, anotados el ${reserve.adjustedAt.slice(0, 10)}`}. Se suma al
+            saldo pero no le cuenta a ninguno de los dos en el reparto.
+          </p>
+        )}
+      </details>
 
       {settlement && Math.abs(settlement.officialAccountBalance) >= 1 && (
         <p className="muted" style={{ marginTop: 12, marginBottom: 0 }}>
