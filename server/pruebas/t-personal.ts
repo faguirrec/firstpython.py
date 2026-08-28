@@ -54,6 +54,17 @@ async function main() {
   await ana.pedir('POST', '/transactions', { occurredOn: dia, amount: 40000, type: 'gasto', scope: 'personal', merchant: 'ROPA' });
   await bruno.pedir('POST', '/transactions', { occurredOn: dia, amount: 90000, type: 'gasto', scope: 'personal', merchant: 'BICICLETA' });
 
+  /*
+   * Un gasto personal lo paga su dueño, no la cuenta del hogar.
+   *
+   * Era al revés y tenía dos consecuencias feas: el saldo de la cuenta quedaba
+   * inflado —esa plata había salido del banco— y nadie respondía por lo que se
+   * sacó del pozo común para algo propio.
+   */
+  const suyos = await ana.pedir('GET', `/transactions?month=${MES}&scope=personal`);
+  const suRopa = suyos.transactions.find((t: any) => t.merchant === 'ROPA');
+  ok('un gasto personal lo paga su dueño por defecto', suRopa?.fundedBy === idAna, suRopa?.fundedBy);
+
   // ------------------------------------------------------ resumen personal
   const resumen = await ana.pedir('GET', `/finance/personal?month=${MES}`);
   ok('el sueldo del mes', resumen.income === 1_500_000, resumen);

@@ -49,6 +49,8 @@ export type MemberBreakdown = {
   fairShare: number;
   transferred: number;
   paidOutOfPocket: number;
+  /** Gastos personales suyos pagados con la cuenta del hogar; se descuentan. */
+  personalFromAccount: number;
   contributed: number;
   /** Saldo que viene de un mes anterior, firmado. Negativo = viene debiendo. */
   carriedOver: number;

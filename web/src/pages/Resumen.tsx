@@ -6,6 +6,7 @@ import {
   type EstadoFijos,
   type Projection,
   type ResumenPersonal,
+  type Reserve,
   type Settlement,
   type Transaction,
 } from '../lib/api';
@@ -21,6 +22,7 @@ import { IconoAlerta, IconoBolsillo } from '../components/Icons';
 import { Avatar, FichaCategoria } from '../components/Fichas';
 import Cifra from '../components/Cifra';
 import PrimerosPasos, { pasosPendientes } from '../components/PrimerosPasos';
+import SaldoCuenta from '../components/SaldoCuenta';
 import { TarjetaCargando, Vacio } from '../components/Estados';
 
 export default function Resumen() {
@@ -38,6 +40,8 @@ export default function Resumen() {
   const [proyeccion, setProyeccion] = useState<Projection | null>(null);
   /** Cuántos buzones hay conectados, para saber si falta ese paso. */
   const [buzones, setBuzones] = useState<number | null>(null);
+  /** Cuánto debería haber en la cuenta del hogar. */
+  const [reserve, setReserve] = useState<Reserve | null>(null);
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const modo = useModo();
@@ -49,7 +53,7 @@ export default function Resumen() {
     try {
       // En un mes que todavía no empieza no hay nada gastado que mostrar: lo
       // que sirve es cuánto va a tener que poner cada uno.
-      const [s, c, t, g, b, p, f, pr] = await Promise.all([
+      const [s, c, t, g, b, p, f, pr, rv] = await Promise.all([
         api.settlement(month),
         // Sin los fijos: el arriendo se lleva tres cuartos del gráfico todos
         // los meses y tapa lo único sobre lo que se puede decidir algo.
@@ -60,6 +64,8 @@ export default function Resumen() {
         esPersonal ? api.resumenPersonal(month) : Promise.resolve(null),
         esPersonal ? Promise.resolve(null) : api.gastosFijos(month),
         futuro && !esPersonal ? api.projection(month) : Promise.resolve(null),
+        // El saldo de la cuenta es del hogar; en el bolsillo propio no aplica.
+        esPersonal ? Promise.resolve(null) : api.reserve(),
       ]);
       // Si el servidor no responde, el paso queda como pendiente y no como
       // hecho: es preferible ofrecer conectar algo ya conectado que dar por
@@ -77,6 +83,7 @@ export default function Resumen() {
       setPersonal(p);
       setFijos(f);
       setProyeccion(pr);
+      setReserve(rv);
     } catch (err) {
       setError((err as Error).message);
     }
@@ -281,6 +288,17 @@ export default function Resumen() {
             <Link to="/movimientos?pendientes=1"><button className="small">Revisar</button></Link>
           </div>
         </div>
+      )}
+
+      {!esPersonal && reserve && (
+        <SaldoCuenta
+          reserve={reserve}
+          settlement={settlement}
+          month={month}
+          currency={currency}
+          cuenta={household?.officialAccount ?? 'la cuenta del hogar'}
+          compacto
+        />
       )}
 
       {/* Cómo va cada uno es del hogar: en el bolsillo propio no viene al caso,

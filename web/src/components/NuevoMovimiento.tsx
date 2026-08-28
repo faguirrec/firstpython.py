@@ -196,7 +196,17 @@ export default function NuevoMovimiento({ month, existing, inicial, onClose, onS
               <button
                 type="button"
                 className={form.scope === 'personal' ? 'activo' : ''}
-                onClick={() => set('scope', 'personal')}
+                onClick={() => {
+                  // Al marcarlo personal, quien paga pasa a ser uno mismo:
+                  // comprarse algo propio con la cuenta común es la excepción,
+                  // no lo normal, y como valor por defecto salía del pozo del
+                  // hogar sin que nadie respondiera por esa plata.
+                  setForm((prev) => ({
+                    ...prev,
+                    scope: 'personal',
+                    fundedBy: prev.fundedBy === 'oficial' ? (user?.id ?? prev.fundedBy) : prev.fundedBy,
+                  }));
+                }}
               >
                 Personal
               </button>

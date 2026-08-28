@@ -29,7 +29,13 @@ const transactionInput = z.object({
   amount: z.number().positive('El monto debe ser mayor que cero'),
   type: z.enum(['gasto', 'aporte', 'ingreso_extra']),
   scope: z.enum(['comun', 'personal']).default('comun'),
-  fundedBy: z.string().default('oficial'),
+  /*
+   * Quién puso la plata. Sin decirlo, la cuenta del hogar… salvo en un gasto
+   * personal, donde lo normal es que lo haya pagado su dueño: nadie compra algo
+   * suyo con la tarjeta común por defecto. Ese ajuste va más abajo, cuando ya
+   * se sabe el ámbito.
+   */
+  fundedBy: z.string().optional(),
   userId: z.string().nullable().optional(),
   categoryId: z.string().nullable().optional(),
   merchant: z.string().max(120).nullable().optional(),
@@ -102,6 +108,16 @@ transactionsRouter.post('/', (req, res) => {
   // justamente lo que le pertenece a una persona.
   const userId =
     t.type === 'aporte' || t.scope === 'personal' ? (t.userId ?? req.user!.id) : (t.userId ?? null);
+
+  /*
+   * Y quién puso la plata, cuando no se dijo.
+   *
+   * Un gasto personal lo paga su dueño salvo que digan lo contrario: asumir la
+   * cuenta del hogar hacía que comprarse algo propio saliera del pozo común sin
+   * que nadie respondiera por esa plata, y dejaba el saldo de la cuenta sin
+   * cuadrar con el banco.
+   */
+  const fundedBy = t.fundedBy ?? (t.scope === 'personal' && t.type === 'gasto' ? userId! : 'oficial');
   const categoryId = t.categoryId ?? categorize(req.household!.id, t.merchant ?? t.description ?? null);
   const id = uid();
 
@@ -112,7 +128,7 @@ transactionsRouter.post('/', (req, res) => {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', 1)`,
   ).run(
     id, req.household!.id, t.occurredOn, t.period ?? t.occurredOn.slice(0, 7),
-    t.amount, t.type, t.scope, t.fundedBy, userId,
+    t.amount, t.type, t.scope, fundedBy, userId,
     categoryId, t.merchant ?? null, t.description ?? null, t.accountLabel ?? null, t.installments ?? null,
   );
 

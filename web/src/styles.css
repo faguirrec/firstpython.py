@@ -878,6 +878,28 @@ details.plegable > summary .resumen-dato {
   color: var(--text-secondary);
 }
 
+/* Las líneas que explican de dónde sale el saldo: concepto a la izquierda,
+   cifra a la derecha, todas alineadas en la misma columna para poder sumarlas
+   con la vista. */
+.cuenta-detalle {
+  display: grid;
+  gap: var(--e2);
+  margin-top: var(--e4);
+  padding-top: var(--e3);
+  border-top: 1px solid var(--grid);
+  font-size: var(--t-sm);
+  color: var(--text-secondary);
+}
+
+.cuenta-detalle > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--e3);
+}
+
+.cuenta-detalle .num { color: var(--text-primary); white-space: nowrap; }
+
 /* Separador entre dos caminos alternativos. La línea a los lados deja claro
    que son opciones excluyentes y no dos pasos seguidos. */
 .o-bien {

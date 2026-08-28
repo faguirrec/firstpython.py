@@ -47,6 +47,16 @@ es del hogar:
   que la persona transfirió: mezclarlas haría imposible cuadrar con la cartola.
   Reabrir el mes lo deshace.
 
+**El saldo de la cuenta.** Cuánta plata debería haber hoy en la cuenta del
+hogar, con el detalle de lo que venía de antes, lo que entró y lo que salió este
+mes. Es el número que tiene que cuadrar con la cartola del banco, y por eso
+cuenta **todo** lo que se pagó con esa cuenta, sea común o personal.
+
+> Un gasto marcado como personal lo paga su dueño salvo que digan lo contrario.
+> Al revés —que era el comportamiento anterior— comprarse algo propio salía del
+> pozo común sin que nadie respondiera por esa plata, y el saldo quedaba
+> inflado frente al banco.
+
 **Qué pasa con lo que sobra.** Si un mes cierra con plata de más en la cuenta,
 esa plata tiene dos destinos posibles y hay que elegir: se queda en el hogar
 —donde financia las metas de ahorro por medio de la reserva— o vuelve como

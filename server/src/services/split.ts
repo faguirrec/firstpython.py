@@ -13,7 +13,15 @@ export type MemberBreakdown = {
   transferred: number;
   /** Gastos comunes que pagó de su bolsillo (no salieron de la cuenta oficial). */
   paidOutOfPocket: number;
-  /** transferred + paidOutOfPocket */
+  /**
+   * Gastos **personales** suyos que pagó con la cuenta del hogar.
+   *
+   * Sacar plata del pozo común para algo propio es lo contrario de aportar, así
+   * que se descuenta. Antes desaparecía de la liquidación: la cuenta quedaba
+   * corta y nadie respondía por esa plata.
+   */
+  personalFromAccount: number;
+  /** transferred + paidOutOfPocket - personalFromAccount */
   contributed: number;
   /**
    * Saldo que viene arrastrado de un mes anterior, firmado.
@@ -335,8 +343,19 @@ export function computeSettlement(
         .get(householdId, periodo, m.userId) as { total: number },
     ]);
 
+    const personalFromAccount = sum([
+      db
+        .prepare(
+          `SELECT COALESCE(SUM(amount), 0) AS total FROM transactions
+            WHERE household_id = ? AND period = ?
+              AND type = 'gasto' AND scope = 'personal'
+              AND funded_by = 'oficial' AND user_id = ?`,
+        )
+        .get(householdId, periodo, m.userId) as { total: number },
+    ]);
+
     const fairShare = round2(totalShared * incomeShare);
-    const contributed = round2(transferred + paidOutOfPocket);
+    const contributed = round2(transferred + paidOutOfPocket - personalFromAccount);
     const arrastre = arrastres.get(m.userId);
 
     return {
@@ -347,6 +366,7 @@ export function computeSettlement(
       fairShare,
       transferred: round2(transferred),
       paidOutOfPocket: round2(paidOutOfPocket),
+      personalFromAccount: round2(personalFromAccount),
       contributed,
       carriedOver: round2(arrastre?.amount ?? 0),
       carriedFrom: arrastre?.from ?? null,
@@ -359,7 +379,7 @@ export function computeSettlement(
       .prepare(
         `SELECT COALESCE(SUM(amount), 0) AS total FROM transactions
           WHERE household_id = ? AND period = ?
-            AND type = 'gasto' AND scope = 'comun' AND funded_by = 'oficial'`,
+            AND type = 'gasto' AND funded_by = 'oficial'`,
       )
       .get(householdId, periodo) as { total: number }
   ).total;
@@ -686,7 +706,11 @@ export function computeReserve(householdId: string): Reserve {
     .prepare(
       `SELECT period AS month,
               COALESCE(SUM(CASE WHEN type = 'aporte' THEN amount ELSE 0 END), 0) AS contributed,
-              COALESCE(SUM(CASE WHEN type = 'gasto' AND scope = 'comun' AND funded_by = 'oficial'
+              -- Todo lo que se pagó con la cuenta, sea común o personal: si
+              -- alguien compra algo suyo con la tarjeta de la casa, esa plata
+              -- sale del banco igual. Filtrar por 'comun' dejaba el saldo
+              -- inflado y hacía imposible cuadrar con la cartola.
+              COALESCE(SUM(CASE WHEN type = 'gasto' AND funded_by = 'oficial'
                                 THEN amount ELSE 0 END), 0) AS spent
          FROM transactions
         WHERE household_id = ?

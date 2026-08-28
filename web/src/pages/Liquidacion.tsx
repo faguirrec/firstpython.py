@@ -7,6 +7,7 @@ import { useVersionDatos } from '../lib/datos';
 import Cabecera from '../components/Cabecera';
 import { SplitBar } from '../components/Charts';
 import { Avatar } from '../components/Fichas';
+import SaldoCuenta from '../components/SaldoCuenta';
 import Metas from '../components/Metas';
 import NuevoMovimiento from '../components/NuevoMovimiento';
 import { IconoOculto, IconoVer } from '../components/Icons';
@@ -113,16 +114,6 @@ export default function Liquidacion() {
 
   /* ¿Hay algo que arrastrar? Con el mes cuadrado no tiene sentido ofrecerlo. */
   const hayDesbalance = Boolean(settlement?.members.some((m) => Math.abs(m.deviation) >= 1));
-
-  /* Un desajuste chico frente a lo que gasta el hogar es redondeo, no déficit. */
-  const enRojoDeVerdad =
-    reserve != null &&
-    reserve.balance < 0 &&
-    // El 1% de lo que gasta el hogar en un mes típico, y nunca menos de mil
-    // pesos. Antes se medía contra el gasto del mes que se está mirando, que en
-    // uno recién abierto es cero: ahí cualquier saldo negativo pasaba a ser una
-    // alarma, incluso el redondeo de meses anteriores.
-    Math.abs(reserve.balance) > Math.max(reserve.monthlyAverage * 0.01, 1000);
 
   return (
     <>
@@ -354,65 +345,18 @@ export default function Liquidacion() {
       </div>
 
       {reserve && (
-        <div className="card">
-          <div className="card-head">
-            <h2>Fondo de reserva</h2>
-            {reserve.monthsCovered > 0 && (
-              <span className={`pill ${reserve.monthsCovered >= 1 ? 'good' : 'warn'}`}>
-                {reserve.monthsCovered} {reserve.monthsCovered === 1 ? 'mes' : 'meses'} de gastos
-              </span>
-            )}
-          </div>
-          {/*
-            * Rojo sólo cuando de verdad hay un problema.
-            *
-            * El saldo del fondo es la resta de dos cifras de siete dígitos, así
-            * que quedar en −$423 sobre un millón y medio es que la cuenta
-            * cuadra, no que el hogar esté en rojo. Pintarlo en rojo enorme y
-            * escribir "se ha gastado más de lo aportado" convertía el redondeo
-            * en una alarma —y una alarma que salta sin motivo enseña a
-            * ignorarlas todas—. El umbral es el 1% del gasto del mes.
-            */}
-          <div
-            className="hero num"
-            style={{ color: enRojoDeVerdad ? 'var(--critical)' : undefined }}
-          >
-            {money(reserve.balance, currency)}
-          </div>
-          {/* Lo prometido a alguien no es reserva: decirlo evita que la cifra
-              grande de arriba se lea como plata disponible cuando parte hay
-              que devolverla. */}
-          {reserve.committed > 0 && (
-            <div className="arrastre" style={{ marginTop: 8 }}>
-              Comprometido como crédito
-              <strong className="num">−{money(reserve.committed, currency)}</strong>
-            </div>
-          )}
-          {reserve.committed > 0 && (
-            <div className="ficha-persona-datos" style={{ marginTop: 8 }}>
-              <span>
-                <span className="label">Libre para metas</span>
-                <span className="num">{money(reserve.free, currency)}</span>
-              </span>
-              <span>
-                <span className="label">Cubre</span>
-                <span className="num">{reserve.monthsCovered} meses</span>
-              </span>
-            </div>
-          )}
+        <>
+          <SaldoCuenta
+            reserve={reserve}
+            settlement={settlement}
+            month={month}
+            currency={currency}
+            cuenta={household?.officialAccount ?? 'la cuenta del hogar'}
+          />
 
-          <p className="muted" style={{ marginTop: 8 }}>
-            {enRojoDeVerdad
-              ? 'La cuenta del hogar está en rojo: se ha gastado más de lo aportado.'
-              : reserve.balance < 0
-                ? `${household?.officialAccount ?? 'La cuenta del hogar'} está prácticamente a cero: lo aportado y lo gastado se emparejan.`
-                : `Acumulado en ${household?.officialAccount ?? 'la cuenta del hogar'} sobre los gastos pagados.`}
-          </p>
-          {/* Mes a mes, en filas: el saldo a la derecha y el detalle debajo.
-              Cuatro columnas de plata en 390px dejaban las cifras pegadas. */}
-          <details className="plegable" style={{ marginTop: 12 }}>
+          <details className="card plegable">
             <summary>
-              <strong>Mes a mes</strong>
+              <strong>La cuenta, mes a mes</strong>
               <span className="resumen-dato"> · últimos {Math.min(6, reserve.history.length)}</span>
             </summary>
             <div className="list">
@@ -421,7 +365,7 @@ export default function Liquidacion() {
                   <div className="body">
                     <div className="title">{monthLabel(h.month)}</div>
                     <div className="meta">
-                      Aportes {money(h.contributed, currency)} · gastos {money(h.spent, currency)}
+                      Entró {money(h.contributed, currency)} · salió {money(h.spent, currency)}
                     </div>
                   </div>
                   {/* Rojo sólo si el mes se pasó de verdad: un desajuste de mil
@@ -442,7 +386,7 @@ export default function Liquidacion() {
               ))}
             </div>
           </details>
-        </div>
+        </>
       )}
 
       {aporteDe && (
@@ -553,10 +497,6 @@ export default function Liquidacion() {
               </ul>
             )}
           </div>
-
-          <p className="muted" style={{ marginTop: 12, marginBottom: 8 }}>
-            Saldo de la cuenta del hogar: {money(settlement.officialAccountBalance, currency)}
-          </p>
 
           {settlement.settledAt ? (
             <button
