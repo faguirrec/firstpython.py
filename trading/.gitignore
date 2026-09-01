@@ -9,3 +9,6 @@ reports/
 *.db
 *.db-wal
 *.db-shm
+*.egg-info/
+build/
+dist/
