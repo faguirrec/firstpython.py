@@ -637,6 +637,17 @@ button:disabled { opacity: 0.55; cursor: default; }
 .legend { display: flex; flex-wrap: wrap; gap: var(--e3); font-size: var(--t-sm); color: var(--text-secondary); margin-bottom: var(--e2); }
 .legend span { display: inline-flex; align-items: center; gap: var(--e2); }
 
+/* El único lugar donde se permite algo más ancho que la pantalla, y sólo
+   porque se desliza solo dentro de su caja. */
+.tabla-ancha {
+  overflow-x: auto;
+  min-width: 0;
+  margin: 0 calc(var(--e4) * -1);
+  padding: 0 var(--e4);
+}
+.tabla-ancha::-webkit-scrollbar { display: none; }
+.tabla-ancha { scrollbar-width: none; }
+
 table.data { width: 100%; border-collapse: collapse; font-size: var(--t-sm); }
 table.data th, table.data td { padding: var(--e2) var(--e1); border-bottom: 1px solid var(--grid); text-align: right; }
 table.data th:first-child, table.data td:first-child { text-align: left; }
@@ -887,6 +898,70 @@ details.plegable > summary .resumen-dato {
 @keyframes crecer {
   from { transform: scaleX(0); }
 }
+
+/*
+ * "Estás viendo Supermercado": la tarjeta que aparece al entrar a una categoría.
+ *
+ * Lleva el color de marca al borde y no al fondo: es un encabezado de contexto,
+ * no una alerta, y compitiendo con la lista de abajo la volvería ruido.
+ */
+.card.viendo {
+  border-color: color-mix(in srgb, var(--marca) 40%, transparent);
+  background: color-mix(in srgb, var(--marca) 5%, var(--surface-1));
+}
+
+.card.viendo .quien {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  min-width: 0;
+}
+
+.card.viendo .quien strong { display: block; }
+/* Sobre el fondo teñido de esta tarjeta el gris apagado cae a 4,29:1; el
+   secundario se lee sin problema y sigue siendo texto de apoyo. */
+.card.viendo .meta { font-size: var(--t-sm); color: var(--text-secondary); }
+
+/*
+ * Una barra del desglose que se puede abrir.
+ *
+ * El área táctil llega a 44px por el padding, aunque la barra dibujada siga
+ * siendo fina: lo que se toca y lo que se ve no tienen por qué medir igual.
+ * Los márgenes negativos la hacen sangrar hacia los costados para que el toque
+ * agarre todo el ancho de la tarjeta sin mover el gráfico de donde estaba.
+ */
+.barra-categoria {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  padding: var(--e2) var(--e2);
+  margin: calc(var(--e2) * -1) calc(var(--e2) * -1);
+  border-radius: var(--radius-sm);
+  transition: background-color var(--transicion);
+}
+
+.barra-categoria:hover,
+.barra-categoria:focus-visible { background: var(--plane); }
+.barra-categoria:active { background: var(--marca-suave); }
+
+/* El nombre de una categoría en Presupuesto: mismo gesto, otra forma de fila. */
+.nombre-categoria {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  min-width: 0;
+  min-height: var(--tocable);
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Una fila de lista que además es un enlace: sin subrayado ni azul de enlace,
+   pero con la misma respuesta al toque que las demás filas. */
+.list > a.item {
+  color: inherit;
+  text-decoration: none;
+}
+.list > a.item:active { background: var(--plane); }
 
 /* ------------------------- Fijos que la app reconoce ---------------------- */
 

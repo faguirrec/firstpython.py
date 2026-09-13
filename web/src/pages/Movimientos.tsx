@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api, type Category, type Transaction } from '../lib/api';
 import { useSession } from '../lib/session';
@@ -16,12 +16,40 @@ export default function Movimientos() {
   const [params, setParams] = useSearchParams();
   const onlyPending = params.get('pendientes') === '1';
 
-  const month = useMes();
+  const mesCompartido = useMes();
+  /*
+   * Los filtros viven en la URL y no en estado local.
+   *
+   * Es lo que permite entrar acá desde una barra del desglose con la categoría
+   * ya puesta. De paso arregla dos cosas que se sentían rotas: el botón de
+   * volver del teléfono deshace el filtro en vez de sacarte de la pantalla, y
+   * la vista se puede compartir o dejar abierta y vuelve igual.
+   */
+  const categoryId = params.get('categoria') ?? '';
+  const scope = params.get('ambito') ?? '';
+  const sinFijos = params.get('sinfijos') === '1';
+  /*
+   * `mes=todos` es el historial completo, que es lo que muestra el desglose
+   * acumulado de Análisis. Sin el parámetro manda el mes compartido entre
+   * pantallas, que es el caso normal.
+   */
+  const todosLosMeses = params.get('mes') === 'todos';
+  const month = mesCompartido;
   // Sube cuando se anota algo desde el botón flotante, que vive fuera de acá.
   const version = useVersionDatos();
   const [search, setSearch] = useState('');
-  const [scope, setScope] = useState('');
-  const [categoryId, setCategoryId] = useState('');
+
+  /** Cambia un filtro dejando los demás donde estaban. */
+  const ponerFiltro = useCallback((cambios: Record<string, string | null>) => {
+    setParams((antes) => {
+      const next = new URLSearchParams(antes);
+      for (const [k, v] of Object.entries(cambios)) {
+        if (v === null || v === '') next.delete(k);
+        else next.set(k, v);
+      }
+      return next;
+    }, { replace: true });
+  }, [setParams]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [rows, setRows] = useState<Transaction[]>([]);
   const [editing, setEditing] = useState<Transaction | null>(null);
@@ -31,19 +59,22 @@ export default function Movimientos() {
   const load = useCallback(async () => {
     setError(null);
     try {
+      const mes = onlyPending || todosLosMeses ? undefined : month;
       const data = await api.transactions({
-        month: onlyPending ? undefined : month,
+        month: mes,
         pending: onlyPending ? '1' : undefined,
         search: search || undefined,
         scope: scope || undefined,
         categoryId: categoryId || undefined,
+        // Sólo tiene sentido con un mes: los fijos se pagan mes a mes.
+        excluirFijos: sinFijos && mes ? '1' : undefined,
         limit: 300,
       });
       setRows(data.transactions);
     } catch (err) {
       setError((err as Error).message);
     }
-  }, [month, search, scope, categoryId, onlyPending, version]);
+  }, [month, search, scope, categoryId, onlyPending, todosLosMeses, sinFijos, version]);
 
   useEffect(() => {
     void load();
@@ -53,7 +84,30 @@ export default function Movimientos() {
     void api.categories().then((c) => setCategories(c.categories));
   }, []);
 
+  /*
+   * Traer a la vista la ficha de la categoría que está puesta.
+   *
+   * Al entrar desde una barra del desglose, la ficha marcada suele quedar fuera
+   * de la tira —hay doce categorías y caben tres—, así que la fila se veía sin
+   * nada elegido justo cuando sí había un filtro. Se mueve sólo la tira, no la
+   * página: `block: 'nearest'` evita que el teléfono salte al hacer scroll.
+   */
+  const tiraCategorias = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!categoryId || !tiraCategorias.current) return;
+    const activa = tiraCategorias.current.querySelector('.filtro-chip.activo');
+    activa?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+  }, [categoryId, categories.length]);
+
   const total = rows.filter((r) => r.type === 'gasto').reduce((a, b) => a + b.amount, 0);
+
+  /* Cómo se llama lo que se está viendo, para poder decirlo y no sólo pintarlo
+     de verde en una ficha a media pantalla de distancia. */
+  const categoriaVista = categoryId
+    ? categoryId === 'sin'
+      ? { name: 'Sin categoría', emoji: '❓' }
+      : categories.find((c) => c.id === categoryId) ?? null
+    : null;
 
   /*
    * La lista, partida por día.
@@ -139,45 +193,50 @@ export default function Movimientos() {
         <div className="chips-fila" role="group" aria-label="Filtrar por tipo">
           <button
             className={`filtro-chip ${!scope && !onlyPending ? 'activo' : ''}`}
-            onClick={() => {
-              setScope('');
-              setParams({});
-            }}
+            onClick={() => setParams({}, { replace: true })}
           >
             Todos
           </button>
           <button
             className={`filtro-chip ${onlyPending ? 'activo' : ''}`}
-            onClick={() => setParams(onlyPending ? {} : { pendientes: '1' })}
+            onClick={() => setParams(onlyPending ? {} : { pendientes: '1' }, { replace: true })}
           >
             Por revisar
           </button>
           <button
             className={`filtro-chip ${scope === 'comun' ? 'activo' : ''}`}
-            onClick={() => setScope(scope === 'comun' ? '' : 'comun')}
+            onClick={() => ponerFiltro({ ambito: scope === 'comun' ? null : 'comun' })}
           >
             Comunes
           </button>
           <button
             className={`filtro-chip ${scope === 'personal' ? 'activo' : ''}`}
-            onClick={() => setScope(scope === 'personal' ? '' : 'personal')}
+            onClick={() => ponerFiltro({ ambito: scope === 'personal' ? null : 'personal' })}
           >
             Personales
           </button>
         </div>
 
-        <div className="chips-fila" role="group" aria-label="Filtrar por categoría">
+        <div className="chips-fila" role="group" aria-label="Filtrar por categoría" ref={tiraCategorias}>
           <button
             className={`filtro-chip ${!categoryId ? 'activo' : ''}`}
-            onClick={() => setCategoryId('')}
+            onClick={() => ponerFiltro({ categoria: null })}
           >
             Todas
+          </button>
+          {/* Los que no tienen categoría son los que hay que ir a arreglar, así
+              que se pueden pedir como cualquier otra. */}
+          <button
+            className={`filtro-chip ${categoryId === 'sin' ? 'activo' : ''}`}
+            onClick={() => ponerFiltro({ categoria: categoryId === 'sin' ? null : 'sin' })}
+          >
+            <span aria-hidden="true">❓</span> Sin categoría
           </button>
           {categories.map((c) => (
             <button
               key={c.id}
               className={`filtro-chip ${categoryId === c.id ? 'activo' : ''}`}
-              onClick={() => setCategoryId(categoryId === c.id ? '' : c.id)}
+              onClick={() => ponerFiltro({ categoria: categoryId === c.id ? null : c.id })}
             >
               <span aria-hidden="true">{c.emoji}</span> {c.name}
             </button>
@@ -187,9 +246,39 @@ export default function Movimientos() {
 
       {error && <div className="error">{error}</div>}
 
+      {/*
+        * Al entrar desde una barra del desglose, decir en qué se entró.
+        *
+        * La ficha verde entre veinte fichas no alcanza: se llega acá desde otra
+        * pantalla y hay que saber de inmediato por qué la lista está corta, y
+        * cómo salir. El recorte se dice completo —el mes, el ámbito, los fijos
+        * afuera— porque es lo que explica que el total sea el que es.
+        */}
+      {categoriaVista && (
+        <div className="card viendo">
+          <div className="row">
+            <span className="quien">
+              <FichaCategoria emoji={categoriaVista.emoji} color={('color' in categoriaVista ? categoriaVista.color : null) ?? null} size={30} />
+              <span>
+                <strong>{categoriaVista.name}</strong>
+                <span className="meta">
+                  {todosLosMeses ? 'Todo el historial' : monthLabel(month)}
+                  {scope === 'comun' && ' · sólo comunes'}
+                  {scope === 'personal' && ' · sólo personales'}
+                  {sinFijos && !todosLosMeses && ' · sin los fijos'}
+                </span>
+              </span>
+            </span>
+            <button className="small ghost" onClick={() => setParams({}, { replace: true })}>
+              Ver todo
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="card">
         <div className="card-head">
-          <h2>Gastos listados</h2>
+          <h2>{categoriaVista ? `${rows.length} ${rows.length === 1 ? 'movimiento' : 'movimientos'}` : 'Gastos listados'}</h2>
           <strong className="num">{money(total, currency)}</strong>
         </div>
 

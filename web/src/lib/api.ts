@@ -307,6 +307,8 @@ export type ResumenPersonal = {
 };
 
 export type CategoryChange = {
+  /** null en "Sin categoría"; sirve para abrir la lista de esa categoría. */
+  categoryId: string | null;
   category: string;
   color: string;
   emoji: string;
@@ -466,9 +468,13 @@ export const api = {
     if (month) query.set('month', month);
     if (scope) query.set('scope', scope);
     if (excluirFijos) query.set('excluirFijos', '1');
-    return get<{ categories: { category: string; color: string; emoji: string; total: number; count: number }[] }>(
-      `/finance/reports/by-category?${query.toString()}`,
-    );
+    return get<{
+      categories: {
+        /* null en "Sin categoría", que no es una categoría sino su ausencia. */
+        categoryId: string | null;
+        category: string; color: string; emoji: string; total: number; count: number;
+      }[];
+    }>(`/finance/reports/by-category?${query.toString()}`);
   },
   // `modo` decide qué bolsillo se consulta. Va explícito en cada llamada en vez
   // de leerse del almacenamiento acá dentro: así una pantalla puede mostrar los

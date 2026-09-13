@@ -245,6 +245,8 @@ export function computeGoals(householdId: string, ambito: Ambito = HOGAR): Goals
 /* ------------------------- Comparación entre meses ------------------------ */
 
 export type CategoryChange = {
+  /** null en "Sin categoría"; sirve para abrir la lista de esa categoría. */
+  categoryId: string | null;
   category: string;
   color: string;
   emoji: string;
@@ -287,7 +289,10 @@ export function compareMonths(
 
   const rows = db
     .prepare(
-      `SELECT COALESCE(c.name, 'Sin categoría') AS category,
+      /* El id va en la respuesta para poder entrar a la categoría desde la fila.
+         Null en "Sin categoría", que se pide del otro lado como `categoria=sin`. */
+      `SELECT c.id AS categoryId,
+              COALESCE(c.name, 'Sin categoría') AS category,
               COALESCE(c.color, '#898781') AS color,
               COALESCE(c.emoji, '❓') AS emoji,
               t.period AS month,
@@ -298,9 +303,10 @@ export function compareMonths(
           AND ${filtroGastos(ambito)}
           AND t.period >= @desde
           AND t.period <= @hasta
-        GROUP BY category, color, emoji, month`,
+        GROUP BY t.category_id, month`,
     )
     .all({ hogar: householdId, desde: since, hasta: month, ...paramsAmbito(ambito) }) as {
+    categoryId: string | null;
     category: string;
     color: string;
     emoji: string;
@@ -308,25 +314,35 @@ export function compareMonths(
     total: number;
   }[];
 
-  const byCategory = new Map<string, { color: string; emoji: string; months: Map<string, number> }>();
+  /* Se agrupa por id y no por nombre: dos categorías distintas podrían llamarse
+     igual y quedarían sumadas en una fila que después no se puede abrir. La
+     clave '' es la de los movimientos sin categoría. */
+  const byCategory = new Map<
+    string,
+    { categoryId: string | null; category: string; color: string; emoji: string; months: Map<string, number> }
+  >();
   for (const row of rows) {
-    if (!byCategory.has(row.category)) {
-      byCategory.set(row.category, { color: row.color, emoji: row.emoji, months: new Map() });
+    const clave = row.categoryId ?? '';
+    if (!byCategory.has(clave)) {
+      byCategory.set(clave, {
+        categoryId: row.categoryId, category: row.category, color: row.color, emoji: row.emoji, months: new Map(),
+      });
     }
-    byCategory.get(row.category)!.months.set(row.month, row.total);
+    byCategory.get(clave)!.months.set(row.month, row.total);
   }
 
   const priorMonths: string[] = [];
   for (let i = 1; i <= lookback; i += 1) priorMonths.push(shiftMonth(month, -i));
 
-  const categories: CategoryChange[] = [...byCategory.entries()].map(([category, data]) => {
+  const categories: CategoryChange[] = [...byCategory.values()].map((data) => {
     const current = data.months.get(month) ?? 0;
     const previous = data.months.get(previousMonth) ?? 0;
     const priorValues = priorMonths.map((m) => data.months.get(m) ?? 0);
     const average = priorValues.reduce((a, b) => a + b, 0) / Math.max(priorValues.length, 1);
 
     return {
-      category,
+      categoryId: data.categoryId,
+      category: data.category,
       color: data.color,
       emoji: data.emoji,
       current: round2(current),

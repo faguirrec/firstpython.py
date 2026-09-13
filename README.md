@@ -137,8 +137,29 @@ se está mirando y nada. Al guardar, un aviso confirma y ofrece deshacer, que es
 mejor que preguntar antes en cada gasto.
 
 **Los movimientos, por día.** Agrupados con encabezado pegajoso y el subtotal
-del día al lado, y filtrados con fichas —*Por revisar*, *Comunes*, cada
-categoría— en vez de menús desplegables, que escondían cuál estaba puesto.
+del día al lado, y filtrados con fichas —*Por revisar*, *Comunes*, *Sin
+categoría*, cada categoría— en vez de menús desplegables, que escondían cuál
+estaba puesto.
+
+**Entrar a una categoría.** Tocar una barra del desglose —en el Resumen, en el
+acumulado de Análisis, en el presupuesto o en la comparación— abre la lista de
+esos movimientos.
+
+Lo que importa acá es que la lista muestre lo mismo que la barra que se tocó. Un
+gráfico nunca muestra "todos los gastos de supermercado": muestra los de un mes,
+de un ámbito, y a veces sin los fijos. Si la lista de destino no arrastrara los
+tres recortes, el usuario vería un total en el gráfico y otro distinto en la
+lista, y dos números que no calzan en una app de plata son motivo suficiente
+para dejar de usarla. El recorte viaja en la dirección —`?categoria=…&mes=…
+&ambito=…&sinfijos=1`, armado en `web/src/lib/verCategoria.ts`— y la pantalla de
+destino lo dice en palabras arriba de la lista: "Supermercado · septiembre 2026 ·
+sólo comunes · sin los fijos". `server/pruebas/t-categoria.ts` comprueba que los
+totales calcen.
+
+Que los filtros vivan en la dirección y no en estado local arregló de paso dos
+cosas que se sentían rotas: el botón de volver del teléfono ahora deshace el
+filtro en vez de sacarte de la pantalla, y la vista se puede compartir o dejar
+abierta y vuelve igual.
 
 **Primeros pasos.** Un hogar recién creado ve los tres que hacen que la app
 sirva: declarar los sueldos, anotar los gastos fijos y conectar el buzón. Cada

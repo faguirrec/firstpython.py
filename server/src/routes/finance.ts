@@ -626,7 +626,17 @@ financeRouter.get('/reports/by-category', (req, res) => {
 
   const rows = db
     .prepare(
-      `SELECT COALESCE(c.name, 'Sin categoría') AS category,
+      /*
+       * El id va en la respuesta para poder entrar a la categoría desde el
+       * gráfico. Viene en null en "Sin categoría", que no es una categoría sino
+       * su ausencia, y del otro lado se pide como `categoria=sin`.
+       *
+       * Se agrupa por `t.category_id` y no por el nombre: dos categorías
+       * distintas podrían llamarse igual y quedarían sumadas en una sola barra
+       * que después no se puede abrir.
+       */
+      `SELECT c.id AS categoryId,
+              COALESCE(c.name, 'Sin categoría') AS category,
               COALESCE(c.color, '#9ca3af') AS color,
               COALESCE(c.emoji, '❓') AS emoji,
               SUM(t.amount) AS total,
@@ -635,7 +645,7 @@ financeRouter.get('/reports/by-category', (req, res) => {
          LEFT JOIN categories c ON c.id = t.category_id
         WHERE t.household_id = @hogar AND t.type = 'gasto'
           AND ${soloMisMovimientos()} ${filter}
-        GROUP BY category, color, emoji
+        GROUP BY t.category_id
         ORDER BY total DESC`,
     )
     .all(params);

@@ -6,6 +6,7 @@ import { money, monthLabel } from '../lib/format';
 import { cambiarMes, useMes } from '../lib/mes';
 import { useVersionDatos } from '../lib/datos';
 import { CategoryBars, TrendChart, type CategorySlice, type TrendPoint } from '../components/Charts';
+import { verCategoria } from '../lib/verCategoria';
 import Cabecera from '../components/Cabecera';
 import Presupuesto from '../components/Presupuesto';
 import Comparacion from '../components/Comparacion';
@@ -122,11 +123,23 @@ function Tendencia() {
       <div className="card">
         <h2>Gasto común acumulado por categoría</h2>
         <p className="muted" style={{ marginTop: 0 }}>Todo el historial registrado, sin los gastos personales.</p>
-        <CategoryBars data={categories} currency={currency} limit={12} />
+        <CategoryBars
+          data={categories}
+          currency={currency}
+          limit={12}
+          enlace={(row) =>
+            row.categoryId === undefined
+              ? null
+              : verCategoria({ categoryId: row.categoryId, scope: 'comun' })
+          }
+        />
       </div>
 
       <div className="card">
         <h2>Detalle mensual</h2>
+        {/* Cuatro columnas de plata no caben en 320px. La tabla se desliza
+            dentro de su tarjeta en vez de correr la página entera. */}
+        <div className="tabla-ancha">
         <table className="data">
           <thead>
             <tr>
@@ -149,6 +162,7 @@ function Tendencia() {
             ))}
           </tbody>
         </table>
+        </div>
         {months.length === 0 && <p className="muted">Todavía no hay datos suficientes.</p>}
       </div>
     </>

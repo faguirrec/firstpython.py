@@ -4,6 +4,7 @@ import { db, uid } from '../lib/db.js';
 import { requireAuth, requireHousehold } from '../lib/auth.js';
 import { categorize, recategorizeUncategorized } from '../services/categorizer.js';
 import { soloMisMovimientos } from '../lib/visibilidad.js';
+import { estadoDelMes } from '../services/gastosFijos.js';
 
 export const transactionsRouter = Router();
 transactionsRouter.use(requireAuth, requireHousehold);
@@ -52,7 +53,12 @@ transactionsRouter.get('/', (req, res) => {
       to: z.string().optional(),
       type: z.string().optional(),
       scope: z.string().optional(),
+      /* Un id, o 'sin' para los que no tienen categoría: es lo que hay que
+         poder pedir para abrir esa barra del gráfico. */
       categoryId: z.string().optional(),
+      /* Para que la lista muestre exactamente lo que mostraba el gráfico del
+         que se viene. Sin mes no aplica: los fijos se pagan por mes. */
+      excluirFijos: z.enum(['1', '0']).optional(),
       pending: z.enum(['1', '0']).optional(),
       search: z.string().optional(),
       limit: z.coerce.number().int().min(1).max(500).default(200),
@@ -78,7 +84,31 @@ transactionsRouter.get('/', (req, res) => {
   if (q.to) { where.push('t.occurred_on <= @hasta'); params.hasta = q.to; }
   if (q.type) { where.push('t.type = @tipo'); params.tipo = q.type; }
   if (q.scope) { where.push('t.scope = @ambito'); params.ambito = q.scope; }
-  if (q.categoryId) { where.push('t.category_id = @categoria'); params.categoria = q.categoryId; }
+  if (q.categoryId === 'sin') {
+    where.push('t.category_id IS NULL');
+  } else if (q.categoryId) {
+    where.push('t.category_id = @categoria');
+    params.categoria = q.categoryId;
+  }
+
+  /*
+   * Los gastos fijos fuera, cuando se piden así.
+   *
+   * El Resumen muestra el desglose por categoría sin ellos —el arriendo aplasta
+   * el resto— y al entrar a una barra la lista tiene que sumar lo mismo que la
+   * barra. Si no, el usuario ve un total en el gráfico y otro en la lista, y
+   * deja de creerle a los dos.
+   */
+  if (q.excluirFijos === '1' && q.month) {
+    const pagados = estadoDelMes(req.household!.id, q.month)
+      .items.map((i) => i.paidWith?.id)
+      .filter((id): id is string => Boolean(id));
+    if (pagados.length > 0) {
+      const marcas = pagados.map((_, i) => `@fijo${i}`);
+      where.push(`t.id NOT IN (${marcas.join(', ')})`);
+      pagados.forEach((id, i) => { params[`fijo${i}`] = id; });
+    }
+  }
   if (q.pending === '1') where.push('t.reviewed = 0');
   if (q.search) {
     where.push('(t.merchant LIKE @busca OR t.description LIKE @busca)');

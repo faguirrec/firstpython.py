@@ -15,6 +15,7 @@ import { useModo } from '../lib/modo';
 import { dayLabel, monthLabel, esMesCerrado, esMesFuturo, money, percent } from '../lib/format';
 import { cambiarMes, useMes } from '../lib/mes';
 import { useVersionDatos } from '../lib/datos';
+import { verCategoria } from '../lib/verCategoria';
 import { CategoryBars, SplitBar, type CategorySlice } from '../components/Charts';
 import Cabecera from '../components/Cabecera';
 import NuevoMovimiento from '../components/NuevoMovimiento';
@@ -444,7 +445,24 @@ export default function Resumen() {
               los meses y tapaban el resto.
             </p>
           )}
-          <CategoryBars data={categories} currency={currency} limit={6} />
+          {/* El enlace arrastra el mismo recorte que arma el gráfico —arriba,
+              en `api.byCategory`—, para que la lista sume lo mismo que la
+              barra que se tocó. */}
+          <CategoryBars
+            data={categories}
+            currency={currency}
+            limit={6}
+            enlace={(row) =>
+              row.categoryId === undefined
+                ? null
+                : verCategoria({
+                    categoryId: row.categoryId,
+                    month,
+                    scope: esPersonal ? 'personal' : 'comun',
+                    sinFijos: !esPersonal,
+                  })
+            }
+          />
         </div>
       )}
 

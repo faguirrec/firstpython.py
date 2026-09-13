@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { money, moneyShort, monthLabel, percentParts } from '../lib/format';
 import { FichaCategoria } from './Fichas';
 
@@ -136,7 +137,11 @@ export function TrendChart({ data, currency }: { data: TrendPoint[]; currency: s
   );
 }
 
-export type CategorySlice = { category: string; color: string; emoji?: string; total: number; count: number };
+export type CategorySlice = {
+  /* Para poder entrar a la categoría desde la barra. null = "Sin categoría". */
+  categoryId?: string | null;
+  category: string; color: string; emoji?: string; total: number; count: number;
+};
 
 /**
  * Desglose por categoría: barras horizontales ordenadas por monto y etiquetadas
@@ -147,18 +152,30 @@ export function CategoryBars({
   data,
   currency,
   limit = 10,
+  enlace,
 }: {
   data: CategorySlice[];
   currency: string;
   limit?: number;
+  /**
+   * A dónde lleva tocar una barra. Lo arma quien usa el gráfico, porque cada
+   * pantalla mira un recorte distinto y hay que arrastrarlo entero. Sin esto
+   * las barras quedan como estaban: sólo para mirar.
+   */
+  enlace?: (row: CategorySlice) => string | null;
 }) {
   if (data.length === 0) return <p className="muted">Sin gastos en este período.</p>;
 
   const sorted = [...data].sort((a, b) => b.total - a.total);
   const head = sorted.slice(0, limit);
   const rest = sorted.slice(limit);
-  const rows = rest.length
-    ? [...head, { category: 'Otras', color: '#898781', emoji: '📦', total: rest.reduce((a, b) => a + b.total, 0), count: rest.length }]
+  const rows: CategorySlice[] = rest.length
+    ? [...head, {
+        // Sin id: "Otras" son varias y no hay una lista que mostrar al tocarla.
+        categoryId: undefined,
+        category: 'Otras', color: '#898781', emoji: '📦',
+        total: rest.reduce((a, b) => a + b.total, 0), count: rest.length,
+      }]
     : head;
 
   const max = Math.max(...rows.map((r) => r.total), 1);
@@ -166,33 +183,48 @@ export function CategoryBars({
 
   return (
     <div className="stack" style={{ gap: 8 }}>
-      {rows.map((row) => (
-        <div key={row.category}>
-          <div className="row" style={{ marginBottom: 3 }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-              <FichaCategoria emoji={row.emoji ?? null} color={row.color} size={26} />
-              <span style={{ fontSize: 'var(--t-md)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {row.category}
+      {rows.map((row) => {
+        const cuerpo = (
+          <>
+            <div className="row" style={{ marginBottom: 3 }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                <FichaCategoria emoji={row.emoji ?? null} color={row.color} size={26} />
+                <span style={{ fontSize: 'var(--t-md)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {row.category}
+                </span>
               </span>
-            </span>
-            <span className="num" style={{ fontSize: 'var(--t-md)', whiteSpace: 'nowrap' }}>
-              {money(row.total, currency)}
-              <span className="muted"> · {Math.round((row.total / grandTotal) * 100)}%</span>
-            </span>
-          </div>
-          <div style={{ height: 8, background: 'var(--grid)', borderRadius: 4 }}>
-            <div
-              className="barra-crece"
-              style={{
-                width: `${Math.max((row.total / max) * 100, 2)}%`,
-                height: '100%',
-                background: 'var(--seq-450)',
-                borderRadius: 4,
-              }}
-            />
-          </div>
-        </div>
-      ))}
+              <span className="num" style={{ fontSize: 'var(--t-md)', whiteSpace: 'nowrap' }}>
+                {money(row.total, currency)}
+                <span className="muted"> · {Math.round((row.total / grandTotal) * 100)}%</span>
+              </span>
+            </div>
+            <div style={{ height: 8, background: 'var(--grid)', borderRadius: 4 }}>
+              <div
+                className="barra-crece"
+                style={{
+                  width: `${Math.max((row.total / max) * 100, 2)}%`,
+                  height: '100%',
+                  background: 'var(--seq-450)',
+                  borderRadius: 4,
+                }}
+              />
+            </div>
+          </>
+        );
+
+        const destino = enlace?.(row) ?? null;
+        if (!destino) return <div key={row.category}>{cuerpo}</div>;
+        return (
+          <Link
+            key={row.category}
+            to={destino}
+            className="barra-categoria"
+            aria-label={`Ver los movimientos de ${row.category}`}
+          >
+            {cuerpo}
+          </Link>
+        );
+      })}
     </div>
   );
 }

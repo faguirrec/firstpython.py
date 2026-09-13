@@ -5,6 +5,8 @@ import { useModo } from '../lib/modo';
 import { useSession } from '../lib/session';
 import { money, monthLabel } from '../lib/format';
 import { FichaCategoria } from './Fichas';
+import { Link } from 'react-router-dom';
+import { verCategoria } from '../lib/verCategoria';
 
 const STATUS: Record<CategoryBudget['status'], { label: string; glyph: string; color: string }> = {
   ok: { label: 'en rango', glyph: '✓', color: 'var(--good)' },
@@ -67,6 +69,11 @@ export default function Presupuesto({ month }: { month: string }) {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const modo = useModo();
+  /* El presupuesto cuenta todos los gastos del mes en ese ámbito, fijos
+     incluidos: el enlace a la lista tiene que pedir lo mismo o los totales no
+     van a calzar. */
+  const abrir = (categoryId: string) =>
+    verCategoria({ categoryId, month, scope: modo === 'personal' ? 'personal' : 'comun' });
   // Para que anotar desde el botón flotante también actualice esta pantalla.
   const version = useVersionDatos();
 
@@ -160,7 +167,7 @@ export default function Presupuesto({ month }: { month: string }) {
           <h3>En qué se están pasando</h3>
           <div className="list">
             {[...status.overBudget, ...status.nearLimit].map((c) => (
-              <div className="item" key={c.categoryId}>
+              <Link className="item" key={c.categoryId} to={abrir(c.categoryId)}>
                 <FichaCategoria emoji={c.emoji} color={c.color} />
                 <div className="body">
                   <div className="title">{c.category}</div>
@@ -173,7 +180,7 @@ export default function Presupuesto({ month }: { month: string }) {
                 <span className={`pill ${c.status === 'excedido' ? 'alert' : 'warn'}`}>
                   {STATUS[c.status].glyph} {Math.round(c.used * 100)}%
                 </span>
-              </div>
+              </Link>
             ))}
           </div>
         </div>
@@ -189,12 +196,25 @@ export default function Presupuesto({ month }: { month: string }) {
           {(editing ? status.categories : conPresupuesto).map((c) => (
             <div key={c.categoryId}>
               <div className="row" style={{ marginBottom: 4 }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                  <FichaCategoria emoji={c.emoji} color={c.color} size={26} />
-                  <span style={{ fontSize: 'var(--t-md)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {c.category}
+                {editing ? (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                    <FichaCategoria emoji={c.emoji} color={c.color} size={26} />
+                    <span style={{ fontSize: 'var(--t-md)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {c.category}
+                    </span>
                   </span>
-                </span>
+                ) : (
+                  <Link
+                    to={abrir(c.categoryId)}
+                    className="nombre-categoria"
+                    aria-label={`Ver los movimientos de ${c.category}`}
+                  >
+                    <FichaCategoria emoji={c.emoji} color={c.color} size={26} />
+                    <span style={{ fontSize: 'var(--t-md)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {c.category}
+                    </span>
+                  </Link>
+                )}
 
                 {editing ? (
                   <input

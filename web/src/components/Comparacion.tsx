@@ -5,6 +5,8 @@ import { useModo } from '../lib/modo';
 import { useSession } from '../lib/session';
 import { money, monthLabel } from '../lib/format';
 import { FichaCategoria } from './Fichas';
+import { Link } from 'react-router-dom';
+import { verCategoria } from '../lib/verCategoria';
 
 function Delta({ value, pct, currency }: { value: number; pct: number | null; currency: string }) {
   if (Math.abs(value) < 0.005) return <span className="muted">sin cambio</span>;
@@ -20,9 +22,9 @@ function Delta({ value, pct, currency }: { value: number; pct: number | null; cu
   );
 }
 
-function Fila({ row, currency }: { row: CategoryChange; currency: string }) {
+function Fila({ row, currency, destino }: { row: CategoryChange; currency: string; destino: string }) {
   return (
-    <div className="item">
+    <Link className="item" to={destino}>
       <FichaCategoria emoji={row.emoji} color={row.color} />
       <div className="body">
         <div className="title">{row.category}</div>
@@ -31,7 +33,7 @@ function Fila({ row, currency }: { row: CategoryChange; currency: string }) {
         </div>
       </div>
       <Delta value={row.deltaPrevious} pct={row.changePct} currency={currency} />
-    </div>
+    </Link>
   );
 }
 
@@ -59,6 +61,15 @@ export default function Comparacion({ month }: { month: string }) {
 
   const total = data.totalCurrent - data.totalPrevious;
   const vsPromedio = data.totalCurrent - data.totalAverage;
+
+  /* Esta pantalla compara el mes que se mira, en el ámbito del modo, con los
+     fijos incluidos: el enlace tiene que decir exactamente eso. */
+  const abrir = (row: CategoryChange) =>
+    verCategoria({
+      categoryId: row.categoryId,
+      month: data.month,
+      scope: modo === 'personal' ? 'personal' : 'comun',
+    });
 
   return (
     <>
@@ -96,7 +107,7 @@ export default function Comparacion({ month }: { month: string }) {
           <h3>Donde más subió</h3>
           <div className="list">
             {data.biggestIncreases.map((row) => (
-              <Fila key={row.category} row={row} currency={currency} />
+              <Fila key={row.category} row={row} currency={currency} destino={abrir(row)} />
             ))}
           </div>
         </div>
@@ -107,7 +118,7 @@ export default function Comparacion({ month }: { month: string }) {
           <h3>Donde bajó</h3>
           <div className="list">
             {data.biggestDecreases.map((row) => (
-              <Fila key={row.category} row={row} currency={currency} />
+              <Fila key={row.category} row={row} currency={currency} destino={abrir(row)} />
             ))}
           </div>
         </div>
@@ -124,7 +135,7 @@ export default function Comparacion({ month }: { month: string }) {
           */}
         <div className="list">
           {data.categories.map((row) => (
-            <div className="item" key={row.category}>
+            <Link className="item" key={row.category} to={abrir(row)}>
               <div className="body">
                 <div className="title">{row.category}</div>
                 <div className="meta">
@@ -133,7 +144,7 @@ export default function Comparacion({ month }: { month: string }) {
                 </div>
               </div>
               <div className="amount">{money(row.current, currency)}</div>
-            </div>
+            </Link>
           ))}
         </div>
       </div>
