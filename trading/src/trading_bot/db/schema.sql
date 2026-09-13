@@ -63,6 +63,7 @@ CREATE INDEX IF NOT EXISTS idx_decisions_symbol ON decisions(symbol, created_at)
 CREATE TABLE IF NOT EXISTS orders (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
     broker_order_id  TEXT UNIQUE,
+    client_order_id  TEXT,
     decision_id      INTEGER REFERENCES decisions(id),
     created_at       TEXT    NOT NULL,
     updated_at       TEXT    NOT NULL,
@@ -76,6 +77,8 @@ CREATE TABLE IF NOT EXISTS orders (
     time_in_force    TEXT    NOT NULL DEFAULT 'day',
     status           TEXT    NOT NULL DEFAULT 'new',
     filled_qty       REAL    NOT NULL DEFAULT 0,
+    -- Quantity already booked into a trade, so a partial fill is booked once.
+    booked_qty       REAL    NOT NULL DEFAULT 0,
     filled_avg_price REAL,
     intent           TEXT    NOT NULL DEFAULT 'entry',  -- entry | exit
     trade_id         INTEGER,
@@ -83,6 +86,7 @@ CREATE TABLE IF NOT EXISTS orders (
 );
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_orders_day ON orders(trading_day);
+CREATE INDEX IF NOT EXISTS idx_orders_client ON orders(client_order_id);
 
 CREATE TABLE IF NOT EXISTS trades (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,

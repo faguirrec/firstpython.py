@@ -5,10 +5,12 @@ __pycache__/
 data/
 logs/
 reports/
-.env
+.env*
+!.env.example
 *.db
 *.db-wal
 *.db-shm
 *.egg-info/
 build/
 dist/
+*.env

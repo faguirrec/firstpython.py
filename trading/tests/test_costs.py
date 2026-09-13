@@ -7,6 +7,7 @@ import pytest
 
 from trading_bot.config import CostConfig
 from trading_bot.costs import (
+    baseline_hit_probability,
     breakeven_move_bps,
     evaluate_net_ev,
     realized_costs,
@@ -47,24 +48,66 @@ def test_round_trip_costs_are_zero_for_empty_orders():
     assert round_trip_costs(100.0, 0.0, CONFIG).total == 0.0
 
 
-def test_breakeven_move_covers_the_round_trip():
+def test_breakeven_move_is_the_cost_of_the_round_trip():
     breakeven = breakeven_move_bps(100.0, 0.1, CONFIG)
+    costs = round_trip_costs(100.0, 0.1, CONFIG)
+    assert breakeven == pytest.approx(costs.total / 10.0 / 1e-4)
+
+
+def test_a_signal_with_no_edge_has_exactly_zero_gross_ev():
+    """The property the whole filter rests on: confidence 0 means no edge."""
     result = evaluate_net_ev(
         symbol="AAPL", side="buy", quantity=0.1, entry_price=100.0,
-        expected_move_bps=breakeven, confidence=1.0, config=CONFIG,
+        expected_move_bps=200.0, confidence=0.0, config=CONFIG,
+        take_profit_pct=0.03, stop_loss_pct=0.02,
     )
-    # At exactly the breakeven move the trade is a wash, within a fee-rounding hair.
-    assert result.net_ev == pytest.approx(0.0, abs=0.0005)
+    assert result.hit_probability == pytest.approx(result.baseline_probability)
+    assert result.gross_ev == pytest.approx(0.0, abs=1e-9)
+    # And after costs it is a loser, so it must be rejected.
+    assert result.net_ev < 0
+    assert result.approved is False
 
 
-def test_trade_with_edge_below_costs_is_rejected():
+def test_baseline_probability_is_the_nearer_barrier():
+    # With a 3% target and a 2% stop, a driftless price hits the stop more often.
+    assert baseline_hit_probability(0.03, 0.02) == pytest.approx(0.4)
+    assert baseline_hit_probability(0.02, 0.02) == pytest.approx(0.5)
+    assert baseline_hit_probability(0.02, 0.04) == pytest.approx(2 / 3)
+
+
+def test_losing_branch_is_actually_priced():
+    """A 40% hit rate on 3%/2% is break-even; below it the EV must go negative."""
+    below = evaluate_net_ev(
+        symbol="AAPL", side="buy", quantity=0.1, entry_price=100.0,
+        expected_move_bps=200.0, confidence=0.9, config=CONFIG,
+        take_profit_pct=0.03, stop_loss_pct=0.02, probability=0.30,
+    )
+    above = evaluate_net_ev(
+        symbol="AAPL", side="buy", quantity=0.1, entry_price=100.0,
+        expected_move_bps=200.0, confidence=0.9, config=CONFIG,
+        take_profit_pct=0.03, stop_loss_pct=0.02, probability=0.55,
+    )
+    assert below.gross_ev < 0 and below.approved is False
+    assert above.gross_ev > 0 and above.approved is True
+
+
+def test_a_measured_probability_overrides_the_confidence_prior():
+    high_confidence_bad_record = evaluate_net_ev(
+        symbol="AAPL", side="buy", quantity=0.1, entry_price=100.0,
+        expected_move_bps=200.0, confidence=1.0, config=CONFIG, probability=0.25,
+    )
+    assert high_confidence_bad_record.hit_probability == pytest.approx(0.25)
+    assert high_confidence_bad_record.approved is False
+
+
+def test_predicted_move_below_breakeven_is_rejected():
+    """Even with a good hit rate, a move too small to clear costs is no trade."""
     result = evaluate_net_ev(
         symbol="AAPL", side="buy", quantity=0.1, entry_price=100.0,
         expected_move_bps=5.0, confidence=0.9, config=CONFIG,
     )
     assert result.approved is False
-    assert result.reason == "net_ev_not_positive"
-    assert result.net_ev < 0
+    assert result.reason == "predicted_move_below_breakeven"
 
 
 def test_trade_with_real_edge_is_approved():

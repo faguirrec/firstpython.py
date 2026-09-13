@@ -15,6 +15,7 @@ from .agents.risk_sentinel import RiskSentinel
 from .agents.trader_core import TraderCore
 from .alerts import Alerter
 from .brokers.alpaca import AlpacaBroker
+from .calendars import load_calendar
 from .brokers.base import BrokerError
 from .circuit_breaker import CircuitBreaker
 from .clock import iso, local_session, parse_iso, trading_day, utcnow
@@ -23,6 +24,7 @@ from .db import Store
 from .logging_setup import get_logger
 from .marketdata import build_market_data
 from .metrics import compute_metrics, daily_snapshot
+from .retry import with_retries
 from .reporting import daily_report, final_report, write_dashboard
 
 log = get_logger(__name__)
@@ -41,6 +43,14 @@ class TradingEngine:
             settings.alpaca_api_key, settings.alpaca_secret_key, base_url=settings.alpaca_base_url
         )
         self.alerter = Alerter(settings)
+        # Where nightly writes the dashboard. The simulator redirects this so a
+        # validation run cannot overwrite real experiment results.
+        self.dashboard_path = "reports/dashboard.html"
+        self.calendar = load_calendar(
+            settings.exchange,
+            path=settings.exchange_calendar_file or None,
+            extra_holidays=settings.exchange_extra_holidays,
+        )
         self.data = build_market_data(settings, self.broker)
         self.risk = RiskSentinel(settings, self.store)
         self.news = NewsPulse(settings, self.store, self.broker)
@@ -53,6 +63,7 @@ class TradingEngine:
             "trading",
             threshold=settings.risk.consecutive_error_limit,
             on_trip=self._on_circuit_trip,
+            on_escalate=self._on_circuit_escalation,
         )
         self.news_breaker = CircuitBreaker(
             self.store, "news", threshold=max(settings.risk.consecutive_error_limit, 3)
@@ -60,19 +71,39 @@ class TradingEngine:
 
     # ------------------------------------------------------------------- jobs
     def trading_cycle(self) -> dict[str, Any]:
-        """One TraderCore cycle, guarded by the circuit breaker."""
+        """One TraderCore cycle.
+
+        A tripped breaker or an engaged kill switch disables **entries only**.
+        Reconciliation and exit management keep running: an open position with a
+        pending stop loss is exactly what must not be abandoned when something
+        has gone wrong.
+        """
+        entries_enabled = True
+        gate_reason = ""
         if self.breaker.is_open():
-            log.warning("trading_cycle_skipped", extra={"event": {"reason": "circuit_open"}})
-            return {"skipped": "circuit_open"}
-        if self.risk.kill_switch_active():
-            return {"skipped": f"kill_switch:{self.risk.kill_switch_reason()}"}
+            entries_enabled = False
+            gate_reason = "circuit_open"
+        elif self.risk.kill_switch_active():
+            entries_enabled = False
+            gate_reason = f"kill_switch:{self.risk.kill_switch_reason()}"
+
+        if not entries_enabled:
+            log.warning(
+                "entries_disabled_exits_continue",
+                extra={"event": {"reason": gate_reason}},
+            )
 
         try:
-            report = self.trader.run_cycle()
+            report = self.trader.run_cycle(entries_enabled=entries_enabled)
         except Exception as exc:  # noqa: BLE001 - a cycle failure must not kill the process
             self.breaker.record_failure(str(exc))
             log.exception("trading_cycle_failed")
             return {"error": str(exc)}
+
+        if not entries_enabled:
+            payload = report.as_dict()
+            payload["entries_disabled"] = gate_reason
+            return payload
 
         self.breaker.record_success()
         self._check_daily_limits()
@@ -109,7 +140,9 @@ class TradingEngine:
             f"Resumen diario {report['day']}", report["text"], severity="info"
         )
         try:
-            results["dashboard"] = str(write_dashboard(self.settings, self.store))
+            results["dashboard"] = str(
+                write_dashboard(self.settings, self.store, self.dashboard_path)
+            )
         except OSError as exc:
             results["dashboard_error"] = str(exc)
 
@@ -147,6 +180,16 @@ class TradingEngine:
         self.alerter.send(
             f"Circuit breaker abierto: {name}",
             f"{failures} fallos consecutivos.\nÚltimo error: {error[:400]}",
+            severity="critical",
+        )
+
+    def _on_circuit_escalation(self, name: str, trips: int, error: str) -> None:
+        """A dependency that keeps failing becomes a human's problem."""
+        self.risk.engage_kill_switch(f"circuit_escalated:{name}", trips=trips, error=error[:300])
+        self.alerter.send(
+            f"Kill switch por fallos repetidos: {name}",
+            f"{trips} aperturas del circuit breaker. Último error: {error[:400]}\n"
+            "Las entradas quedan bloqueadas; las salidas siguen operando.",
             severity="critical",
         )
 
@@ -192,9 +235,24 @@ class TradingEngine:
         return {"flattened": True, "reason": reason}
 
     # ------------------------------------------------------------ experiment
+    def _account_with_retry(self, *, attempts: int = 3) -> Any:
+        """Fetch the account, tolerating a transient outage.
+
+        Startup is the one place a broker hiccup could kill the process before
+        the scheduler exists to absorb it, so it gets its own retry.
+        """
+        return with_retries(
+            self.broker.get_account,
+            attempts=attempts,
+            base=2.0,
+            cap=10.0,
+            retry_on=(BrokerError,),
+            description="get_account[startup]",
+        )
+
     def start_experiment(self) -> dict[str, Any]:
         """Mark day 0 and record the starting conditions for the final report."""
-        account = self.broker.get_account()
+        account = self._account_with_retry()
         started = self.store.get_state(EXPERIMENT_START_KEY)
         if started:
             return {"already_started": started, "equity": account.equity}
@@ -246,7 +304,8 @@ class TradingEngine:
         payload: dict[str, Any] = {
             "checked_at": iso(utcnow()),
             "mode": "paper" if self.settings.is_paper else "live",
-            "session": local_session(),
+            "session": self.calendar.session(),
+            "calendar": self.calendar.describe(),
             "market_data": self.data.describe(),
             "kill_switch": self.store.get_state("kill_switch") or {"active": False},
             "circuit_trading": self.breaker.state().as_dict(),
@@ -255,6 +314,12 @@ class TradingEngine:
             "open_trades": len(self.store.open_trades()),
             "open_orders": len(self.store.open_orders()),
         }
+        last_tick = self.store.get_state("last_tick")
+        payload["last_tick"] = last_tick if isinstance(last_tick, str) else None
+        moment = parse_iso(last_tick) if isinstance(last_tick, str) else None
+        payload["last_tick_age_seconds"] = (
+            round((utcnow() - moment).total_seconds(), 1) if moment else None
+        )
         try:
             account = self.broker.get_account()
             positions = self.broker.get_positions()

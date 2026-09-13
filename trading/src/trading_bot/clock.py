@@ -7,6 +7,7 @@ answered in US/Eastern because that is what the exchanges use.
 from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta, timezone
+from typing import Callable
 from zoneinfo import ZoneInfo
 
 MARKET_TZ = ZoneInfo("America/New_York")
@@ -30,7 +31,30 @@ STATIC_HOLIDAYS: frozenset[date] = frozenset(
 )
 
 
+# Injectable time source. Production never sets this; the offline simulator does,
+# so a 30-day run can be replayed in seconds without lying to the rest of the
+# system about what "now" is.
+_TIME_SOURCE: Callable[[], datetime] | None = None
+
+
+def set_time_source(source: Callable[[], datetime] | None) -> None:
+    """Override ``utcnow()``. Only the simulator is allowed to call this."""
+    global _TIME_SOURCE
+    _TIME_SOURCE = source
+
+
+def clear_time_source() -> None:
+    set_time_source(None)
+
+
+def time_source_active() -> bool:
+    """True when a simulated clock is installed - surfaced in status output."""
+    return _TIME_SOURCE is not None
+
+
 def utcnow() -> datetime:
+    if _TIME_SOURCE is not None:
+        return to_utc(_TIME_SOURCE())
     return datetime.now(tz=timezone.utc)
 
 

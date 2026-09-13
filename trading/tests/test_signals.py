@@ -107,9 +107,30 @@ def test_agreeing_signals_beat_conflicting_ones():
 
 def test_weights_shift_the_fused_score():
     scores = SignalSet(scores={"trend": 1.0, "mean_reversion": -1.0})
-    trend_heavy = fuse_signals("AAPL", scores, weights={"trend": 2.0, "mean_reversion": 0.5})
-    reversion_heavy = fuse_signals("AAPL", scores, weights={"trend": 0.5, "mean_reversion": 2.0})
+    # With only two components the share cap would flatten them to 50/50, so this
+    # checks the weighting itself with the cap relaxed.
+    trend_heavy = fuse_signals(
+        "AAPL", scores, weights={"trend": 2.0, "mean_reversion": 0.5}, max_component_share=0.9
+    )
+    reversion_heavy = fuse_signals(
+        "AAPL", scores, weights={"trend": 0.5, "mean_reversion": 2.0}, max_component_share=0.9
+    )
     assert trend_heavy.score > 0 > reversion_heavy.score
+
+
+def test_the_share_cap_levels_a_two_component_vote():
+    """With two components a 40% cap is unsatisfiable, so it becomes 50/50."""
+    scores = SignalSet(scores={"trend": 1.0, "mean_reversion": -1.0})
+    capped = fuse_signals("AAPL", scores, weights={"trend": 9.0, "mean_reversion": 0.1})
+    assert capped.weights["trend"] == pytest.approx(capped.weights["mean_reversion"])
+    assert capped.score == pytest.approx(0.0)
+
+
+def test_the_share_cap_binds_with_enough_components():
+    scores = SignalSet(scores={"a": 1.0, "b": 1.0, "c": 1.0, "d": 1.0})
+    capped = fuse_signals("AAPL", scores, weights={"a": 20.0, "b": 0.1, "c": 0.1, "d": 0.1})
+    total = sum(capped.weights.values())
+    assert capped.weights["a"] / total == pytest.approx(0.4, abs=1e-6)
 
 
 def test_expected_move_scales_with_conviction():

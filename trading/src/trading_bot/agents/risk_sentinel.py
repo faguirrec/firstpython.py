@@ -23,13 +23,15 @@ from typing import Any, Mapping, Sequence
 from ..brokers.base import AccountSnapshot, Position
 from ..clock import iso, trading_day, utcnow
 from ..config import Settings
-from ..costs import NetExpectedValue, evaluate_net_ev
+from ..costs import NetExpectedValue, baseline_hit_probability, evaluate_net_ev, hit_probability
 from ..db import Store
 from ..logging_setup import get_logger
 
 log = get_logger(__name__)
 
 KILL_SWITCH_KEY = "kill_switch"
+# Trades of evidence needed before the measured hit rate outweighs the prior.
+PROBABILITY_PRIOR_WEIGHT = 20
 # Sentinel for "PDT does not apply here"; kept finite so callers can compare.
 UNLIMITED_DAY_TRADES = 999
 PEAK_EQUITY_KEY = "peak_equity"
@@ -135,9 +137,12 @@ class RiskSentinel:
         elif account.trading_blocked:
             block_reason = "trading_blocked"
 
-        # PDT only applies to margin accounts below the equity threshold.
+        # PDT applies to margin accounts below the equity threshold, and to any
+        # account the broker has already flagged as a pattern day trader.
         under_threshold = account.equity < self.risk.pdt_equity_threshold
-        pdt_restricted = (not account.is_cash_account) and under_threshold
+        pdt_restricted = (
+            account.pattern_day_trader or not account.is_cash_account
+        ) and under_threshold
 
         # Trust the broker's count when it has one; our own tally is the floor.
         local_count = self.store.day_trades_in_window(as_of=as_of)
@@ -201,8 +206,13 @@ class RiskSentinel:
         *,
         positions: Sequence[Position] = (),
         as_of: str | None = None,
+        engage_on_breach: bool = True,
     ) -> tuple[bool, str, dict[str, Any]]:
-        """Gate applied before any new entry is even considered."""
+        """Gate applied before any new entry is even considered.
+
+        ``engage_on_breach=False`` makes this purely read-only, for the status
+        command and the health endpoint: showing the state should never change it.
+        """
         posture = self.account_posture(account, as_of=as_of)
         daily = self.daily_loss_state(account, as_of=as_of)
         drawdown = self.drawdown_state(account)
@@ -218,18 +228,24 @@ class RiskSentinel:
             return False, posture.block_reason, details
         if drawdown["breached"]:
             # A drawdown breach ends the experiment; it must not silently resume.
-            self.engage_kill_switch("max_drawdown_breached", **drawdown)
+            if engage_on_breach:
+                self.engage_kill_switch("max_drawdown_breached", **drawdown)
             return False, "max_drawdown_breached", details
         if daily["breached"]:
             return False, "daily_loss_limit_reached", details
 
-        trades_today = self.store.count_filled_entries_today(as_of)
+        trades_today = self.store.count_entries_today(as_of)
         details["trades_today"] = trades_today
         if trades_today >= self.risk.max_trades_per_day:
             return False, "max_trades_per_day_reached", details
 
-        open_count = len([p for p in positions if abs(p.quantity) > 0])
-        details["open_positions"] = open_count
+        # A working order is exposure in waiting: counting only filled positions
+        # would let one symbol be bought again on every cycle until it fills.
+        pending = self.store.symbols_with_live_orders()
+        held = {p.symbol.upper() for p in positions if abs(p.quantity) > 0}
+        open_count = len(held | pending)
+        details["open_positions"] = len(held)
+        details["pending_orders"] = sorted(pending)
         if open_count >= self.risk.max_open_positions:
             return False, "max_open_positions_reached", details
 
@@ -269,6 +285,48 @@ class RiskSentinel:
             return 0.0, 0.0, "quantity_rounds_to_zero"
         return quantity, quantity * reference_price, "ok"
 
+    # ----------------------------------------------------------- probability
+    def entry_probability(self, confidence: float) -> tuple[float, dict[str, Any]]:
+        """The hit probability to price this trade with.
+
+        Starts from a confidence-scaled prior and shifts toward the **measured**
+        hit rate as closed trades accumulate. The property that matters: if the
+        strategy's realized hit rate turns out to be below the no-edge baseline,
+        the expected value goes negative and the bot stops trading on its own,
+        without anyone having to notice and intervene.
+        """
+        win_pct = self.risk.take_profit_pct
+        loss_pct = self.risk.stop_loss_pct
+        baseline = baseline_hit_probability(win_pct, loss_pct)
+        prior = hit_probability(
+            confidence,
+            take_profit_pct=win_pct,
+            stop_loss_pct=loss_pct,
+            edge_cap=self.risk.confidence_edge_cap,
+        )
+
+        wins, total = self.store.realized_hit_rate()
+        if total <= 0:
+            return prior, {
+                "source": "prior",
+                "baseline": round(baseline, 4),
+                "prior": round(prior, 4),
+                "samples": 0,
+            }
+
+        measured = wins / total
+        weight = total / (total + PROBABILITY_PRIOR_WEIGHT)
+        blended = prior * (1 - weight) + measured * weight
+        return blended, {
+            "source": "blended",
+            "baseline": round(baseline, 4),
+            "prior": round(prior, 4),
+            "measured": round(measured, 4),
+            "samples": total,
+            "weight_on_measured": round(weight, 4),
+            "blended": round(blended, 4),
+        }
+
     # ----------------------------------------------------------------- entries
     def evaluate_entry(
         self,
@@ -298,6 +356,11 @@ class RiskSentinel:
         if any(p.symbol == symbol.upper() and abs(p.quantity) > 0 for p in positions):
             return RiskAssessment(False, "position_already_open", symbol, side, details=details)
 
+        # Same symbol, order still working: buying again would stack the position
+        # past the per-position cap without either check noticing.
+        if symbol.upper() in self.store.symbols_with_live_orders():
+            return RiskAssessment(False, "order_already_working", symbol, side, details=details)
+
         if confidence < self.risk.min_confidence:
             details["confidence"] = confidence
             return RiskAssessment(False, "confidence_below_minimum", symbol, side, details=details)
@@ -314,6 +377,8 @@ class RiskSentinel:
         if quantity <= 0:
             return RiskAssessment(False, sizing_reason, symbol, side, details=details)
 
+        probability, probability_detail = self.entry_probability(confidence)
+        details["probability"] = probability_detail
         ev = evaluate_net_ev(
             symbol=symbol,
             side=side,
@@ -325,6 +390,11 @@ class RiskSentinel:
             half_spread_bps=half_spread_bps,
             min_net_ev_usd=self.risk.min_net_ev_usd,
             min_net_ev_bps=self.risk.min_net_ev_bps,
+            # The payoff comes from the exit levels this trade will actually use.
+            take_profit_pct=self.risk.take_profit_pct,
+            stop_loss_pct=self.risk.stop_loss_pct,
+            confidence_edge_cap=self.risk.confidence_edge_cap,
+            probability=probability,
         )
         if not ev.approved:
             return RiskAssessment(
@@ -382,8 +452,10 @@ class RiskSentinel:
 
     # --------------------------------------------------------------- reporting
     def snapshot(self, account: AccountSnapshot, positions: Sequence[Position] = ()) -> dict[str, Any]:
-        """A single dict describing every limit and where we stand against it."""
-        allowed, reason, details = self.check_trading_allowed(account, positions=positions)
+        """A read-only view of every limit and where we stand against it."""
+        allowed, reason, details = self.check_trading_allowed(
+            account, positions=positions, engage_on_breach=False
+        )
         return {
             "checked_at": iso(utcnow()),
             "trading_allowed": allowed,

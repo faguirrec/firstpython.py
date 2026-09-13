@@ -100,6 +100,9 @@ class CostConfig:
     taf_max_per_order: float = 8.30
     # Fallback half-spread assumption when no quote is available, in bps.
     default_half_spread_bps: float = 5.0
+    # Floor applied to a quoted half-spread, so a locked or crossed quote cannot
+    # price the round trip at zero.
+    min_half_spread_bps: float = 1.0
     # Extra slippage assumed on top of the half-spread, in bps per fill.
     slippage_bps: float = 2.0
 
@@ -112,6 +115,7 @@ class CostConfig:
             taf_per_share=env_float("TAF_PER_SHARE", 0.000166),
             taf_max_per_order=env_float("TAF_MAX_PER_ORDER", 8.30),
             default_half_spread_bps=env_float("DEFAULT_HALF_SPREAD_BPS", 5.0),
+            min_half_spread_bps=env_float("MIN_HALF_SPREAD_BPS", 1.0),
             slippage_bps=env_float("SLIPPAGE_BPS", 2.0),
         )
 
@@ -132,6 +136,10 @@ class RiskConfig:
     min_net_ev_usd: float = 0.005           # absolute net edge required
     min_net_ev_bps: float = 10.0            # net edge as bps of notional
     min_confidence: float = 0.35
+    # How much a maximally-confident signal may add to the no-edge hit
+    # probability. A prior, not a measurement: calibrate it against realized hit
+    # rates (`trading-bot calibrate`) before trusting a larger value.
+    confidence_edge_cap: float = 0.15
     # PDT: FINRA allows 3 day trades per rolling 5 business days under $25k.
     pdt_equity_threshold: float = 25_000.0
     max_day_trades_window: int = 3
@@ -154,6 +162,7 @@ class RiskConfig:
             min_net_ev_usd=env_float("MIN_NET_EV_USD", 0.005),
             min_net_ev_bps=env_float("MIN_NET_EV_BPS", 10.0),
             min_confidence=env_float("MIN_CONFIDENCE", 0.35),
+            confidence_edge_cap=env_float("CONFIDENCE_EDGE_CAP", 0.15),
             pdt_equity_threshold=env_float("PDT_EQUITY_THRESHOLD", 25_000.0),
             max_day_trades_window=env_int("MAX_DAY_TRADES_WINDOW", 3),
             day_trade_safety_buffer=env_int("DAY_TRADE_SAFETY_BUFFER", 1),
@@ -229,6 +238,11 @@ class Settings:
     database_url: str = "trading_bot.db"
     universe: tuple[str, ...] = ("SPY", "QQQ", "AAPL", "MSFT", "NVDA", "AMD", "TSLA", "F")
     benchmark: str = "SPY"
+    # Which exchange's hours gate execution. XNYS is the only market Alpaca
+    # trades; other profiles exist so monitoring windows stay correct elsewhere.
+    exchange: str = "XNYS"
+    exchange_calendar_file: str = ""
+    exchange_extra_holidays: tuple[str, ...] = ()
     experiment_days: int = 30
     dry_run: bool = False
     log_level: str = "INFO"
@@ -236,6 +250,9 @@ class Settings:
     timezone: str = "America/New_York"
     trade_interval_minutes: int = 15
     news_interval_minutes: int = 20
+    # 0 disables the endpoint. Set it on any host that needs a liveness probe.
+    health_port: int = 0
+    health_token: str = ""
     costs: CostConfig = field(default_factory=CostConfig)
     risk: RiskConfig = field(default_factory=RiskConfig)
     signals: SignalConfig = field(default_factory=SignalConfig)
@@ -256,7 +273,10 @@ class Settings:
             "anthropic_api_key",
             "market_data_api_key",
             "news_api_key",
+            "health_token",
             "telegram_bot_token",
+            "telegram_chat_id",
+            "alert_email",
             "smtp_url",
         }
         out: dict[str, Any] = {}
@@ -297,6 +317,11 @@ class Settings:
             database_url=env_str("DATABASE_URL", "trading_bot.db"),
             universe=env_list("UNIVERSE", ("SPY", "QQQ", "AAPL", "MSFT", "NVDA", "AMD", "TSLA", "F")),
             benchmark=env_str("BENCHMARK", "SPY").upper(),
+            exchange=env_str("EXCHANGE", "XNYS").upper(),
+            exchange_calendar_file=env_str("EXCHANGE_CALENDAR_FILE"),
+            exchange_extra_holidays=tuple(
+                item.strip() for item in env_str("EXCHANGE_EXTRA_HOLIDAYS").split(",") if item.strip()
+            ),
             experiment_days=env_int("EXPERIMENT_DAYS", 30),
             dry_run=env_bool("DRY_RUN", False),
             log_level=env_str("LOG_LEVEL", "INFO").upper(),
@@ -304,6 +329,8 @@ class Settings:
             timezone=env_str("TIMEZONE", "America/New_York"),
             trade_interval_minutes=env_int("TRADE_INTERVAL_MINUTES", 15),
             news_interval_minutes=env_int("NEWS_INTERVAL_MINUTES", 20),
+            health_port=env_int("HEALTH_PORT", env_int("PORT", 0)),
+            health_token=env_str("HEALTH_TOKEN"),
             costs=CostConfig.from_env(),
             risk=RiskConfig.from_env(),
             signals=SignalConfig.from_env(),
@@ -318,6 +345,18 @@ class Settings:
             problems.append(f"ALPACA_BASE_URL looks wrong: {self.alpaca_base_url!r}")
         if not self.universe:
             problems.append("UNIVERSE is empty; nothing to trade.")
+        try:
+            from .calendars import load_calendar
+
+            load_calendar(
+                self.exchange,
+                path=self.exchange_calendar_file or None,
+                extra_holidays=self.exchange_extra_holidays,
+            )
+        except (ValueError, KeyError, IndexError, TypeError, AttributeError, OSError) as exc:
+            # A malformed calendar file can raise almost anything; all of it is a
+            # configuration problem to report, not a crash to propagate.
+            problems.append(f"EXCHANGE/EXCHANGE_CALENDAR_FILE inválido: {exc}")
         if self.market_data_provider not in ("alpaca", "polygon", "alphavantage", "alpha_vantage"):
             problems.append(f"MARKET_DATA_PROVIDER desconocido: {self.market_data_provider!r}")
         if self.market_data_provider not in ("alpaca",) and not self.market_data_api_key:

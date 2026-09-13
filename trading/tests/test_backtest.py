@@ -106,7 +106,13 @@ def test_no_position_is_left_open(bt_settings, history):
     store = Store(":memory:")
     run_backtest(bt_settings, history, store=store)
     assert store.open_trades() == []
-    assert any(t["exit_reason"] == "end_of_backtest" for t in store.closed_trades()) or True
+    closed = store.closed_trades()
+    assert closed
+    # Every trade ends for a stated reason, and they are all reasons we model.
+    assert all(trade["exit_reason"] for trade in closed)
+    assert set(trade["exit_reason"] for trade in closed) <= {
+        "stop_loss", "take_profit", "time_stop", "end_of_backtest",
+    }
     store.close()
 
 
@@ -264,6 +270,18 @@ def test_thin_results_are_reported_but_not_recommended(bt_settings, history):
 
 
 def test_default_grid_only_touches_known_parameters(bt_settings):
-    for key in default_grid():
-        tuned = apply_params(bt_settings, {key: default_grid()[key][0]})
-        assert tuned != bt_settings
+    """Every grid key must reach a real config field, on risk or on signals."""
+    for key, values in default_grid().items():
+        # Pick a value that differs from the default so the change is observable.
+        candidate = next(
+            (value for value in values if value != _current(bt_settings, key)), values[0]
+        )
+        tuned = apply_params(bt_settings, {key: candidate})
+        assert _current(tuned, key) == candidate
+        assert _current(bt_settings, key) != candidate or len(values) == 1
+
+
+def _current(settings, key: str):
+    if hasattr(settings.risk, key):
+        return getattr(settings.risk, key)
+    return getattr(settings.signals, key)

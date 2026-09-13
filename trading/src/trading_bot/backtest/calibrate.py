@@ -129,9 +129,12 @@ def default_grid() -> dict[str, list[Any]]:
     """A small, defensible grid: the parameters that actually move the needle."""
     return {
         "edge_scale_bps": [80.0, 120.0, 200.0, 300.0],
-        "min_confidence": [0.25, 0.35, 0.5],
+        "min_confidence": [0.35, 0.45, 0.55],
         "take_profit_pct": [0.02, 0.03, 0.05],
         "stop_loss_pct": [0.015, 0.02, 0.03],
+        # The probability prior is the least-justified number in the system, so
+        # it belongs in the sweep rather than being assumed.
+        "confidence_edge_cap": [0.10, 0.15, 0.25],
     }
 
 

@@ -47,12 +47,24 @@ régimen (SPY) ─────────────────────�
 ### Cómo se decide si un trade conviene
 
 `RiskSentinel` no compara la señal contra cero, sino contra el costo del viaje
-de ida y vuelta:
+de ida y vuelta, y pondera **las dos ramas** del trade:
 
 ```
-EV_bruto  = notional × movimiento_esperado × confianza
+p         = probabilidad de tocar el objetivo antes del stop
+EV_bruto  = notional × (p × take_profit − (1 − p) × stop_loss)
 EV_neto   = EV_bruto − comisión − fee_SEC − fee_TAF − spread − slippage
 ```
+
+De dónde sale `p` es la parte que importa. Con objetivo 3% y stop 2%, un precio
+sin tendencia toca el stop más seguido: la probabilidad base es
+`stop / (objetivo + stop) = 0,40`. Esa es la cifra que hay que superar para tener
+EV positivo, y por construcción una señal sin edge da EV exactamente cero.
+
+`p` arranca en un **prior** (la confianza de la señal puede sumar hasta
+`CONFIDENCE_EDGE_CAP`) y se desplaza hacia la **tasa de acierto realmente
+medida** a medida que se cierran trades. La propiedad que esto compra: si la tasa
+de acierto real queda por debajo de la base, el EV se vuelve negativo y el bot
+**deja de operar por sí solo**, sin que nadie tenga que darse cuenta.
 
 * El **fee SEC** (Sección 31) y el **TAF de FINRA** se cobran solo en las
   *ventas*; están modelados con sus tasas y su tope por orden.
@@ -235,6 +247,8 @@ python -m trading_bot nightly            # cierre completo: aprendizaje + report
 python -m trading_bot report             # reporte del día
 python -m trading_bot report --final     # reporte final del experimento
 python -m trading_bot dashboard          # regenera reports/dashboard.html
+python -m trading_bot simulate           # valida el ambiente completo, sin credenciales
+python -m trading_bot calendar --list    # horarios de mercado disponibles
 python -m trading_bot backtest           # simula la estrategia sobre historial
 python -m trading_bot calibrate          # barrido de parámetros con validación
 python -m trading_bot run                # scheduler 24/7
@@ -295,6 +309,40 @@ tail -f logs/trading_bot.jsonl | python -m json.tool
 
 ---
 
+## Validar el ambiente sin credenciales
+
+```bash
+trading-bot simulate --days 5
+trading-bot simulate --outage-rate 0.2    # con el broker fallando
+```
+
+Comprime varios días de operación en segundos contra un broker sintético y
+después **se verifica a sí mismo**: que no se envíen órdenes fuera de sesión, que
+cada fill se convierta en un trade, que ninguna posición exceda su límite, que la
+contabilidad neta cuadre, que el ciclo nocturno corra, que el dashboard se genere.
+
+El P&L de esa corrida no significa nada — los precios son sintéticos. Lo que
+valida es la mecánica. Para saber si la estrategia sirve, eso es `backtest`.
+
+Córrelo después de cada despliegue, antes de apuntar el bot a una cuenta real.
+
+---
+
+## Horario de mercado configurable
+
+El scheduler deriva todas sus ventanas del calendario configurado:
+
+```bash
+EXCHANGE=XNYS   # NYSE/Nasdaq (el único operable vía Alpaca)
+EXCHANGE=XTKS   # Tokio, con su pausa de almuerzo 11:30–12:30
+```
+
+Los feriados de EE.UU. se calculan por regla (Viernes Santo desde la Pascua,
+feriados en fin de semana corridos como lo hace NYSE), así que el calendario no
+caduca. Detalles y calendarios propios en [DEPLOY.md](DEPLOY.md).
+
+---
+
 ## Métricas y reportes
 
 Diario y acumulado: P&L neto, retorno sobre capital inicial, win rate, número de
@@ -338,15 +386,18 @@ modelo de fees, dimensionamiento de posición, límites duros y reglas PDT.
 
 ---
 
-## Despliegue con Docker
+## Despliegue 24/7
 
 ```bash
-docker compose up -d --build
-docker compose logs -f
+docker compose up -d --build      # local o VPS
 ```
 
+Para correr sin depender de tu máquina — Fly.io, Render, VPS con systemd —, el
+endpoint de salud, el monitoreo y el freno de mano remoto: **[DEPLOY.md](DEPLOY.md)**.
+
 `data/`, `logs/` y `reports/` se montan como volúmenes: el contenedor es
-desechable, el historial del experimento no.
+desechable, el historial del experimento no. El contenedor corre como usuario
+no-root y su healthcheck sí puede fallar (`status --strict`).
 
 ---
 
@@ -361,6 +412,9 @@ trading/
 │   ├── signals/         indicadores técnicos y fusión ponderada
 │   ├── marketdata/      proveedores de precios (Alpaca · Polygon · Alpha Vantage)
 │   ├── backtest/        simulación histórica y calibración de parámetros
+│   ├── calendars.py     horarios y feriados por bolsa (calculados, no tabulados)
+│   ├── simulation.py    validación del ambiente extremo a extremo
+│   ├── health.py        endpoints /health y /status para monitoreo
 │   ├── costs.py         modelo de fees y valor esperado neto
 │   ├── metrics.py       métricas de desempeño
 │   ├── reporting.py     reportes y dashboard HTML
@@ -369,8 +423,10 @@ trading/
 │   ├── circuit_breaker.py · alerts.py · clock.py · config.py · logging_setup.py
 │   └── cli.py
 ├── scripts/start_experiment.py
+├── deploy/trading-bot.service
 ├── tests/
-└── Dockerfile · docker-compose.yml · .env.example
+├── DEPLOY.md            despliegue 24/7, horarios y monitoreo
+└── Dockerfile · docker-compose.yml · fly.toml · render.yaml · .env.example
 ```
 
 ---
@@ -393,6 +449,11 @@ trading/
   live.
 * Con pocos trades cerrados, el ciclo de aprendizaje ajusta pesos sobre muestras
   muy pequeñas. El reporte final lo señala explícitamente cuando ocurre.
+* **La confianza de la señal no es una probabilidad calibrada.** Es un heurístico
+  (fuerza × acuerdo × amplitud). El modelo de EV lo trata como un prior acotado y
+  lo reemplaza por la tasa de acierto medida en cuanto hay datos, pero los
+  primeros ~20 trades se operan sobre un supuesto. Ese es el costo del arranque
+  en frío, y en pruebas sobre series sin edge equivale a ~2% del capital.
 * **Corre `backtest` y `calibrate` antes de arrancar los 30 días.** Un backtest
   favorable no es una promesa, pero uno desfavorable sí es una advertencia: si la
   estrategia no cubre sus costos sobre años de historial, tampoco lo hará en 30

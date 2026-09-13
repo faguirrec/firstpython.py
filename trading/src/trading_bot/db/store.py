@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -19,15 +20,18 @@ from ..clock import iso, parse_iso, trading_day, utcnow
 SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 
 
-def connect(database: str | Path) -> sqlite3.Connection:
+def connect(database: str | Path, *, same_thread: bool = True) -> sqlite3.Connection:
     """Open a SQLite connection configured for concurrent agent access."""
     path = Path(database)
-    if str(path) != ":memory:":
+    in_memory = str(path) == ":memory:"
+    if not in_memory:
         path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(path), timeout=30.0, isolation_level=None)
+    conn = sqlite3.connect(
+        str(path), timeout=30.0, isolation_level=None, check_same_thread=same_thread
+    )
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
-    if str(path) != ":memory:":
+    if not in_memory:
         conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA busy_timeout = 30000")
     return conn
@@ -65,22 +69,72 @@ class SignalWeight:
 
 
 class Store:
-    """Auditable storage for news, decisions, orders, trades and metrics."""
+    """Auditable storage for news, decisions, orders, trades and metrics.
+
+    **Thread safety.** A SQLite connection belongs to the thread that opened it,
+    and the production scheduler (APScheduler) runs every job on a worker thread
+    from a pool. So a file-backed store hands each thread its own connection;
+    WAL plus a 30s busy timeout lets them write concurrently.
+
+    An in-memory database is the exception: it *is* the connection, so a
+    per-thread connection would hand each thread a different empty database.
+    Those share one connection with ``check_same_thread=False`` instead, which is
+    safe because every write here is a single autocommit statement.
+    """
 
     def __init__(self, database: str | Path = "trading_bot.db") -> None:
         self.database = str(database)
-        self.conn = connect(database)
+        self._in_memory = self.database == ":memory:"
+        self._local = threading.local()
+        self._connections: list[sqlite3.Connection] = []
+        self._lock = threading.Lock()
+        self._shared: sqlite3.Connection | None = (
+            self._track(connect(self.database, same_thread=False)) if self._in_memory else None
+        )
         self.migrate()
 
+    def _track(self, conn: sqlite3.Connection) -> sqlite3.Connection:
+        with self._lock:
+            self._connections.append(conn)
+        return conn
+
+    @property
+    def conn(self) -> sqlite3.Connection:
+        """The connection this thread may use."""
+        if self._shared is not None:
+            return self._shared
+        existing = getattr(self._local, "conn", None)
+        if existing is None:
+            existing = self._track(connect(self.database))
+            self._local.conn = existing
+        return existing
+
     # ---------------------------------------------------------------- lifecycle
+    # Columns added after the first release; SQLite needs them backfilled by
+    # hand because CREATE TABLE IF NOT EXISTS will not alter an existing table.
+    _ADDED_COLUMNS = (
+        ("orders", "client_order_id", "TEXT"),
+        ("orders", "booked_qty", "REAL NOT NULL DEFAULT 0"),
+    )
+
     def migrate(self) -> None:
         self.conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+        for table, column, spec in self._ADDED_COLUMNS:
+            existing = {row["name"] for row in self._rows(f"PRAGMA table_info({table})")}
+            if column not in existing:
+                self._exec(f"ALTER TABLE {table} ADD COLUMN {column} {spec}")
 
     def close(self) -> None:
-        try:
-            self.conn.close()
-        except sqlite3.Error:
-            pass
+        with self._lock:
+            connections = list(self._connections)
+            self._connections.clear()
+        self._shared = None
+        self._local = threading.local()
+        for conn in connections:
+            try:
+                conn.close()
+            except sqlite3.Error:
+                pass
 
     def __enter__(self) -> "Store":
         return self
@@ -248,12 +302,13 @@ class Store:
         now = iso()
         cursor = self._exec(
             "INSERT INTO orders"
-            "(broker_order_id, decision_id, created_at, updated_at, trading_day, symbol, side,"
-            " quantity, notional, limit_price, order_type, time_in_force, status, filled_qty,"
-            " filled_avg_price, intent, trade_id, raw)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "(broker_order_id, client_order_id, decision_id, created_at, updated_at, trading_day,"
+            " symbol, side, quantity, notional, limit_price, order_type, time_in_force, status,"
+            " filled_qty, filled_avg_price, intent, trade_id, raw)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 order.get("broker_order_id"),
+                order.get("client_order_id"),
                 order.get("decision_id"),
                 order.get("created_at") or now,
                 now,
@@ -279,8 +334,8 @@ class Store:
         if not fields:
             return
         allowed = {
-            "broker_order_id", "status", "filled_qty", "filled_avg_price",
-            "limit_price", "quantity", "trade_id", "raw", "intent",
+            "broker_order_id", "client_order_id", "status", "filled_qty", "booked_qty",
+            "filled_avg_price", "limit_price", "quantity", "trade_id", "raw", "intent",
         }
         updates = {k: (_json(v) if k == "raw" else v) for k, v in fields.items() if k in allowed}
         if not updates:
@@ -292,14 +347,51 @@ class Store:
         )
 
     def open_orders(self) -> list[dict[str, Any]]:
+        """Orders that are still working at the broker."""
+        placeholders = ",".join("?" * len(self.LIVE_ORDER_STATUSES))
         return self._rows(
-            "SELECT * FROM orders WHERE status IN"
-            " ('new','accepted','partially_filled','pending_new','held','accepted_for_bidding')"
-            " ORDER BY created_at"
+            f"SELECT * FROM orders WHERE status IN ({placeholders}) ORDER BY created_at",
+            self.LIVE_ORDER_STATUSES,
         )
 
     def get_order(self, order_id: int) -> dict[str, Any] | None:
         return self._row("SELECT * FROM orders WHERE id = ?", (order_id,))
+
+    def unconfirmed_orders(self) -> list[dict[str, Any]]:
+        """Rows written before the broker call returned an id.
+
+        A crash between `record_order` and `submit_limit_order` leaves these. They
+        must be recovered or retired, never ignored: an orphaned exit row makes
+        `_has_open_exit` true forever and silently disables that trade's stop.
+        """
+        return self._rows(
+            "SELECT * FROM orders WHERE broker_order_id IS NULL"
+            " AND status NOT IN ('canceled','rejected','expired','unknown','filled')"
+            " ORDER BY created_at"
+        )
+
+    def grow_trade(self, trade_id: int, *, quantity: float, price: float) -> None:
+        """Add a later fill of the same order, blending the entry price."""
+        trade = self.get_trade(trade_id)
+        if trade is None or trade.get("status") == "closed":
+            return
+        held = float(trade["quantity"])
+        entry = float(trade["entry_price"])
+        total = held + quantity
+        if total <= 0:
+            return
+        blended = (entry * held + price * quantity) / total
+        self._exec(
+            "UPDATE trades SET quantity = ?, entry_price = ? WHERE id = ?",
+            (total, blended, trade_id),
+        )
+
+    def shrink_trade(self, trade_id: int, quantity: float) -> None:
+        """Reduce an open trade's size after a partial exit."""
+        self._exec(
+            "UPDATE trades SET quantity = MAX(quantity - ?, 0) WHERE id = ?",
+            (float(quantity), trade_id),
+        )
 
     def order_by_broker_id(self, broker_order_id: str) -> dict[str, Any] | None:
         return self._row("SELECT * FROM orders WHERE broker_order_id = ?", (broker_order_id,))
@@ -307,6 +399,27 @@ class Store:
     def orders_for_day(self, day: date | str | None = None) -> list[dict[str, Any]]:
         return self._rows("SELECT * FROM orders WHERE trading_day = ? ORDER BY created_at", (_day_key(day),))
 
+    # Statuses that mean "this order can still consume buying power".
+    LIVE_ORDER_STATUSES = (
+        "new", "accepted", "partially_filled", "pending_new", "held", "accepted_for_bidding",
+    )
+
+    def count_entries_today(self, day: date | str | None = None) -> int:
+        """Entries today that took risk: filled **or** still working.
+
+        A resting limit order has already committed buying power, so counting
+        only fills would let the daily budget be spent several times over.
+        """
+        placeholders = ",".join("?" * len(self.LIVE_ORDER_STATUSES))
+        row = self._row(
+            "SELECT COUNT(*) AS n FROM orders"
+            f" WHERE trading_day = ? AND intent = 'entry'"
+            f" AND (status = 'filled' OR status IN ({placeholders}))",
+            (_day_key(day), *self.LIVE_ORDER_STATUSES),
+        )
+        return int(row["n"]) if row else 0
+
+    # Kept for readers that specifically want completed entries.
     def count_filled_entries_today(self, day: date | str | None = None) -> int:
         """Filled *entries* today. Exits are not new risk and must not count."""
         row = self._row(
@@ -315,6 +428,10 @@ class Store:
             (_day_key(day),),
         )
         return int(row["n"]) if row else 0
+
+    def symbols_with_live_orders(self) -> set[str]:
+        """Symbols that already have a working order - pending exposure."""
+        return {str(row["symbol"]).upper() for row in self.open_orders()}
 
     # ------------------------------------------------------------------- trades
     def open_trade(self, trade: dict[str, Any]) -> int:
@@ -392,6 +509,20 @@ class Store:
         for row in rows:
             row["signals"] = _loads(row.get("signals_json"))
         return rows
+
+    def realized_hit_rate(self, *, limit: int = 200) -> tuple[int, int]:
+        """``(wins, total)`` over the most recent closed trades.
+
+        This is what the expected-value model should believe about its own hit
+        rate. A win is a *net* win: a trade that made money after costs.
+        """
+        rows = self._rows(
+            "SELECT net_pnl FROM trades WHERE status='closed' AND net_pnl IS NOT NULL"
+            " ORDER BY closed_at DESC LIMIT ?",
+            (limit,),
+        )
+        wins = sum(1 for row in rows if float(row["net_pnl"]) > 0)
+        return wins, len(rows)
 
     def mark_trade_reviewed(self, trade_id: int) -> None:
         self._exec("UPDATE trades SET reviewed = 1 WHERE id = ?", (trade_id,))

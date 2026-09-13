@@ -14,7 +14,6 @@ eat the entire edge, so the price we are willing to pay is always explicit.
 
 from __future__ import annotations
 
-import uuid
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
@@ -36,8 +35,11 @@ log = get_logger(__name__)
 # Marketable-limit cushion: cross the spread by this fraction of it to get
 # filled, without paying an unbounded price.
 LIMIT_CROSS_FRACTION = 0.6
-# Orders that never filled are cancelled after this many cycles.
+# Orders that never filled are cancelled after this long. It must stay BELOW the
+# trading interval: an order still working when the next cycle scans is an order
+# that cycle could stack another position on top of.
 STALE_ORDER_MINUTES = 20.0
+STALE_ORDER_MARGIN_MINUTES = 1.0
 # The benchmark's daily trend barely moves intraday; refetching it per symbol
 # would burn the rate limit for nothing.
 REGIME_CACHE_SECONDS = 900.0
@@ -93,11 +95,22 @@ class TraderCore:
             data = MarketData(AlpacaData(broker, feed=settings.alpaca_feed))
         self.data = data
         self._regime_cache: tuple[Any, float | None] = (None, None)
+        self.stale_order_minutes = max(
+            2.0,
+            min(STALE_ORDER_MINUTES, settings.trade_interval_minutes - STALE_ORDER_MARGIN_MINUTES),
+        )
         self.store.ensure_weights(settings.signals.seed_weights)
 
     # ------------------------------------------------------------------ cycle
-    def run_cycle(self) -> CycleReport:
-        """Run one full trading cycle. Safe to call when the market is closed."""
+    def run_cycle(self, *, entries_enabled: bool = True) -> CycleReport:
+        """Run one full trading cycle. Safe to call when the market is closed.
+
+        ``entries_enabled=False`` still reconciles orders and manages exits. That
+        separation is deliberate: the kill switch and the circuit breaker must
+        stop the bot from opening risk, never from closing it. Blocking exits
+        while the account is in trouble is how a bounded drawdown becomes an
+        unbounded loss.
+        """
         session = self.broker.session()
         notes: list[str] = []
 
@@ -114,6 +127,12 @@ class TraderCore:
         self._snapshot_equity(account, positions)
 
         exits = self.manage_exits(account, positions)
+
+        if not entries_enabled:
+            notes.append("entries_disabled_by_caller")
+            return CycleReport(
+                session=session, fills=fills, exits_submitted=exits, notes=notes
+            )
 
         allowed, reason, _details = self.risk.check_trading_allowed(account, positions=positions)
         if not allowed:
@@ -137,7 +156,20 @@ class TraderCore:
 
     # ------------------------------------------------------------ reconcile
     def sync_orders(self) -> int:
-        """Update local orders from the broker; turn fills into trades."""
+        """Update local orders from the broker; turn fills into trades.
+
+        Two properties this has to guarantee, both learned the hard way:
+
+        * **Every share that filled gets booked.** An order that ends
+          ``expired`` or ``canceled`` after a *partial* fill still moved shares.
+          Keying off ``status == 'filled'`` silently abandoned those positions,
+          leaving them with no stop loss and no take profit, forever.
+        * **The trade is booked before the terminal status is written.** If the
+          process dies in between, the order is still open locally and the next
+          sync re-books it. The other order would lose the fill permanently.
+        """
+        self._recover_unconfirmed_orders()
+
         fills = 0
         for record in self.store.open_orders():
             broker_order_id = record.get("broker_order_id")
@@ -154,6 +186,14 @@ class TraderCore:
             if remote is None:
                 continue
 
+            booked = float(record.get("booked_qty") or 0.0)
+            newly_filled = float(remote.filled_qty or 0.0) - booked
+            if newly_filled > 1e-9:
+                fills += 1
+                # Book first, then record the status: a crash in between must
+                # leave the order re-syncable rather than losing the fill.
+                self._on_fill(record, remote, quantity=newly_filled)
+
             self.store.update_order(
                 int(record["id"]),
                 status=remote.status,
@@ -162,12 +202,65 @@ class TraderCore:
                 raw=remote.raw,
             )
 
-            if remote.is_filled:
-                fills += 1
-                self._on_fill(record, remote)
-            elif not remote.is_terminal:
+            if not remote.is_terminal:
                 self._maybe_cancel_stale(record, remote)
         return fills
+
+    def _recover_unconfirmed_orders(self) -> None:
+        """Reconcile rows written before the broker confirmed an id.
+
+        The row is looked up by the deterministic ``client_order_id`` we wrote
+        before calling the broker. If the broker has it, we adopt the id; if the
+        row is old enough that the call clearly never landed, we retire it so it
+        stops blocking that symbol's exits.
+        """
+        lookup = getattr(self.broker, "get_order_by_client_id", None)
+        for record in self.store.unconfirmed_orders():
+            order_id = int(record["id"])
+            client_order_id = record.get("client_order_id")
+
+            if lookup is not None and client_order_id:
+                try:
+                    remote = lookup(str(client_order_id))
+                except BrokerError as exc:
+                    log.warning(
+                        "order_recovery_failed",
+                        extra={"event": {"order_id": order_id, "error": str(exc)}},
+                    )
+                    continue
+                if remote is not None:
+                    # Adopt the id only. Writing the terminal status here would
+                    # drop the row out of `open_orders()` before its fill is
+                    # booked; the main loop below handles it on this same pass.
+                    self.store.update_order(order_id, broker_order_id=remote.broker_order_id)
+                    self.store.record_event(
+                        "order_recovered",
+                        f"{record['symbol']} {client_order_id}",
+                        symbol=record["symbol"], order_id=order_id,
+                    )
+                    log.info(
+                        "order_recovered",
+                        extra={"event": {"order_id": order_id, "broker_id": remote.broker_order_id}},
+                    )
+                    continue
+
+            created = parse_iso(str(record.get("created_at")))
+            if created is None:
+                continue
+            age_minutes = (utcnow() - created).total_seconds() / 60.0
+            if age_minutes < self.stale_order_minutes:
+                continue
+            self.store.update_order(order_id, status="unknown")
+            self.store.record_event(
+                "order_never_confirmed",
+                f"{record['symbol']} retired after {age_minutes:.0f}m with no broker id",
+                severity="error",
+                symbol=record["symbol"], order_id=order_id, intent=record.get("intent"),
+            )
+            log.error(
+                "order_never_confirmed",
+                extra={"event": {"order_id": order_id, "symbol": record["symbol"]}},
+            )
 
     def _settle_if_filled(self, order_id: int, result: OrderResult) -> None:
         """Book an order that came back already filled, without waiting a cycle."""
@@ -182,7 +275,7 @@ class TraderCore:
         if created is None:
             return
         age_minutes = (utcnow() - created).total_seconds() / 60.0
-        if age_minutes < STALE_ORDER_MINUTES:
+        if age_minutes < self.stale_order_minutes:
             return
         try:
             self.broker.cancel_order(remote.broker_order_id)
@@ -196,15 +289,33 @@ class TraderCore:
         except BrokerError as exc:
             log.warning("cancel_failed", extra={"event": {"error": str(exc)}})
 
-    def _on_fill(self, record: Mapping[str, Any], remote: OrderResult) -> None:
-        """A fill either opens a trade or closes one."""
+    def _on_fill(
+        self, record: Mapping[str, Any], remote: OrderResult, *, quantity: float | None = None
+    ) -> None:
+        """Book a fill. ``quantity`` is the *newly* filled amount, not the total."""
         intent = str(record.get("intent", "entry"))
         price = float(remote.filled_avg_price or record.get("limit_price") or 0.0)
-        quantity = float(remote.filled_qty or record.get("quantity") or 0.0)
+        if quantity is None:
+            quantity = float(remote.filled_qty or record.get("quantity") or 0.0)
         if quantity <= 0 or price <= 0:
             return
+        booked = float(record.get("booked_qty") or 0.0)
+        self.store.update_order(int(record["id"]), booked_qty=booked + quantity)
 
         if intent == "entry":
+            existing_trade_id = record.get("trade_id")
+            if existing_trade_id:
+                # A later slice of the same order: grow the position and blend the
+                # entry price, rather than opening a second trade for one order.
+                self.store.grow_trade(int(existing_trade_id), quantity=quantity, price=price)
+                log.info(
+                    "trade_position_increased",
+                    extra={"event": {
+                        "symbol": record["symbol"], "added": quantity, "price": price,
+                    }},
+                )
+                return
+
             decision_id = record.get("decision_id")
             signals: dict[str, Any] = {}
             expected_move = None
@@ -242,6 +353,26 @@ class TraderCore:
             return
 
         entry_price = float(trade["entry_price"])
+        remaining = float(trade["quantity"]) - quantity
+
+        if remaining > 1e-9:
+            # Partial exit: shrink the position and leave the trade open, so the
+            # P&L is eventually booked against the quantity that actually left.
+            self.store.shrink_trade(int(trade_id), quantity)
+            self.store.record_event(
+                "trade_partially_closed",
+                f"{record['symbol']} {quantity} of {trade['quantity']}",
+                symbol=record["symbol"], trade_id=trade_id, quantity=quantity,
+            )
+            log.info(
+                "trade_partially_closed",
+                extra={"event": {
+                    "symbol": record["symbol"], "closed": quantity, "remaining": remaining,
+                }},
+            )
+            return
+
+        quantity = float(trade["quantity"])
         gross = (price - entry_price) * quantity
         fees = realized_costs(
             entry_price=entry_price, exit_price=price, quantity=quantity, config=self.settings.costs
@@ -324,8 +455,15 @@ class TraderCore:
         return submitted
 
     def _has_open_exit(self, trade_id: int) -> bool:
+        """Whether a working exit already covers this trade.
+
+        Only orders the broker confirmed count. A row with no broker id is not a
+        live order - treating one as live is what permanently disabled a stop.
+        """
         return any(
-            int(order.get("trade_id") or 0) == trade_id and order.get("intent") == "exit"
+            int(order.get("trade_id") or 0) == trade_id
+            and order.get("intent") == "exit"
+            and order.get("broker_order_id")
             for order in self.store.open_orders()
         )
 
@@ -371,6 +509,10 @@ class TraderCore:
                 "raw": {"exit_reason": reason},
             }
         )
+        # Derived from the local row, so a crash before the broker replies leaves
+        # something to reconcile against instead of an unrecoverable orphan.
+        client_order_id = f"exit-{order_id}"
+        self.store.update_order(order_id, client_order_id=client_order_id)
         self.store.attach_order_to_decision(decision_id, order_id)
 
         if self.settings.dry_run:
@@ -380,9 +522,9 @@ class TraderCore:
         try:
             result = self.broker.submit_limit_order(
                 symbol, "sell", quantity=quantity, limit_price=limit_price,
-                client_order_id=f"exit-{uuid.uuid4().hex[:16]}",
+                client_order_id=client_order_id,
             )
-        except BrokerError as exc:
+        except Exception as exc:  # noqa: BLE001 - a non-BrokerError must not orphan the row
             self.store.update_order(order_id, status="rejected")
             self.store.record_event("exit_order_failed", str(exc), severity="error", symbol=symbol)
             log.error("exit_order_failed", extra={"event": {"symbol": symbol, "error": str(exc)}})
@@ -406,7 +548,9 @@ class TraderCore:
         Returns ``(evaluated, submitted, rejected, errors)``.
         """
         evaluated = submitted = rejected = errors = 0
+        # Exposure already committed: open positions *and* working orders.
         held = {p.symbol for p in positions if abs(p.quantity) > 0}
+        held |= self.store.symbols_with_live_orders()
         regime = self._regime()
 
         candidates: list[tuple[FusedSignal, float, Quote | None]] = []
@@ -435,9 +579,12 @@ class TraderCore:
                 continue
 
             limit_price = self._limit_price("buy", price, quote)
-            half_spread = quote.half_spread_bps if quote else None
-            if half_spread != half_spread:  # NaN guard
-                half_spread = None
+            # A quote is only usable if it is a real two-sided market.
+            half_spread = None
+            if quote is not None and 0 < quote.bid < quote.ask:
+                candidate = quote.half_spread_bps
+                if candidate == candidate:      # NaN guard
+                    half_spread = candidate
 
             assessment = self.risk.evaluate_entry(
                 symbol=signal.symbol,
@@ -490,6 +637,8 @@ class TraderCore:
                 "decision_id": decision_id, "intent": "entry", "status": "pending_new",
             }
         )
+        client_order_id = f"entry-{order_id}"
+        self.store.update_order(order_id, client_order_id=client_order_id)
         self.store.attach_order_to_decision(decision_id, order_id)
 
         if self.settings.dry_run:
@@ -506,9 +655,9 @@ class TraderCore:
                 symbol, "buy",
                 quantity=assessment.quantity,
                 limit_price=float(assessment.limit_price or price),
-                client_order_id=f"entry-{uuid.uuid4().hex[:16]}",
+                client_order_id=client_order_id,
             )
-        except BrokerError as exc:
+        except Exception as exc:  # noqa: BLE001 - a non-BrokerError must not orphan the row
             self.store.update_order(order_id, status="rejected")
             self.store.record_event("entry_order_failed", str(exc), severity="error", symbol=symbol)
             log.error("entry_order_failed", extra={"event": {"symbol": symbol, "error": str(exc)}})

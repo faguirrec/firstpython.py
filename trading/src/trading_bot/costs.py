@@ -23,6 +23,47 @@ from .config import CostConfig
 
 BPS = 1e-4
 
+# How much a maximally-confident signal may add to the baseline hit probability.
+# Deliberately small: `confidence` is a heuristic (strength x agreement x breadth),
+# not a calibrated probability, and treating it as one is how a backtest starts
+# lying. LearningLoop's realized hit rates are what should eventually replace it.
+DEFAULT_CONFIDENCE_EDGE_CAP = 0.15
+
+
+def baseline_hit_probability(take_profit_pct: float, stop_loss_pct: float) -> float:
+    """Probability of touching the target before the stop with **no edge**.
+
+    For a driftless price with barriers at ``+tp`` and ``-sl``, the chance of
+    reaching the target first is ``sl / (tp + sl)``: the nearer barrier is the
+    likelier one. This is the number an honest expected value must beat, and it
+    is why a 3%-target / 2%-stop trade needs a 40% hit rate just to break even
+    before costs.
+    """
+    tp = abs(take_profit_pct)
+    sl = abs(stop_loss_pct)
+    total = tp + sl
+    if total <= 0:
+        return 0.5
+    return sl / total
+
+
+def hit_probability(
+    confidence: float,
+    *,
+    take_profit_pct: float,
+    stop_loss_pct: float,
+    edge_cap: float = DEFAULT_CONFIDENCE_EDGE_CAP,
+) -> float:
+    """Translate a signal's confidence into a hit probability.
+
+    ``confidence = 0`` returns the no-edge baseline, which by construction makes
+    the gross expected value exactly zero - so a signal that knows nothing can
+    never clear the cost hurdle.
+    """
+    baseline = baseline_hit_probability(take_profit_pct, stop_loss_pct)
+    confidence = min(max(confidence, 0.0), 1.0)
+    return min(max(baseline + confidence * max(edge_cap, 0.0), 0.0), 1.0)
+
 
 @dataclass(frozen=True)
 class CostBreakdown:
@@ -72,6 +113,10 @@ class NetExpectedValue:
     breakeven_move_bps: float
     approved: bool
     reason: str
+    hit_probability: float = 0.0
+    baseline_probability: float = 0.0
+    win_pct: float = 0.0
+    loss_pct: float = 0.0
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -86,6 +131,10 @@ class NetExpectedValue:
             "net_ev": round(self.net_ev, 6),
             "net_ev_bps": round(self.net_ev_bps, 2),
             "breakeven_move_bps": round(self.breakeven_move_bps, 2),
+            "hit_probability": round(self.hit_probability, 4),
+            "baseline_probability": round(self.baseline_probability, 4),
+            "win_pct": round(self.win_pct, 6),
+            "loss_pct": round(self.loss_pct, 6),
             "approved": self.approved,
             "reason": self.reason,
         }
@@ -119,7 +168,13 @@ def one_way_execution_cost(
     if price <= 0 or quantity <= 0:
         return 0.0, 0.0
     notional = price * quantity
-    half_spread = config.default_half_spread_bps if half_spread_bps is None else half_spread_bps
+    if half_spread_bps is None:
+        half_spread = config.default_half_spread_bps
+    else:
+        # A locked (bid == ask) or crossed (bid > ask) quote would otherwise make
+        # the trade look free. IEX crosses more often than the consolidated tape,
+        # so this is a real condition, not a theoretical one.
+        half_spread = max(half_spread_bps, config.min_half_spread_bps)
     return notional * max(half_spread, 0.0) * BPS, notional * max(config.slippage_bps, 0.0) * BPS
 
 
@@ -186,12 +241,27 @@ def evaluate_net_ev(
     half_spread_bps: float | None = None,
     min_net_ev_usd: float = 0.0,
     min_net_ev_bps: float = 0.0,
+    take_profit_pct: float = 0.03,
+    stop_loss_pct: float = 0.02,
+    confidence_edge_cap: float = DEFAULT_CONFIDENCE_EDGE_CAP,
+    probability: float | None = None,
 ) -> NetExpectedValue:
     """Decide whether a candidate trade is worth doing after costs.
 
-    ``expected_move_bps`` is the *directional* edge the signal stack predicts and
-    ``confidence`` (0-1) scales it: gross EV is the probability-weighted dollar
-    move. Costs are then subtracted in full - they are certain, the edge is not.
+    The expected value is computed over **both** branches of the trade's actual
+    exit geometry::
+
+        EV_gross = notional x (p x take_profit - (1 - p) x stop_loss)
+
+    where ``p`` comes from :func:`hit_probability`. Pricing only the winning
+    branch - which an earlier version of this function did - makes every
+    candidate look profitable and approves trades with no edge at all.
+
+    ``expected_move_bps`` is what the signal stack predicts. It no longer sets the
+    payoff (the exit levels do), but it still has to cover the round trip: a
+    predicted move smaller than the breakeven is rejected on its own.
+
+    Costs are subtracted in full. They are certain; the edge is not.
     """
     normalized_side = side.lower()
     if normalized_side not in ("buy", "sell"):
@@ -210,11 +280,26 @@ def evaluate_net_ev(
             approved=False, reason="zero_notional",
         )
 
-    # A short/sell candidate profits from a fall, so its edge points the other way.
-    directional_bps = expected_move_bps if normalized_side == "buy" else -expected_move_bps
-    gross_ev = notional * directional_bps * BPS * confidence
+    win_pct = abs(take_profit_pct)
+    loss_pct = abs(stop_loss_pct)
+    baseline = baseline_hit_probability(win_pct, loss_pct)
+    # A measured probability always wins over the confidence prior.
+    if probability is None:
+        probability = hit_probability(
+            confidence, take_profit_pct=win_pct, stop_loss_pct=loss_pct,
+            edge_cap=confidence_edge_cap,
+        )
+    probability = min(max(float(probability), 0.0), 1.0)
 
-    projected_exit = entry_price * (1 + directional_bps * BPS)
+    # Both branches, weighted. A signal with no edge lands exactly on zero.
+    gross_ev = notional * (probability * win_pct - (1 - probability) * loss_pct)
+
+    # A sell candidate would profit from a fall; the payoff geometry is mirrored,
+    # and the regulatory fee lands on the entry (the sale) rather than the exit.
+    if normalized_side == "sell":
+        gross_ev = -gross_ev if expected_move_bps >= 0 else gross_ev
+
+    projected_exit = entry_price * (1 + (win_pct if normalized_side == "buy" else -win_pct))
     costs = round_trip_costs(
         entry_price, quantity, config, exit_price=projected_exit, half_spread_bps=half_spread_bps
     )
@@ -224,6 +309,9 @@ def evaluate_net_ev(
 
     if net_ev <= 0:
         reason = "net_ev_not_positive"
+    elif abs(expected_move_bps) <= breakeven:
+        # The signal's own predicted move does not clear the round trip.
+        reason = "predicted_move_below_breakeven"
     elif net_ev < min_net_ev_usd:
         reason = "net_ev_below_usd_floor"
     elif net_ev_bps < min_net_ev_bps:
@@ -243,6 +331,10 @@ def evaluate_net_ev(
         net_ev=net_ev,
         net_ev_bps=net_ev_bps,
         breakeven_move_bps=breakeven,
+        hit_probability=probability,
+        baseline_probability=baseline,
+        win_pct=win_pct,
+        loss_pct=loss_pct,
         approved=reason == "approved",
         reason=reason,
     )

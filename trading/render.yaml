@@ -1,0 +1,43 @@
+# Render: el bot como servicio siempre encendido con disco persistente.
+# El plan Starter (~US$7/mes) es el mínimo: el plan gratuito se duerme por
+# inactividad, y un bot dormido no opera ni gestiona sus salidas.
+services:
+  - type: web
+    name: trading-bot
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: starter
+    region: oregon
+    branch: claude/trading-bot-alpaca-system-11bu9r
+    healthCheckPath: /health
+    # Una sola instancia: dos schedulers sobre la misma cuenta duplican órdenes.
+    numInstances: 1
+    disk:
+      name: trading-data
+      mountPath: /app/data
+      sizeGB: 1
+    envVars:
+      - key: DATABASE_URL
+        value: /app/data/trading_bot.db
+      - key: LOG_FILE
+        value: /app/data/logs/trading_bot.jsonl
+      - key: HEALTH_PORT
+        value: 8080
+      - key: ALPACA_BASE_URL
+        value: https://paper-api.alpaca.markets
+      - key: EXCHANGE
+        value: XNYS
+      # Secretos: se configuran en el dashboard de Render, nunca en este archivo.
+      - key: ALPACA_API_KEY
+        sync: false
+      - key: ALPACA_SECRET_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: HEALTH_TOKEN
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false

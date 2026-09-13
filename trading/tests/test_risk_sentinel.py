@@ -201,7 +201,34 @@ def test_good_entry_is_approved_with_a_positive_net_ev(risk: RiskSentinel):
 def test_entry_rejected_when_edge_does_not_cover_costs(risk: RiskSentinel):
     assessment = entry(risk, expected_move_bps=3.0)
     assert assessment.approved is False
-    assert assessment.reason.startswith("net_ev")
+    assert assessment.reason in ("net_ev_not_positive", "predicted_move_below_breakeven")
+
+
+def test_entry_probability_starts_from_the_prior_then_follows_reality(risk: RiskSentinel, store: Store):
+    prior, detail = risk.entry_probability(0.6)
+    assert detail["source"] == "prior"
+    assert prior > detail["baseline"]
+
+    # A losing record must drag the probability below the no-edge baseline, which
+    # makes every subsequent expected value negative without human intervention.
+    for index in range(40):
+        trade_id = store.open_trade({"symbol": "X", "quantity": 0.1, "entry_price": 100.0})
+        net = 0.3 if index % 10 < 3 else -0.2
+        store.close_trade(trade_id, exit_price=100 + net, gross_pnl=net, fees=0.01, net_pnl=net)
+
+    blended, detail = risk.entry_probability(0.6)
+    assert detail["source"] == "blended"
+    assert detail["samples"] == 40
+    assert blended < detail["baseline"]
+
+
+def test_a_losing_track_record_stops_approving_entries(risk: RiskSentinel, store: Store):
+    assert entry(risk).approved is True
+    for index in range(40):
+        trade_id = store.open_trade({"symbol": "Y", "quantity": 0.1, "entry_price": 100.0})
+        net = 0.3 if index % 10 < 2 else -0.2
+        store.close_trade(trade_id, exit_price=100 + net, gross_pnl=net, fees=0.01, net_pnl=net)
+    assert entry(risk).approved is False
 
 
 def test_entry_rejected_below_minimum_confidence(risk: RiskSentinel):

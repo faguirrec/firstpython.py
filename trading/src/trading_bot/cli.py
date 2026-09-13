@@ -21,6 +21,7 @@ import sys
 from typing import Any, Sequence
 
 from .config import LIVE_URL, PAPER_URL, Settings
+from .db import Store
 from .engine import TradingEngine
 from .logging_setup import setup_logging
 from .reporting import daily_report, final_report, write_dashboard
@@ -49,7 +50,26 @@ def build_parser() -> argparse.ArgumentParser:
     report.add_argument("--day", default=None, help="YYYY-MM-DD (default: today)")
     dashboard = sub.add_parser("dashboard", help="write the HTML dashboard")
     dashboard.add_argument("--out", default="reports/dashboard.html")
-    sub.add_parser("status", help="print account, risk and metrics status")
+    status_cmd = sub.add_parser("status", help="print account, risk and metrics status")
+    status_cmd.add_argument(
+        "--strict", action="store_true",
+        help="exit non-zero when unhealthy (for container healthchecks)",
+    )
+
+    simulate = sub.add_parser(
+        "simulate", help="validate the whole environment offline, no credentials needed"
+    )
+    simulate.add_argument("--days", type=int, default=5, help="simulated trading days (default 5)")
+    simulate.add_argument("--seed", type=int, default=42, help="price seed; same seed, same run")
+    simulate.add_argument("--step-minutes", type=int, default=5, help="simulation granularity")
+    simulate.add_argument("--start", default=None, help="YYYY-MM-DD to start from")
+    simulate.add_argument("--reject-rate", type=float, default=0.0,
+                          help="fraction of orders the broker rejects, to exercise error paths")
+    simulate.add_argument("--outage-rate", type=float, default=0.0,
+                          help="fraction of API calls that fail, to exercise the circuit breaker")
+
+    calendar_cmd = sub.add_parser("calendar", help="show or list exchange trading calendars")
+    calendar_cmd.add_argument("--list", action="store_true", help="list the built-in profiles")
 
     backtest = sub.add_parser("backtest", help="replay the strategy over historical bars")
     _add_data_args(backtest)
@@ -84,13 +104,42 @@ def _add_data_args(parser: argparse.ArgumentParser) -> None:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    settings = Settings.from_env(dotenv=args.env_file)
-    setup_logging(args.log_level or settings.log_level, settings.log_file)
+    try:
+        settings = Settings.from_env(dotenv=args.env_file)
+        setup_logging(args.log_level or settings.log_level, settings.log_file)
+    except OSError as exc:
+        # An unwritable log path or a full disk must say so once, not restart in
+        # a loop under `restart: unless-stopped`.
+        print(f"No se pudo inicializar la configuración o el logging: {exc}", file=sys.stderr)
+        return 2
 
     if args.command == "check":
         return _check(settings, as_json=args.json)
 
-    engine = TradingEngine(settings)
+    # Commands that never talk to the broker must work without credentials:
+    # the calendar, the offline simulator, and reports read from the database.
+    if args.command == "calendar":
+        return _calendar(args, settings)
+    if args.command == "simulate":
+        return _simulate(args, settings)
+    if args.command in ("report", "dashboard"):
+        store = Store(settings.database_url)
+        try:
+            return _reporting(args, settings, store)
+        finally:
+            store.close()
+    if args.command in ("backtest", "calibrate") and args.source != "alpaca":
+        store = Store(settings.database_url)
+        try:
+            return _run_history_command(args, settings, broker=None)
+        finally:
+            store.close()
+
+    try:
+        engine = TradingEngine(settings)
+    except (OSError, ValueError) as exc:
+        print(f"No se pudo iniciar el motor: {exc}", file=sys.stderr)
+        return 2
     try:
         return _dispatch(args, settings, engine)
     finally:
@@ -126,28 +175,23 @@ def _dispatch(args: argparse.Namespace, settings: Settings, engine: TradingEngin
         _emit(engine.nightly(), as_json=args.json)
         return 0
 
-    if command == "report":
-        report = (
-            final_report(settings, engine.store)
-            if args.final
-            else daily_report(settings, engine.store, args.day)
-        )
-        if args.json:
-            print(json.dumps(report, indent=2, default=str))
-        else:
-            print(report["text"])
-        return 0
+    if command == "simulate":
+        return _simulate(args, settings)
 
-    if command == "dashboard":
-        path = write_dashboard(settings, engine.store, args.out)
-        _emit({"dashboard": str(path)}, as_json=args.json)
-        return 0
+    if command == "calendar":
+        return _calendar(args, settings)
 
     if command in ("backtest", "calibrate"):
-        return _run_history_command(args, settings, engine)
+        return _run_history_command(args, settings, broker=engine.broker)
 
     if command == "status":
-        _emit(engine.status(), as_json=True)
+        payload = engine.status()
+        _emit(payload, as_json=True)
+        # Exit code carries the verdict so a container healthcheck or an uptime
+        # monitor can act on it; printing JSON and always returning 0 meant the
+        # Docker HEALTHCHECK could never fail for any reason that mattered.
+        if args.strict:
+            return 0 if _status_is_healthy(payload, settings) else 1
         return 0
 
     if command == "kill-switch":
@@ -168,7 +212,105 @@ def _dispatch(args: argparse.Namespace, settings: Settings, engine: TradingEngin
     return 1
 
 
-def _load_history(args: argparse.Namespace, settings: Settings, engine: TradingEngine):
+def _status_is_healthy(payload: dict[str, Any], settings: Settings) -> bool:
+    """Whether `status` should report success to a healthcheck."""
+    if payload.get("broker_error"):
+        return False
+    if (payload.get("kill_switch") or {}).get("active"):
+        return False
+    if (payload.get("circuit_trading") or {}).get("open_until"):
+        return False
+    last_tick = payload.get("last_tick_age_seconds")
+    if last_tick is not None:
+        # Two missed cycles means the scheduler is not running.
+        return last_tick <= settings.trade_interval_minutes * 60 * 2
+    return True
+
+
+def _reporting(args: argparse.Namespace, settings: Settings, store: Store) -> int:
+    """`report` and `dashboard` only read the database - no broker involved."""
+    if args.command == "report":
+        report = (
+            final_report(settings, store)
+            if args.final
+            else daily_report(settings, store, args.day)
+        )
+        if args.json:
+            print(json.dumps(report, indent=2, default=str))
+        else:
+            print(report["text"])
+        return 0
+
+    path = write_dashboard(settings, store, args.out)
+    _emit({"dashboard": str(path)}, as_json=args.json)
+    return 0
+
+
+def _simulate(args: argparse.Namespace, settings: Settings) -> int:
+    """Offline end-to-end validation; exit code 1 if any check failed."""
+    from datetime import date as _date
+
+    from .simulation import run_simulation
+
+    start = _date.fromisoformat(args.start) if args.start else None
+    report = run_simulation(
+        settings,
+        days=args.days,
+        seed=args.seed,
+        step_minutes=args.step_minutes,
+        start=start,
+        reject_rate=args.reject_rate,
+        outage_rate=args.outage_rate,
+    )
+    if args.json:
+        print(json.dumps(report.as_dict(), indent=2, default=str))
+    else:
+        print(report.text())
+    return 0 if report.passed else 1
+
+
+def _calendar(args: argparse.Namespace, settings: Settings) -> int:
+    from .calendars import available, load_calendar
+
+    if args.list:
+        rows = available()
+        if args.json:
+            print(json.dumps(rows, indent=2))
+        else:
+            print("Calendarios disponibles (EXCHANGE=...):")
+            for row in rows:
+                print(f"  {row['code']:<6} {row['hours']:<24} {row['timezone']:<20} {row['name']}")
+            print("\n  Personalizado: define EXCHANGE_CALENDAR_FILE=ruta/a/calendario.json")
+        return 0
+
+    calendar = load_calendar(
+        settings.exchange,
+        path=settings.exchange_calendar_file or None,
+        extra_holidays=settings.exchange_extra_holidays,
+    )
+    payload = calendar.describe()
+    if args.json:
+        print(json.dumps(payload, indent=2, default=str))
+    else:
+        print(f"{payload['code']} — {payload['name']}")
+        print(f"  Zona horaria:   {payload['timezone']} (hora local {payload['local_time']})")
+        print(f"  Horario regular:" + " " + " / ".join(
+            f"{w['start']}-{w['end']}" for w in payload["regular"]
+        ))
+        if payload["premarket"]:
+            print(f"  Pre-market:     {payload['premarket']['start']}-{payload['premarket']['end']}")
+        if payload["afterhours"]:
+            print(f"  Post-market:    {payload['afterhours']['start']}-{payload['afterhours']['end']}")
+        print(f"  Sesión actual:  {payload['session']}")
+        print(f"  Próxima apertura: {payload['next_open']}")
+        print(f"  Próximo cierre:   {payload['next_close']}")
+        print(f"  Feriados este año: {', '.join(payload['holidays_this_year']) or 'ninguno'}")
+        if payload["notes"]:
+            print(f"  Nota: {payload['notes']}")
+    return 0
+
+
+def _load_history(args: argparse.Namespace, settings: Settings, broker: Any | None):
     """Load bars for the requested symbols, always including the benchmark."""
     from .backtest import load_bars
 
@@ -181,7 +323,7 @@ def _load_history(args: argparse.Namespace, settings: Settings, engine: TradingE
     return load_bars(
         symbols,
         source=args.source,
-        broker=engine.broker,
+        broker=broker,
         timeframe=args.timeframe,
         limit=args.limit,
         days=args.days,
@@ -189,10 +331,12 @@ def _load_history(args: argparse.Namespace, settings: Settings, engine: TradingE
     )
 
 
-def _run_history_command(args: argparse.Namespace, settings: Settings, engine: TradingEngine) -> int:
+def _run_history_command(
+    args: argparse.Namespace, settings: Settings, *, broker: Any | None = None
+) -> int:
     from .backtest import calibrate, run_backtest
 
-    bars = _load_history(args, settings, engine)
+    bars = _load_history(args, settings, broker)
     if not bars:
         print("No se pudieron cargar barras. Revisa --source, las credenciales o los símbolos.")
         return 1
@@ -265,9 +409,12 @@ def _backtest_text(result: Any, settings: Settings) -> str:
 def _check(settings: Settings, *, as_json: bool = True) -> int:
     """Validate configuration and, if credentials exist, reach the broker."""
     problems = settings.validate()
+    from .calendars import load_calendar
+
     result: dict[str, Any] = {
         "mode": "paper" if settings.is_paper else "live",
         "base_url": settings.alpaca_base_url,
+        "exchange": settings.exchange,
         "universe": list(settings.universe),
         "database": settings.database_url,
         "problems": problems,
@@ -276,6 +423,11 @@ def _check(settings: Settings, *, as_json: bool = True) -> int:
     }
 
     if not problems:
+        result["calendar"] = load_calendar(
+            settings.exchange,
+            path=settings.exchange_calendar_file or None,
+            extra_holidays=settings.exchange_extra_holidays,
+        ).describe()
         try:
             engine = TradingEngine(settings)
             account = engine.broker.get_account()

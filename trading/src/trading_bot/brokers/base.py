@@ -22,7 +22,9 @@ class AccountSnapshot:
     equity: float
     cash: float
     buying_power: float
-    non_marginable_buying_power: float
+    # None means the broker did not report it; 0.0 means nothing is settled.
+    # Conflating the two let a cash account spend unsettled proceeds.
+    non_marginable_buying_power: float | None
     portfolio_value: float
     daytrade_count: int = 0
     pattern_day_trader: bool = False
@@ -36,14 +38,36 @@ class AccountSnapshot:
 
     @property
     def is_cash_account(self) -> bool:
-        """A cash account has no leverage, so funds settle T+1 before reuse."""
+        """Whether this account settles T+1 instead of using Reg-T margin.
+
+        ``multiplier`` alone is not enough: Alpaca reports ``"1"`` for a *margin*
+        account whose equity is below the $2,000 Reg-T minimum - exactly a $30
+        account - and treating that as a cash account switches off the
+        pattern-day-trader limits that do apply to it.
+        """
+        declared = str(self.raw.get("account_type", "")).lower()
+        if "cash" in declared:
+            return True
+        if "margin" in declared:
+            return False
+        if self.pattern_day_trader:
+            # Only a margin account can be flagged a pattern day trader.
+            return False
         return self.multiplier <= 1.0
 
     @property
     def settled_cash_available(self) -> float:
-        """Cash usable right now without triggering a good-faith violation."""
+        """Cash usable right now without triggering a good-faith violation.
+
+        On a cash account, spending unsettled sale proceeds is a free-riding
+        violation and Alpaca restricts the account for 90 days - which would end
+        the experiment. So zero settled cash must mean zero, not "fall back to
+        the full balance".
+        """
         if self.is_cash_account:
-            return max(min(self.cash, self.non_marginable_buying_power or self.cash), 0.0)
+            reported = self.non_marginable_buying_power
+            usable = self.cash if reported is None else min(self.cash, reported)
+            return max(usable, 0.0)
         return max(self.buying_power, 0.0)
 
 
@@ -152,6 +176,8 @@ class Broker(Protocol):
         client_order_id: str | None = None,
     ) -> OrderResult: ...
     def get_order(self, broker_order_id: str) -> OrderResult | None: ...
+    # Optional; used to recover an order whose id we never received.
+    def get_order_by_client_id(self, client_order_id: str) -> OrderResult | None: ...
     def cancel_order(self, broker_order_id: str) -> None: ...
     def session(self) -> str: ...
     def get_news(

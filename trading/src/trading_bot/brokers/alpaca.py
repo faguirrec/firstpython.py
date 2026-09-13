@@ -59,17 +59,22 @@ class _Throttle:
         self._lock = threading.Lock()
 
     def acquire(self, *, sleep=time.sleep, now=time.monotonic) -> None:
-        with self._lock:
-            current = now()
-            while self._calls and current - self._calls[0] > 60.0:
-                self._calls.popleft()
-            if len(self._calls) >= self.max_per_minute:
+        """Block until a request slot frees up.
+
+        A loop, not recursion: under sustained saturation each wait is ~60s of
+        real time, and recursing would eventually raise RecursionError instead of
+        simply waiting.
+        """
+        while True:
+            with self._lock:
+                current = now()
+                while self._calls and current - self._calls[0] > 60.0:
+                    self._calls.popleft()
+                if len(self._calls) < self.max_per_minute:
+                    self._calls.append(current)
+                    return
                 wait = 60.0 - (current - self._calls[0]) + 0.05
-            else:
-                self._calls.append(current)
-                return
-        sleep(max(wait, 0.0))
-        self.acquire(sleep=sleep, now=now)
+            sleep(max(wait, 0.0))
 
 
 class AlpacaBroker:
@@ -301,6 +306,24 @@ class AlpacaBroker:
             f"get_order[{broker_order_id}]",
             lambda: self.trading.get_order_by_id(broker_order_id),
         )
+        return _order_from(_as_dict(order)) if order is not None else None
+
+    def get_order_by_client_id(self, client_order_id: str) -> OrderResult | None:
+        """Find an order by the id we generated before submitting it.
+
+        This is the recovery path after a crash between writing the local row and
+        the broker replying: the client id is deterministic, so the order can be
+        adopted instead of orphaned.
+        """
+        try:
+            order = self._call(
+                f"get_order_by_client_id[{client_order_id}]",
+                lambda: self.trading.get_order_by_client_id(client_order_id),
+            )
+        except BrokerError:
+            # Alpaca answers 404 for an order that never landed; that is a
+            # legitimate answer here, not a failure.
+            return None
         return _order_from(_as_dict(order)) if order is not None else None
 
     def cancel_order(self, broker_order_id: str) -> None:

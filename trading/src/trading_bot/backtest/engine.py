@@ -399,9 +399,13 @@ def _exit_trigger(position: OpenPosition, bar: Bar, risk_config: Any) -> tuple[s
     target_price = position.entry_price * (1 + risk_config.take_profit_pct)
 
     if bar.low <= stop_price:
-        return "stop_loss", stop_price
+        # A gap through the stop fills at the open, not at the stop. Assuming the
+        # stop price understates every tail loss - and the tail is the part that
+        # ends experiments.
+        return "stop_loss", min(stop_price, bar.open)
     if bar.high >= target_price:
-        return "take_profit", target_price
+        # Symmetrically, a gap in our favour does not fill better than the open.
+        return "take_profit", max(target_price, bar.open) if bar.open > target_price else target_price
 
     held_days = (bar.timestamp - position.opened_at).days
     if held_days >= risk_config.max_holding_days:

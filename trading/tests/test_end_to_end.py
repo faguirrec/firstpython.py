@@ -113,9 +113,11 @@ def test_drawdown_breach_stops_the_experiment(engine: TradingEngine, store: Stor
 
     assert engine.risk.kill_switch_active() is True
     assert store.get_state("kill_switch")["reason"] == "max_drawdown_breached"
-    # And it stays stopped on the next cycle, even if equity recovers.
+    # Entries stay stopped even if equity recovers - but exits keep running.
     broker.equity = 30.0
-    assert engine.trading_cycle()["skipped"].startswith("kill_switch")
+    resumed = engine.trading_cycle()
+    assert resumed["entries_disabled"].startswith("kill_switch")
+    assert resumed["entries_submitted"] == 0
 
 
 def test_daily_loss_limit_pauses_entries_without_killing_the_run(engine: TradingEngine, store: Store):

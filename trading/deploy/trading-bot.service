@@ -1,0 +1,39 @@
+# systemd: el bot en un VPS propio. Instalación:
+#   sudo cp deploy/trading-bot.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now trading-bot
+#   journalctl -u trading-bot -f
+[Unit]
+Description=Bot de trading autónomo (Alpaca)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=trader
+Group=trader
+WorkingDirectory=/opt/trading-bot/trading
+EnvironmentFile=/opt/trading-bot/trading/.env
+ExecStart=/opt/trading-bot/trading/.venv/bin/python -m trading_bot run
+
+# Reinicio con espera: si falla al arrancar, no queremos un bucle apretado.
+Restart=always
+RestartSec=30
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+# Endurecimiento
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/trading-bot/trading/data /opt/trading-bot/trading/logs /opt/trading-bot/trading/reports
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+# El log estructurado ya rota en archivo; journald se queda con lo de consola.
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=trading-bot
+
+[Install]
+WantedBy=multi-user.target

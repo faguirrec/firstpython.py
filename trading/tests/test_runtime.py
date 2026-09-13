@@ -151,36 +151,57 @@ def test_paper_and_live_are_distinguished():
 
 
 # --------------------------------------------------------------- scheduler
-def test_scheduler_only_runs_jobs_allowed_in_the_current_session(settings, store, broker, monkeypatch):
-    engine = TradingEngine(settings, store=store, broker=broker)
-    scheduler = BotScheduler(settings, engine)
+# These drive the scheduler through the real clock rather than patching its
+# internals, so the session gating under test is the one that ships.
+MONDAY_OPEN = datetime(2026, 3, 2, 15, 0, tzinfo=timezone.utc)       # 10:00 ET
+MONDAY_AFTER_CLOSE = datetime(2026, 3, 2, 22, 0, tzinfo=timezone.utc)  # 17:00 ET
+SATURDAY = datetime(2026, 3, 7, 15, 0, tzinfo=timezone.utc)
 
-    monkeypatch.setattr("trading_bot.scheduler.local_session", lambda *_a, **_k: "closed")
+
+@pytest.fixture()
+def frozen():
+    """Pin the clock, and always release it so no test leaks a fake time."""
+    from trading_bot.clock import clear_time_source, set_time_source
+
+    def pin(moment: datetime) -> None:
+        set_time_source(lambda: moment)
+
+    yield pin
+    clear_time_source()
+
+
+def build_scheduler(settings, store, broker) -> BotScheduler:
+    return BotScheduler(settings, TradingEngine(settings, store=store, broker=broker))
+
+
+def test_scheduler_only_runs_jobs_allowed_in_the_current_session(settings, store, broker, frozen):
+    frozen(SATURDAY)
+    scheduler = build_scheduler(settings, store, broker)
+    assert scheduler.session() == "closed"
+
     ran = scheduler.tick(now=10_000.0)
     assert "trading_cycle" not in ran
     assert "news_cycle" in ran
 
 
-def test_scheduler_runs_the_trading_cycle_when_the_market_is_open(settings, store, broker, monkeypatch):
-    engine = TradingEngine(settings, store=store, broker=broker)
-    scheduler = BotScheduler(settings, engine)
-    monkeypatch.setattr("trading_bot.scheduler.local_session", lambda *_a, **_k: "open")
+def test_scheduler_runs_the_trading_cycle_when_the_market_is_open(settings, store, broker, frozen):
+    frozen(MONDAY_OPEN)
+    scheduler = build_scheduler(settings, store, broker)
+    assert scheduler.session() == "open"
     assert "trading_cycle" in scheduler.tick(now=10_000.0)
 
 
-def test_jobs_respect_their_interval(settings, store, broker, monkeypatch):
-    engine = TradingEngine(settings, store=store, broker=broker)
-    scheduler = BotScheduler(settings, engine)
-    monkeypatch.setattr("trading_bot.scheduler.local_session", lambda *_a, **_k: "open")
+def test_jobs_respect_their_interval(settings, store, broker, frozen):
+    frozen(MONDAY_OPEN)
+    scheduler = build_scheduler(settings, store, broker)
     scheduler.tick(now=10_000.0)
     assert scheduler.tick(now=10_060.0) == []          # one minute later: nothing due
     assert "trading_cycle" in scheduler.tick(now=10_000.0 + 16 * 60)
 
 
-def test_a_failing_job_does_not_stop_the_loop(settings, store, broker, monkeypatch):
-    engine = TradingEngine(settings, store=store, broker=broker)
-    scheduler = BotScheduler(settings, engine)
-    monkeypatch.setattr("trading_bot.scheduler.local_session", lambda *_a, **_k: "open")
+def test_a_failing_job_does_not_stop_the_loop(settings, store, broker, frozen):
+    frozen(MONDAY_OPEN)
+    scheduler = build_scheduler(settings, store, broker)
 
     def explode():
         raise RuntimeError("boom")
@@ -190,23 +211,54 @@ def test_a_failing_job_does_not_stop_the_loop(settings, store, broker, monkeypat
     assert "trading_cycle" in ran and "news_cycle" in ran
 
 
-def test_nightly_runs_once_per_day(settings, store, broker, monkeypatch):
-    engine = TradingEngine(settings, store=store, broker=broker)
-    scheduler = BotScheduler(settings, engine)
-    after_close = datetime(2026, 3, 2, 22, 0, tzinfo=timezone.utc)  # 17:00 ET
-    monkeypatch.setattr("trading_bot.scheduler.market_now", lambda *_a, **_k: after_close.astimezone())
+def test_nightly_runs_once_per_day(settings, store, broker, frozen):
+    frozen(MONDAY_AFTER_CLOSE)
+    scheduler = build_scheduler(settings, store, broker)
+    assert scheduler._nightly_if_due() is not None
+    assert scheduler._nightly_if_due() is None
 
-    first = scheduler._nightly_if_due()
-    second = scheduler._nightly_if_due()
-    assert first is not None
-    assert second is None
+
+def test_nightly_does_not_run_before_the_exchange_closes(settings, store, broker, frozen):
+    frozen(MONDAY_OPEN)
+    scheduler = build_scheduler(settings, store, broker)
+    assert scheduler._nightly_if_due() is None
+
+
+def test_scheduler_windows_follow_the_configured_exchange(settings, store, broker, frozen):
+    """Pointing the bot at Tokyo must move its whole schedule, not just a label."""
+    from trading_bot.config import Settings as S
+
+    tokyo = S(**{**settings.__dict__, "exchange": "XTKS"})
+    frozen(datetime(2026, 3, 2, 3, 0, tzinfo=timezone.utc))     # 12:00 JST = lunch break
+    scheduler = BotScheduler(tokyo, TradingEngine(tokyo, store=store, broker=broker))
+
+    assert scheduler.calendar.code == "XTKS"
+    assert scheduler.session() == "break"
+    ran = scheduler.tick(now=10_000.0)
+    assert "trading_cycle" not in ran      # no execution during the halt
+    assert "news_cycle" in ran
+    # Nightly is derived from Tokyo's 15:30 close, not New York's 16:00.
+    assert scheduler._nightly_after().hour == 16
 
 
 # ------------------------------------------------------------------ engine
-def test_engine_cycle_is_skipped_while_the_kill_switch_is_on(settings, store, broker):
+def test_kill_switch_disables_entries_but_not_exits(settings, store, broker, frozen):
+    """The worst moment to stop managing a losing position is when risk triggers."""
+    frozen(MONDAY_OPEN)
+    broker.set_position("AAPL", 0.1, 120.0, 100.0)      # 17% underwater
+    trade_id = store.open_trade(
+        {"symbol": "AAPL", "quantity": 0.1, "entry_price": 120.0, "opened_day": "2026-02-27"}
+    )
     engine = TradingEngine(settings, store=store, broker=broker)
     engine.risk.engage_kill_switch("test")
-    assert engine.trading_cycle()["skipped"].startswith("kill_switch")
+
+    result = engine.trading_cycle()
+    assert result["entries_disabled"].startswith("kill_switch")
+    assert result["entries_submitted"] == 0
+    # The stop loss still went out.
+    assert result["exits_submitted"] == 1
+    assert any(order["side"] == "sell" for order in broker.submitted)
+    assert store.get_trade(trade_id) is not None
 
 
 def test_engine_records_a_failure_against_the_breaker(settings, store, broker, monkeypatch):
@@ -216,11 +268,16 @@ def test_engine_records_a_failure_against_the_breaker(settings, store, broker, m
     assert engine.breaker.state().failures == 1
 
 
-def test_engine_skips_when_the_breaker_is_open(settings, store, broker):
+def test_open_breaker_disables_entries_but_keeps_reconciling(settings, store, broker, frozen):
+    frozen(MONDAY_OPEN)
     engine = TradingEngine(settings, store=store, broker=broker)
     for _ in range(settings.risk.consecutive_error_limit):
         engine.breaker.record_failure("boom")
-    assert engine.trading_cycle() == {"skipped": "circuit_open"}
+
+    result = engine.trading_cycle()
+    assert result["entries_disabled"] == "circuit_open"
+    assert result["entries_submitted"] == 0
+    assert "fills" in result       # reconciliation still ran
 
 
 def test_start_experiment_is_idempotent(settings, store, broker):

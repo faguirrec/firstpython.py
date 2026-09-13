@@ -7,9 +7,31 @@ services:
     environment:
       DATABASE_URL: /app/data/trading_bot.db
       LOG_FILE: /app/logs/trading_bot.jsonl
+      HEALTH_PORT: 8080
+    ports:
+      # Solo local: el endpoint /status expone equity y posiciones.
+      - "127.0.0.1:8080:8080"
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
       - ./reports:/app/reports
-    # El scheduler distingue sesiones por sí mismo; el contenedor corre 24/7.
-    command: ["python", "-m", "trading_bot", "run"]
+    # Endurecimiento: el bot no necesita privilegios ni escribir el sistema de
+    # archivos raíz. Si algo se compromete, que tenga el mínimo alcance.
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 512m
+    # El log a stdout no rota por sí solo; sin esto crece sin límite en el host.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "python", "-m", "trading_bot", "status", "--strict"]
+      interval: 5m
+      timeout: 30s
+      start_period: 2m
+      retries: 3

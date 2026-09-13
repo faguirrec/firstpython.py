@@ -105,6 +105,8 @@ def fuse_signals(
     min_confidence: float = 0.35,
     buy_threshold: float = 0.15,
     sell_threshold: float = -0.15,
+    max_component_share: float = 0.4,
+    require_technical_agreement: bool = True,
     extra_context: Mapping[str, Any] | None = None,
 ) -> FusedSignal:
     """Combine every available component into one actionable signal.
@@ -120,6 +122,7 @@ def fuse_signals(
 
     weight_map = dict(weights or {})
     used_weights = {name: max(float(weight_map.get(name, 1.0)), 0.0) for name in components}
+    used_weights = _cap_weight_share(used_weights, max_share=max_component_share)
     total_weight = sum(used_weights.values())
 
     if not components or total_weight <= 0:
@@ -140,7 +143,21 @@ def fuse_signals(
     confidence = _confidence(components, used_weights, score)
     expected_move_bps = abs(score) * edge_scale_bps
 
+    # Sentiment comes from news the bot does not control. Requiring a price-based
+    # component to agree means a manipulated headline cannot open a position on
+    # its own, however much weight sentiment has earned.
+    technical_agrees = True
+    if require_technical_agreement and score != 0:
+        direction = 1.0 if score > 0 else -1.0
+        price_based = {
+            name: value for name, value in components.items()
+            if name not in ("sentiment", "regime")
+        }
+        technical_agrees = any(value * direction > 0 for value in price_based.values())
+
     if confidence < min_confidence:
+        action = "hold"
+    elif not technical_agrees:
         action = "hold"
     elif score >= buy_threshold:
         action = "buy"
@@ -151,6 +168,7 @@ def fuse_signals(
 
     context: dict[str, Any] = {
         "agreement": round(_agreement(components, used_weights, score), 4),
+        "technical_agrees": technical_agrees,
         "signal_count": len(components),
         **technical.context,
     }
@@ -167,6 +185,44 @@ def fuse_signals(
         weights=used_weights,
         context=context,
     )
+
+
+def _cap_weight_share(
+    weights: Mapping[str, float], *, max_share: float = 0.4
+) -> dict[str, float]:
+    """Stop any one component from owning more than ``max_share`` of the vote.
+
+    LearningLoop can legitimately drive one weight to its maximum and the rest to
+    their minimum. Without a cap, that single component then decides every trade
+    by itself - which is only safe if it can never be manipulated, and sentiment
+    can be.
+    """
+    values = {name: max(weight, 0.0) for name, weight in weights.items()}
+    total = sum(values.values())
+    if total <= 0 or len(values) < 2 or not 0 < max_share < 1:
+        return values
+
+    # A cap can never demand less than an equal share: with two components,
+    # "no more than 40% each" is unsatisfiable, and asking for it anyway would
+    # shrink both weights toward zero instead of levelling them.
+    effective_share = max(max_share, 1.0 / len(values))
+    if effective_share >= 1.0:
+        return values
+
+    # Trimming a weight also shrinks the total, so the ceiling has to be solved
+    # against the *other* weights: w / (w + others) <= share.
+    ratio = effective_share / (1 - effective_share)
+    for _ in range(len(values)):
+        changed = False
+        for name, weight in list(values.items()):
+            others = sum(v for key, v in values.items() if key != name)
+            ceiling = others * ratio
+            if weight > ceiling + 1e-12:
+                values[name] = ceiling
+                changed = True
+        if not changed:
+            break
+    return values
 
 
 def _agreement(
