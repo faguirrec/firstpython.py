@@ -9,8 +9,11 @@ import { FichaCategoria } from './Fichas';
 function Delta({ value, pct, currency }: { value: number; pct: number | null; currency: string }) {
   if (Math.abs(value) < 0.005) return <span className="muted">sin cambio</span>;
   const subio = value > 0;
+  // Subir respecto del mes pasado no es una falla: un mes con un cumpleaños
+  // gasta más y no pasa nada. La flecha ya dice hacia dónde va; el rojo se
+  // guarda para lo que de verdad salió mal.
   return (
-    <span style={{ color: subio ? 'var(--critical)' : 'var(--good-text)', whiteSpace: 'nowrap' }}>
+    <span style={{ color: subio ? 'var(--text-primary)' : 'var(--good-text)', whiteSpace: 'nowrap' }}>
       {subio ? '▲' : '▼'} {money(Math.abs(value), currency)}
       {pct != null && <span className="muted"> ({Math.abs(pct * 100).toFixed(0)}%)</span>}
     </span>

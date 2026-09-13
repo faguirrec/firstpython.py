@@ -25,6 +25,8 @@ function QR({ text, size = 190 }: { text: string; size?: number }) {
       viewBox={`-1 -1 ${path.count + 2} ${path.count + 2}`}
       role="img"
       aria-label="Código QR con el link de invitación"
+      /* Blanco fijo a propósito, también en modo oscuro: un QR sobre fondo
+         oscuro no lo lee la mitad de las cámaras. */
       style={{ background: '#fff', borderRadius: 10, padding: 4 }}
       shapeRendering="crispEdges"
     >

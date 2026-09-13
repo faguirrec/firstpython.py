@@ -115,6 +115,8 @@ const mensajes = [
       cuerpo: [
         'Te informamos que has realizado una Transferencia a terceros en forma exitosa',
         'con el siguiente detalle:',
+        'Fecha',
+        '18/08/2026',
         'Destino',
         'Nombre y Apellido',
         'Otra Persona',

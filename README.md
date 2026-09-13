@@ -323,6 +323,46 @@ teléfono: los nombres se parten en tres líneas y las cifras quedan pegadas. El
 reparto, la liquidación, el fondo de reserva y la comparación por categoría usan
 fichas o filas.
 
+**Verde casona, no azul de banco.** El azul es el color más ocupado del rubro y
+el nuestro lo era sin haberlo elegido. Pero MyHaus no compite con un banco:
+compite con una planilla compartida y con acordarse de memoria. Sus dos usuarios
+no están invirtiendo, están tratando de vivir juntos sin pelear por plata. Eso es
+un producto doméstico, y el verde de puerta pintada —apagado, no el verde
+chillón de las apps de trading— es lo que lo dice. Los neutros llevan un sesgo
+verde muy leve: un gris puro se lee como no elegido, uno inclinado hacia el
+acento se lee como decidido.
+
+Las dos personas van en verde y ocre, no en verde y rojo: la dupla clásica es
+ilegible para cerca del 8% de los hombres.
+
+**Una tipografía propia, sólo donde importa.** Bricolage Grotesque va en las
+cifras grandes, el logotipo y los títulos de tarjeta; el resto se queda en la
+del sistema, y no es pereza —es lo correcto para una PWA que se abre treinta
+segundos dos veces al día—. El archivo es nuestro y no de Google: así lo guarda
+el service worker, la app abre sin conexión con su tipografía puesta y nadie
+fuera de acá se entera de que la abriste.
+
+**Rojo sólo para lo que salió mal.** Un mes a medio andar no es una emergencia.
+Si el día 10 ya está todo rojo porque falta poner lo del 25, el rojo deja de
+significar algo, y cuando pase algo de verdad nadie lo va a mirar. Mientras el
+mes corre, lo que falta es una tarea y va en el color del texto normal
+(`esMesCerrado` en `web/src/lib/format.ts` es quien decide); una vez cerrado el
+mes, recién ahí es una deuda y se pinta. Gastar más que el mes pasado tampoco es
+una falla, y que salga plata de la cuenta del hogar es para lo que está la
+cuenta. Quedan en rojo los errores de formulario, el presupuesto excedido y el
+mes cerrado con plata faltando.
+
+Del mismo lado está el tono de los textos: "para quedar a mano" en vez de "te
+falta poner", "falta su parte" en vez de "debe". La razón número uno por la que
+se abandona una app de presupuesto no es que sea fea, es que da vergüenza
+abrirla; y a la culpa se responde evitando.
+
+**Todo esto se mide, no se estima.** El contraste se comprueba en la app
+corriendo y no sobre los tokens, porque con `color-mix` y transparencias el
+valor de la variable no es lo que se ve: 692 textos en cinco pantallas y los dos
+temas, todos sobre el mínimo AA. Así se encontró que el gris apagado quedaba en
+2,87:1 y que el "40%" blanco sobre ocre daba 3,85:1.
+
 ## Estructura
 
 ```

@@ -222,7 +222,9 @@ export function SplitBar({
               display: 'grid',
               placeItems: 'center',
               fontSize: 'var(--t-xs)',
-              color: '#fff',
+              // En oscuro las series se aclaran, y el blanco sobre verde claro
+              // no se lee. El token invierte con el tema.
+              color: 'var(--sobre-acento)',
               fontWeight: 600,
             }}
           >

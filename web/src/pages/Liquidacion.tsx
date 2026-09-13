@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, type Member, type Projection, type RepartoExcedente, type Reserve, type Settlement } from '../lib/api';
 import { useSession } from '../lib/session';
-import { money, monthLabel, percent } from '../lib/format';
+import { esMesCerrado, money, monthLabel, percent } from '../lib/format';
 import { cambiarMes, useMes } from '../lib/mes';
 import { useVersionDatos } from '../lib/datos';
 import Cabecera from '../components/Cabecera';
@@ -17,6 +17,12 @@ export default function Liquidacion() {
   const { user, household } = useSession();
   const currency = household?.currency ?? 'CLP';
   const month = useMes();
+  /**
+   * Mientras el mes corre, lo que falta por poner es una tarea pendiente y va
+   * en el color del texto. Recién cuando el mes cerró y sigue faltando, eso es
+   * una deuda y se pinta en rojo.
+   */
+  const cerrado = esMesCerrado(month);
   const version = useVersionDatos();
   const [settlement, setSettlement] = useState<Settlement | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
@@ -262,9 +268,11 @@ export default function Liquidacion() {
                         <span className="muted"> · {percent(row.share)}</span>
                       </span>
                     </span>
+                    {/* Nunca en rojo: esto es un mes que todavía no llega, así
+                        que lo que falta es lo que hay que poner, no una deuda. */}
                     <span
                       className="cifra-sm"
-                      style={{ color: row.pending > 0 ? 'var(--critical)' : 'var(--good-text)' }}
+                      style={{ color: row.pending > 0 ? 'var(--text-primary)' : 'var(--good-text)' }}
                     >
                       {row.pending > 0 ? money(row.pending, currency) : 'al día'}
                     </span>
@@ -428,7 +436,14 @@ export default function Liquidacion() {
                   </span>
                   <span
                     className="cifra-sm"
-                    style={{ color: m.deviation < -0.5 ? 'var(--critical)' : 'var(--good-text)' }}
+                    style={{
+                      color:
+                        m.deviation < -0.5
+                          ? cerrado
+                            ? 'var(--critical)'
+                            : 'var(--text-primary)'
+                          : 'var(--good-text)',
+                    }}
                   >
                     {m.deviation >= 0 ? '+' : ''}{money(m.deviation, currency)}
                   </span>

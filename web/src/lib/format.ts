@@ -108,6 +108,19 @@ export function esMesFuturo(month: string): boolean {
 }
 
 /**
+ * ¿Es un mes que ya terminó?
+ *
+ * Decide cuándo la app se pone en rojo. Un mes a medio andar no es una
+ * emergencia: si el día 10 ya está todo rojo porque falta poner lo del 25, el
+ * rojo deja de significar algo, y cuando pase algo de verdad nadie lo va a
+ * mirar. Mientras el mes corre, lo que falta es una tarea; una vez cerrado,
+ * recién ahí es una deuda.
+ */
+export function esMesCerrado(month: string): boolean {
+  return month < currentMonth();
+}
+
+/**
  * Hasta dónde se puede mirar hacia adelante.
  *
  * Los sueldos no llegan todos el mismo día —a uno le pagan el 23 y al otro el

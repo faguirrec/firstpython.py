@@ -1,29 +1,87 @@
+/*
+ * La cara de la marca.
+ *
+ * Va sólo en las cifras grandes, el logotipo y los títulos de tarjeta: ahí vive
+ * la personalidad. El resto de la interfaz se queda en la tipografía del
+ * sistema, y no es pereza —es la decisión correcta para una PWA que se abre
+ * treinta segundos dos veces al día—. En iPhone eso es San Francisco y en
+ * Android Roboto; las dos traen figuras tabulares, que es lo único que los
+ * montos necesitan de verdad, y pesan cero.
+ *
+ * El archivo es propio y no de Google: así lo guarda el service worker, la app
+ * abre sin conexión con su tipografía puesta y nadie fuera de acá se entera de
+ * que la abriste. Es una variable, así que un solo archivo cubre todos los
+ * grosores.
+ */
+@font-face {
+  font-family: 'Bricolage Grotesque';
+  src: url('/fonts/bricolage-latin.woff2') format('woff2');
+  font-weight: 500 800;
+  font-style: normal;
+  /* El texto se ve de inmediato con la cara del sistema y cambia al cargar:
+     más vale una cifra legible al instante que una cifra bonita tarde. */
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+2000-206F, U+20AC, U+2122, U+2212, U+FEFF, U+FFFD;
+}
+
 :root {
   color-scheme: light;
 
-  --surface-1: #fcfcfb;
-  --plane: #f9f9f7;
-  --text-primary: #0b0b0b;
-  --text-secondary: #52514e;
-  --text-muted: #898781;
-  --grid: #e1e0d9;
-  --axis: #c3c2b7;
-  --border: rgba(11, 11, 11, 0.1);
+  /*
+   * Verde casona.
+   *
+   * El azul es el color más ocupado del rubro y el nuestro lo era sin haberlo
+   * elegido. Pero MyHaus no compite con bancos: compite con una planilla
+   * compartida y con acordarse de memoria. Sus dos usuarios no están
+   * invirtiendo, están tratando de vivir juntos sin pelear por plata. Eso es un
+   * producto doméstico, y el verde de puerta pintada —apagado, no el verde
+   * chillón de las apps de trading— es lo que lo dice.
+   *
+   * Los neutros llevan un sesgo verde muy leve. Un gris puro se lee como no
+   * elegido; uno inclinado hacia el acento se lee como decidido.
+   */
+  --surface-1: #fbfbf9;
+  --plane: #f4f5f2;
+  --text-primary: #141a16;
+  --text-secondary: #4a544d;
+  /* Medido en pantalla contra --plane, que es el fondo más oscuro de los dos:
+     el gris de antes daba 2,87:1 y el mínimo legible (AA) es 4,5:1. Con éste
+     queda en 4,65:1 sin cambiar de tono. */
+  --text-muted: #69706a;
+  --grid: #dde0d9;
+  --axis: #b9c0b8;
+  --border: rgba(20, 26, 22, 0.1);
 
-  --series-1: #2a78d6;
-  --series-2: #eb6834;
-  --seq-100: #cde2fb;
-  --seq-250: #86b6ef;
-  --seq-450: #2a78d6;
-  --seq-600: #184f95;
+  /* Las dos personas. Verde y ocre en vez de verde y rojo: la dupla clásica es
+     ilegible para cerca del 8% de los hombres. */
+  --series-1: #2f5d4e;
+  /* Un punto más oscuro que el ocre de partida. Los dos colores de persona
+     llevan texto blanco encima —en los avatares y en la barra del reparto— y
+     con el ocre claro ese "40%" quedaba en 3,85:1, bajo el mínimo legible.
+     Así queda en 4,54:1 y sigue siendo el mismo color. */
+  --series-2: #a36a26;
+  --seq-100: #dbe7e1;
+  --seq-250: #9cbfb1;
+  --seq-450: #2f5d4e;
+  --seq-600: #1b3a30;
 
-  --good: #0ca30c;
-  --good-text: #006300;
-  --warning: #fab219;
-  --critical: #d03b3b;
+  /* El color semántico va aparte del de marca: si "bien" y "MyHaus" fueran el
+     mismo verde, la señal dejaría de significar algo. Éste es más vivo. */
+  --good: #3d8168;
+  --good-text: #2a6350;
+  --warning: #c8912f;
+  /* Terracota en vez del rojo bombero de antes: sigue leyéndose como alerta sin
+     gritar en una pantalla que se abre todos los días. */
+  --critical: #a8402f;
 
-  --marca: #2a78d6;
-  --marca-suave: #eaf2fd;
+  --marca: #2f5d4e;
+  --marca-suave: #e3ece8;
+  /* Lo que va encima de cualquier relleno saturado: la marca, el verde de
+     "bien", el terracota de alerta, las barras de las dos personas. En claro es
+     blanco; en oscuro esos colores se aclaran y el texto tiene que oscurecerse,
+     o el botón queda ilegible. */
+  --sobre-acento: #ffffff;
 
   --radius: 18px;
   --radius-sm: 11px;
@@ -74,6 +132,8 @@
 
   --transicion: 160ms cubic-bezier(0.2, 0, 0.2, 1);
 
+  --display: 'Bricolage Grotesque', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
   -webkit-text-size-adjust: 100%;
 }
@@ -81,23 +141,29 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
     color-scheme: dark;
-    --surface-1: #1a1a19;
-    --plane: #0d0d0d;
-    --text-primary: #ffffff;
-    --text-secondary: #c3c2b7;
-    --text-muted: #898781;
-    --grid: #2c2c2a;
-    --axis: #383835;
-    --border: rgba(255, 255, 255, 0.1);
-    --series-1: #3987e5;
-    --series-2: #d95926;
-    --seq-100: #104281;
-    --seq-250: #184f95;
-    --seq-450: #3987e5;
-    --seq-600: #86b6ef;
-    --good-text: #0ca30c;
-    --marca: #3987e5;
-    --marca-suave: #16304d;
+    /* El oscuro no es el claro invertido: el verde se aclara para mantener
+       contraste sobre negro, y el texto que va encima se oscurece. */
+    --surface-1: #1a1f1a;
+    --plane: #101410;
+    --text-primary: #eef1ec;
+    --text-secondary: #aab3ac;
+    --text-muted: #7f8a81; /* 4,67:1 contra --surface-1 */
+    --grid: #2c332d;
+    --axis: #3d453e;
+    --border: rgba(238, 241, 236, 0.1);
+    --series-1: #7fb69e;
+    --series-2: #d9a154;
+    --seq-100: #1d3a30;
+    --seq-250: #2f5d4e;
+    --seq-450: #7fb69e;
+    --seq-600: #b8d8c9;
+    --good: #6fc39f;
+    --good-text: #86d3b1;
+    --warning: #e0b75c;
+    --critical: #e07a63;
+    --marca: #7fb69e;
+    --marca-suave: #1d2b25;
+    --sobre-acento: #0f1611;
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 6px 20px -6px rgba(0, 0, 0, 0.6);
     --shadow-alta: 0 2px 6px rgba(0, 0, 0, 0.55), 0 18px 34px -14px rgba(0, 0, 0, 0.75);
   }
@@ -105,23 +171,27 @@
 
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --surface-1: #1a1a19;
-  --plane: #0d0d0d;
-  --text-primary: #ffffff;
-  --text-secondary: #c3c2b7;
-  --text-muted: #898781;
-  --grid: #2c2c2a;
-  --axis: #383835;
-  --border: rgba(255, 255, 255, 0.1);
-  --series-1: #3987e5;
-  --series-2: #d95926;
-  --seq-100: #104281;
-  --seq-250: #184f95;
-  --seq-450: #3987e5;
-  --seq-600: #86b6ef;
-  --good-text: #0ca30c;
-  --marca: #3987e5;
-  --marca-suave: #16304d;
+  --surface-1: #1a1f1a;
+  --plane: #101410;
+  --text-primary: #eef1ec;
+  --text-secondary: #aab3ac;
+  --text-muted: #7f8a81; /* 4,67:1 contra --surface-1 */
+  --grid: #2c332d;
+  --axis: #3d453e;
+  --border: rgba(238, 241, 236, 0.1);
+  --series-1: #7fb69e;
+  --series-2: #d9a154;
+  --seq-100: #1d3a30;
+  --seq-250: #2f5d4e;
+  --seq-450: #7fb69e;
+  --seq-600: #b8d8c9;
+  --good: #6fc39f;
+  --good-text: #86d3b1;
+  --warning: #e0b75c;
+  --critical: #e07a63;
+  --marca: #7fb69e;
+  --marca-suave: #1d2b25;
+  --sobre-acento: #0f1611;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 6px 20px -6px rgba(0, 0, 0, 0.6);
   --shadow-alta: 0 2px 6px rgba(0, 0, 0, 0.55), 0 18px 34px -14px rgba(0, 0, 0, 0.75);
 }
@@ -142,7 +212,9 @@ body {
   overscroll-behavior-y: none;
 }
 
-h1, h2, h3 { line-height: 1.2; margin: 0; }
+/* Los títulos y las cifras llevan la cara de la marca. El cuerpo no: a 13px la
+   del sistema se lee mejor y no hay que esperar a que baje ningún archivo. */
+h1, h2, h3 { font-family: var(--display); line-height: 1.2; margin: 0; }
 /* clamp evita que el nombre del hogar, si es largo, empuje el botón de la
    cabecera a otra línea en pantallas angostas. */
 h1 { font-size: clamp(1.15rem, 5.2vw, 1.4rem); letter-spacing: -0.02em; }
@@ -228,7 +300,7 @@ a { color: var(--series-1); }
   place-items: center;
 
   background: var(--marca);
-  color: #fff;
+  color: var(--sobre-acento);
   box-shadow: var(--shadow-alta);
   transition: transform var(--transicion), box-shadow var(--transicion);
 }
@@ -265,10 +337,28 @@ a { color: var(--series-1); }
   margin-bottom: var(--e3);
 }
 
+/*
+ * "Ver detalle →" tenía 19px de alto: se ve como enlace pero falla al tocarlo.
+ * El área crece hacia afuera con padding y márgenes negativos que lo compensan,
+ * así que el texto no se mueve de donde está pero el dedo tiene dónde caer.
+ */
+.card-head a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tocable);
+  padding: 0 var(--e2);
+  /* Sólo hacia la izquierda: estirándolo también por la derecha se pasaba del
+     borde de la tarjeta. */
+  margin: calc((var(--tocable) - 1.45em) / -2) 0 calc((var(--tocable) - 1.45em) / -2) calc(var(--e2) * -1);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
 .hero {
   /* Puede venir como <span> —la cifra que cuenta hasta su valor lo es— y tiene
      que ocupar su línea igual. */
   display: block;
+  font-family: var(--display);
   font-size: var(--cifra-lg);
   font-weight: 700;
   letter-spacing: -0.025em;
@@ -286,7 +376,7 @@ a { color: var(--series-1); }
   padding: var(--e5);
 }
 
-.cifra-md { font-size: var(--cifra-md); font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.cifra-md { font-family: var(--display); font-size: var(--cifra-md); font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .cifra-sm { font-size: var(--cifra-sm); font-weight: 600; font-variant-numeric: tabular-nums; }
 
 /* -------------------------- Estados vacíos y carga ------------------------ */
@@ -379,6 +469,10 @@ a { color: var(--series-1); }
 .pill.good { color: var(--good-text); border-color: color-mix(in srgb, var(--good) 45%, transparent); }
 .pill.alert { color: var(--critical); border-color: color-mix(in srgb, var(--critical) 45%, transparent); }
 .pill.warn { color: var(--text-primary); border-color: color-mix(in srgb, var(--warning) 60%, transparent); }
+/* Pendiente: queda algo por hacer y el mes todavía corre. No lleva color
+   semántico a propósito —el rojo es para lo que salió mal, y un mes a medio
+   andar no lo es—, pero sí el peso de una etiqueta para que se note. */
+.pill.pendiente { color: var(--text-primary); border-color: var(--axis); }
 
 .dot { width: 9px; height: 9px; border-radius: 3px; flex: none; display: inline-block; }
 
@@ -391,6 +485,7 @@ input, select, textarea, button {
 
 input, select, textarea {
   width: 100%;
+  min-height: var(--tocable);
   padding: var(--e3) var(--e3);
   border-radius: 10px;
   border: 1px solid var(--border);
@@ -428,13 +523,16 @@ button:active:not(:disabled) { transform: scale(0.97); }
   button.primary:hover:not(:disabled) { background: color-mix(in srgb, #000 8%, var(--marca)); }
 }
 
-button.primary { background: var(--marca); border-color: transparent; color: #fff; font-weight: 600; }
+button.primary { background: var(--marca); border-color: transparent; color: var(--sobre-acento); font-weight: 600; }
 button.ghost { background: transparent; }
 button.danger { color: var(--critical); }
 /* Las etiquetas de los botones no se parten en dos líneas: "Cerrar / mes"
-   se lee como un error de maquetación. Las fichas de categoría quedan fuera:
-   ahí el texto largo es el contenido, no una etiqueta. */
-button:not(.chip) { white-space: nowrap; }
+   se lee como un error de maquetación.
+   Quedan fuera las fichas de categoría y las filas de lista: ahí el texto largo
+   es el contenido y no una etiqueta. Una fila de movimiento es un <button>, y
+   heredar el nowrap le impedía cortar "Sin categoría · personal · pagado por
+   Ana Rivas", que a 320px se salía de la pantalla y corría la página entera. */
+button:not(.chip):not(.item) { white-space: nowrap; }
 
 button.small { min-height: var(--tocable); padding: var(--e2) var(--e3); font-size: var(--t-sm); }
 button:disabled { opacity: 0.55; cursor: default; }
@@ -453,7 +551,7 @@ button:disabled { opacity: 0.55; cursor: default; }
 
 .tabs::-webkit-scrollbar { display: none; }
 .tabs button { white-space: nowrap; min-height: var(--tocable); padding: var(--e2) var(--e4); font-size: var(--t-md); }
-.tabs button.active { background: var(--series-1); color: #fff; border-color: transparent; }
+.tabs button.active { background: var(--series-1); color: var(--sobre-acento); border-color: transparent; }
 
 .error {
   background: color-mix(in srgb, var(--critical) 12%, var(--surface-1));
@@ -561,7 +659,9 @@ details.table-view summary { font-size: var(--t-sm); color: var(--text-secondary
 }
 
 .cambio-modo button {
-  min-height: 38px;
+  /* El mismo mínimo táctil que el resto: es de los botones más tocados y
+     estaba seis píxeles corto. */
+  min-height: var(--tocable);
   padding: var(--e2) var(--e5);
   border: none;
   border-radius: 999px;
@@ -622,6 +722,7 @@ details.plegable > summary::before {
 details.plegable[open] > summary::before { transform: rotate(90deg); }
 details.plegable > summary strong {
   display: block;
+  font-family: var(--display);
   font-size: var(--t-lg);
   letter-spacing: -0.015em;
 }
@@ -742,7 +843,7 @@ details.plegable > summary .resumen-dato {
   animation: aviso-entra 220ms cubic-bezier(0.2, 0.8, 0.25, 1);
 }
 
-.aviso.error { background: var(--critical); color: #fff; }
+.aviso.error { background: var(--critical); color: var(--sobre-acento); }
 
 /* El botón hereda el color del aviso, que es el inverso del de la app. */
 .aviso button {
@@ -989,7 +1090,7 @@ details.plegable > summary .resumen-dato {
 .pasos li.listo .marca {
   border-color: var(--good);
   background: var(--good);
-  color: #fff;
+  color: var(--sobre-acento);
 }
 
 .pasos li.listo .title {
@@ -1035,6 +1136,11 @@ details.plegable > summary .resumen-dato {
   display: flex;
   gap: var(--e2);
   overflow-x: auto;
+  /* Sin esto la tira no puede achicarse por debajo del ancho de sus fichas
+     —en una grilla el mínimo es el contenido— y en vez de deslizarse ella,
+     estira la tarjeta y hace que la página entera se corra en horizontal.
+     Se veía a 320px, que es el iPhone SE. */
+  min-width: 0;
   padding: 2px var(--e4);
   margin: 0 calc(var(--e4) * -1);
   -webkit-overflow-scrolling: touch;
@@ -1060,7 +1166,7 @@ details.plegable > summary .resumen-dato {
 .filtro-chip.activo {
   border-color: transparent;
   background: var(--marca);
-  color: #fff;
+  color: var(--sobre-acento);
   font-weight: 600;
 }
 
@@ -1132,6 +1238,7 @@ details.plegable > summary .resumen-dato {
 .cabecera-nombre { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; }
 
 .cabecera-nombre strong {
+  font-family: var(--display);
   font-size: var(--t-lg);
   letter-spacing: -0.015em;
   white-space: nowrap;
@@ -1204,6 +1311,7 @@ details.plegable > summary .resumen-dato {
 .pill.good { background: color-mix(in srgb, var(--good) 10%, var(--surface-1)); }
 .pill.alert { background: color-mix(in srgb, var(--critical) 10%, var(--surface-1)); }
 .pill.warn { background: color-mix(in srgb, var(--warning) 14%, var(--surface-1)); }
+.pill.pendiente { background: var(--plane); }
 
 /* Filas de lista con respuesta al toque. */
 .item { transition: background-color var(--transicion); }
@@ -1264,7 +1372,7 @@ details.plegable > summary .resumen-dato {
 
 .ficha.avatar {
   border-radius: 50%;
-  color: #fff;
+  color: var(--sobre-acento);
   font-weight: 700;
   font-family: inherit;
   letter-spacing: 0.02em;

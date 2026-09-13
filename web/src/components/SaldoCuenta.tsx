@@ -102,9 +102,9 @@ export default function SaldoCuenta({
         </div>
         <div>
           <span>Salió en {monthLabel(month, true)}</span>
-          <strong className="num" style={{ color: salio > 0 ? 'var(--critical)' : undefined }}>
-            −{money(salio, currency)}
-          </strong>
+          {/* Sin rojo: que salga plata de la cuenta del hogar es para lo que
+              está la cuenta. El signo menos ya dice todo lo que hay que decir. */}
+          <strong className="num">−{money(salio, currency)}</strong>
         </div>
       </div>
 

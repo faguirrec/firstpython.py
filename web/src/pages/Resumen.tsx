@@ -12,7 +12,7 @@ import {
 } from '../lib/api';
 import { useSession } from '../lib/session';
 import { useModo } from '../lib/modo';
-import { dayLabel, monthLabel, esMesFuturo, money, percent } from '../lib/format';
+import { dayLabel, monthLabel, esMesCerrado, esMesFuturo, money, percent } from '../lib/format';
 import { cambiarMes, useMes } from '../lib/mes';
 import { useVersionDatos } from '../lib/datos';
 import { CategoryBars, SplitBar, type CategorySlice } from '../components/Charts';
@@ -47,6 +47,12 @@ export default function Resumen() {
   const modo = useModo();
   const esPersonal = modo === 'personal';
   const futuro = esMesFuturo(month);
+  /**
+   * Sólo un mes ya cerrado con plata faltante se pinta en rojo. Durante el
+   * mes en curso lo que falta es lo que queda por hacer, y eso va en el color
+   * del texto normal: el rojo se guarda para cuando algo salió mal de verdad.
+   */
+  const cerrado = esMesCerrado(month);
 
   const load = useCallback(async () => {
     setError(null);
@@ -172,7 +178,7 @@ export default function Resumen() {
           <>
             <div className="label">
               {(proyeccion?.rows.find((r) => r.userId === user?.id)?.contributed ?? 0) > 0
-                ? 'Te falta poner'
+                ? 'Para quedar a mano'
                 : 'Te va a tocar poner'}
             </div>
             <Cifra
@@ -194,12 +200,27 @@ export default function Resumen() {
           <>
             {/* "Vas al día · $330.600" deja el número sin explicar: no es lo que
                 debes ni lo que gastaste, es lo que pusiste de más. */}
-            <div className="label">{me.deviation < -0.5 ? 'Te falta poner' : 'Pusiste de más'}</div>
+            {/*
+               * "Para quedar a mano" en vez de "te falta poner".
+               *
+               * Es la misma cifra, pero "falta" es una falta. La razón número
+               * uno por la que se abandona una app de presupuesto no es que sea
+               * fea: es que da vergüenza abrirla, y a la culpa se responde
+               * evitando. Una tarea con final —quedar a mano— no da vergüenza.
+               */}
+            <div className="label">{me.deviation < -0.5 ? 'Para quedar a mano' : 'Pusiste de más'}</div>
             <Cifra
               className="hero"
               valor={Math.abs(me.deviation)}
               moneda={currency}
-              style={{ color: me.deviation < -0.5 ? 'var(--critical)' : 'var(--good-text)' }}
+              style={{
+                color:
+                  me.deviation < -0.5
+                    ? cerrado
+                      ? 'var(--critical)'
+                      : 'var(--text-primary)'
+                    : 'var(--good-text)',
+              }}
             />
             <div className="muted">
               {me.deviation < -0.5
@@ -308,7 +329,11 @@ export default function Resumen() {
       {settlement && !esPersonal && !futuro && settlement.members.some((m) => m.userId !== user?.id) && (
         <div className="card">
           <div className="card-head">
-            <h2>Cómo va {settlement.members.find((m) => m.userId !== user?.id)?.name ?? 'el resto'}</h2>
+            {/* Una tarjeta titulada con el nombre del otro es un marcador.
+                 Aunque el dato sea neutro, el encuadre dice "vengo a revisar
+                 cómo va el otro" — y en apps de pareja, la que se convierte en
+                 la herramienta para probar quién tiene la razón se abandona. */}
+            <h2>El mes de los dos</h2>
             <Link to="/liquidacion" className="muted">Ver detalle →</Link>
           </div>
 
@@ -331,8 +356,12 @@ export default function Resumen() {
                         <span className="muted"> · {percent(m.incomeShare)}</span>
                       </span>
                     </span>
-                    <span className={`pill ${debe ? 'alert' : 'good'}`}>
-                      {debe ? '▼ debe' : '▲ al día'} {money(Math.abs(m.deviation), currency)}
+                    <span className={`pill ${debe ? (cerrado ? 'alert' : 'pendiente') : 'good'}`}>
+                      {/* "Debe" juzga a la persona; "falta" describe la plata.
+                           Corto a propósito: la píldora se llevaba media pantalla
+                           y el nombre de al lado quedaba partido en dos líneas.
+                           Lo que falta y lo que lleva puesto va acá abajo. */}
+                      {debe ? `Falta ${money(Math.abs(m.deviation), currency)}` : 'Al día'}
                     </span>
                   </div>
                   <div className="ficha-persona-datos">

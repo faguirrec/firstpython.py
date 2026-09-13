@@ -106,7 +106,7 @@ function Tendencia() {
           <div className="muted">
             {monthLabel(last.month)}: {money(last.shared, currency)}
             {delta != null && (
-              <span style={{ color: delta > 0 ? 'var(--critical)' : 'var(--good-text)' }}>
+              <span style={{ color: delta > 0 ? 'var(--text-primary)' : 'var(--good-text)' }}>
                 {' '}· {delta > 0 ? '▲' : '▼'} {Math.abs(delta * 100).toFixed(0)}% vs. el mes anterior
               </span>
             )}

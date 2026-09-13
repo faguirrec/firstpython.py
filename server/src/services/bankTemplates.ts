@@ -115,7 +115,11 @@ export const BANK_TEMPLATES: BankTemplate[] = [
     gmail_query: 'from:(bancochile.cl) subject:(transferencia OR comprobante) newer_than:60d',
     amount_regex: 'Monto[\\s\\S]{0,40}?\\$\\s?([\\d.,]+)',
     merchant_regex: 'Nombre y Apellido\\s*([^\\n]{2,60})',
-    date_regex: null,
+    // El comprobante trae la fecha de la transferencia. Vale más que la hora en
+    // que llegó el correo: una transferencia del 31 avisada pasada la medianoche
+    // es del mes que se está cerrando, no del que empieza. Si algún correo no
+    // trae el campo, el patrón no calza y se sigue usando la fecha del correo.
+    date_regex: 'Fecha[\\s\\S]{0,40}?(\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4})',
     account_regex: 'Destino[\\s\\S]{0,200}?N[°º] de Cuenta\\s*([\\d-]{8,})',
     must_contain: 'Transferencia a terceros',
     // Lo que va a la cuenta del hogar es un aporte, no un gasto: lo toma la
