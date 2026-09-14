@@ -115,7 +115,12 @@ export default function AjustesReglas() {
                 <div className="title">{rule.name}</div>
                 <div className="meta una-linea" style={{ fontFamily: 'ui-monospace, monospace' }}>{rule.gmailQuery}</div>
                 <div className="meta">
-                  {rule.type === 'aporte' ? 'crea aportes' : 'crea gastos'} · {rule.scope === 'comun' ? 'comunes' : 'personales'}
+                  {/* La regla sigue pudiendo marcar lo que entra como algo que
+                      no se reparte —es la forma de dejar afuera la tarjeta de
+                      uno—, pero se dice por lo que hace y no por el modo
+                      personal, que está escondido. */}
+                  {rule.type === 'aporte' ? 'crea aportes' : 'crea gastos'} ·{' '}
+                  {rule.scope === 'comun' ? 'comunes' : 'que no se reparten'}
                 </div>
                 {rule.desactualizada && (
                   <div className="meta" style={{ color: 'var(--warning)' }}>
@@ -291,7 +296,7 @@ function EditorRegla({
           <span>Se reparten</span>
           <select value={form.scope} onChange={(e) => set('scope', e.target.value as 'comun' | 'personal')}>
             <option value="comun">Sí, comunes</option>
-            <option value="personal">No, personales</option>
+            <option value="personal">No, quedan fuera del reparto</option>
           </select>
         </label>
       </div>
@@ -333,7 +338,7 @@ function EditorRegla({
           onChange={(e) => set('cardFilter', e.target.value)}
           placeholder="1234, 5678"
         />
-        <em className="muted">Sirve para ignorar las tarjetas personales que no entran al reparto.</em>
+        <em className="muted">Sirve para ignorar las tarjetas que no entran al reparto.</em>
       </label>
 
       <label className="field">

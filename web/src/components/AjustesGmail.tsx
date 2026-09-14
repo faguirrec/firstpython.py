@@ -159,7 +159,7 @@ export default function AjustesGmail() {
           <li>Conecta la cuenta de Gmail donde llegan los avisos del banco.</li>
           <li>En «Reglas de correo» activas la de tu banco y la ajustas con un correo real de ejemplo.</li>
           <li>Sincronizas: cada correo que calza se transforma en un movimiento, ya categorizado si hay regla.</li>
-          <li>Revisas lo importado y confirmas qué es común y qué es personal.</li>
+          <li>Revisas lo importado y confirmas la categoría y si entra al reparto.</li>
         </ol>
         <p className="muted" style={{ marginBottom: 0 }}>
           Los correos ya importados no se duplican: cada movimiento queda amarrado al id del mensaje.

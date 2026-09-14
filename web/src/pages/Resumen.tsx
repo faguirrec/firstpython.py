@@ -11,7 +11,7 @@ import {
   type Transaction,
 } from '../lib/api';
 import { useSession } from '../lib/session';
-import { useModo } from '../lib/modo';
+import { MODO_PERSONAL_VISIBLE, useModo } from '../lib/modo';
 import { dayLabel, monthLabel, esMesCerrado, esMesFuturo, money, percent } from '../lib/format';
 import { cambiarMes, useMes } from '../lib/mes';
 import { useDeslizarMes } from '../lib/deslizar';
@@ -63,6 +63,15 @@ export default function Resumen() {
   const [leyendoElMes, setLeyendoElMes] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const modo = useModo();
+  /*
+   * Con el modo personal escondido esto es siempre falso, porque `useModo`
+   * devuelve siempre 'hogar'. Toda la vista del bolsillo propio que cuelga de
+   * acá —el encabezado de "te queda este mes", las llamadas a la API que sólo
+   * sirven para eso— queda dormida sin borrarse, y vuelve sola el día que se
+   * prenda `MODO_PERSONAL_VISIBLE`. Por eso las condiciones se dejaron tal
+   * cual en vez de reemplazarlas por el caso hogar: el diff de volver atrás
+   * tiene que ser una línea, no esta pantalla entera.
+   */
   const esPersonal = modo === 'personal';
   const futuro = esMesFuturo(month);
   /**
@@ -317,10 +326,14 @@ export default function Resumen() {
           </div>
         )}
 
+        {/* Esta línea se queda aunque el modo personal esté escondido: es la
+            única que da cuenta de la plata que se gastó y no entró al reparto.
+            Sacarla haría que un gasto anotado ayer no apareciera en ninguna
+            parte, que es exactamente lo que no puede pasar. Lo que se dejó de
+            nombrar es el modo; el hecho se sigue diciendo. */}
         {settlement && settlement.totalPersonalExpenses > 0 && (
           <div className="muted" style={{ marginTop: 10 }}>
-            Aparte, {money(settlement.totalPersonalExpenses, currency)} tuyos en gastos personales, que no se
-            reparten.
+            Aparte, {money(settlement.totalPersonalExpenses, currency)} tuyos en gastos que no se reparten.
           </div>
         )}
       </div>
@@ -593,7 +606,10 @@ export default function Resumen() {
                       que cuenta son el mismo, decirlo sería ruido. */}
                   {t.period !== t.occurredOn.slice(0, 7) && ` · cuenta en ${monthLabel(t.period, true)}`}
                   {' · '}{t.categoryName ?? 'Sin categoría'}
-                  {t.scope === 'personal' && ' · personal'}
+                  {/* Igual que en Movimientos: lo que ya estaba anotado como
+                      personal se sigue marcando para que la lista no parezca
+                      sumar al reparto, pero sin nombrar un modo que no se ve. */}
+                  {t.scope === 'personal' && (MODO_PERSONAL_VISIBLE ? ' · personal' : ' · no se reparte')}
                   {t.type === 'aporte' && ` · aporte de ${t.userName ?? ''}`}
                 </div>
               </div>

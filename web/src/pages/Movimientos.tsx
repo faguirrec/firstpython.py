@@ -4,6 +4,7 @@ import { api, type Category, type Transaction } from '../lib/api';
 import { useSession } from '../lib/session';
 import { diaLargo, money, monthLabel } from '../lib/format';
 import { cambiarMes, useMes } from '../lib/mes';
+import { MODO_PERSONAL_VISIBLE } from '../lib/modo';
 import { useDeslizarMes } from '../lib/deslizar';
 import { useVersionDatos } from '../lib/datos';
 import Cabecera from '../components/Cabecera';
@@ -202,12 +203,19 @@ export default function Movimientos() {
           >
             Comunes
           </button>
-          <button
-            className={`filtro-chip ${scope === 'personal' ? 'activo' : ''}`}
-            onClick={() => ponerFiltro({ ambito: scope === 'personal' ? null : 'personal' })}
-          >
-            Personales
-          </button>
+          {/* El filtro de lo que no se reparte se esconde con el modo personal:
+              sin ese modo no hay dos bolsillos entre los que elegir. El filtro
+              sigue funcionando por URL (`?ambito=personal`), así que un enlace
+              guardado de antes no se rompe y lo que hay en la base se puede
+              seguir mirando. */}
+          {MODO_PERSONAL_VISIBLE && (
+            <button
+              className={`filtro-chip ${scope === 'personal' ? 'activo' : ''}`}
+              onClick={() => ponerFiltro({ ambito: scope === 'personal' ? null : 'personal' })}
+            >
+              Personales
+            </button>
+          )}
         </div>
 
         {/*
@@ -258,7 +266,7 @@ export default function Movimientos() {
                 <span className="meta">
                   {todosLosMeses ? 'Todo el historial' : monthLabel(month)}
                   {scope === 'comun' && ' · sólo comunes'}
-                  {scope === 'personal' && ' · sólo personales'}
+                  {scope === 'personal' && (MODO_PERSONAL_VISIBLE ? ' · sólo personales' : ' · sólo lo que no se reparte')}
                   {sinFijos && !todosLosMeses && ' · sin los fijos'}
                 </span>
               </span>
@@ -315,7 +323,14 @@ export default function Movimientos() {
                           el mes contable no es el de la fecha. */}
                       {t.period !== t.occurredOn.slice(0, 7) && `Cuenta en ${monthLabel(t.period, true)} · `}
                       {t.categoryName ?? 'Sin categoría'}
-                      {t.scope === 'personal' && ' · personal'}
+                      {/* Los gastos personales que ya estaban en la base se
+                          siguen mostrando y se siguen marcando: si se vieran
+                          iguales que los comunes, la lista sumaría más de lo
+                          que el reparto reparte y nadie entendería por qué.
+                          Lo que cambia con el modo escondido es el nombre: sin
+                          modo personal la palabra no significa nada, pero el
+                          hecho —esta plata no se divide— sigue importando. */}
+                      {t.scope === 'personal' && (MODO_PERSONAL_VISIBLE ? ' · personal' : ' · no se reparte')}
                       {t.type === 'aporte' && ` · aporte de ${t.userName ?? ''}`}
                       {t.fundedBy !== 'oficial' && t.type === 'gasto' && ` · pagó ${t.userName ?? 'uno de los dos'}`}
                       {t.source === 'gmail' && ' · ✉'}
@@ -336,7 +351,14 @@ export default function Movimientos() {
         <Sheet title={detail.merchant ?? 'Movimiento'} onClose={() => setDetail(null)}>
           <div className="hero num">{money(detail.amount, currency)}</div>
           <p className="muted" style={{ marginTop: 4 }}>
-            {detail.occurredOn} · {detail.type === 'aporte' ? 'aporte' : detail.scope === 'comun' ? 'gasto común' : 'gasto personal'}
+            {detail.occurredOn} ·{' '}
+            {detail.type === 'aporte'
+              ? 'aporte'
+              : detail.scope === 'comun'
+                ? 'gasto común'
+                : MODO_PERSONAL_VISIBLE
+                  ? 'gasto personal'
+                  : 'gasto que no se reparte'}
             {detail.accountLabel && ` · ${detail.accountLabel}`}
             {detail.installments && ` · ${detail.installments} cuotas`}
           </p>

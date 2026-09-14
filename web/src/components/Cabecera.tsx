@@ -1,6 +1,6 @@
 import { Logo } from './Icons';
 import { MESES_HACIA_ADELANTE, currentMonth, esMesFuturo, monthLabel, shiftMonth } from '../lib/format';
-import { cambiarModo, useModo } from '../lib/modo';
+import { MODO_PERSONAL_VISIBLE, cambiarModo, useModo } from '../lib/modo';
 import { useSession } from '../lib/session';
 
 /**
@@ -12,7 +12,9 @@ import { useSession } from '../lib/session';
  *
  * Acá vive también el cambio entre las cuentas del hogar y las propias. Va en
  * la cabecera y no en ajustes porque no es una configuración: es dónde uno está
- * parado, y cambia varias veces al día.
+ * parado, y cambia varias veces al día. Hoy no se dibuja: el modo personal está
+ * escondido detrás de `MODO_PERSONAL_VISIBLE` (ver `lib/modo.ts`), así que la
+ * cabecera muestra siempre el hogar.
  */
 export default function Cabecera({
   hogar,
@@ -54,7 +56,10 @@ export default function Cabecera({
         {accion}
       </div>
 
-      {conModo && (
+      {/* El selector se dibuja sólo si hay entre qué elegir: con el modo
+          personal escondido, un par de botones donde uno está siempre apagado
+          no sería un control, sería un adorno que promete algo que no pasa. */}
+      {MODO_PERSONAL_VISIBLE && conModo && (
         <div className="cambio-modo" role="group" aria-label="Qué cuentas se están viendo">
           <button
             className={modo === 'hogar' ? 'activo' : ''}

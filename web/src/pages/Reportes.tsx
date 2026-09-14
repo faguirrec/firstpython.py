@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { useSession } from '../lib/session';
 import { money, monthLabel } from '../lib/format';
 import { cambiarMes, useMes } from '../lib/mes';
+import { MODO_PERSONAL_VISIBLE } from '../lib/modo';
 import { useDeslizarMes } from '../lib/deslizar';
 import { datosCambiaron, useVersionDatos } from '../lib/datos';
 import { avisar, avisarError } from '../lib/aviso';
@@ -167,7 +168,9 @@ function Tendencia() {
 
       <div className="card">
         <h2>Gasto común acumulado por categoría</h2>
-        <p className="muted" style={{ marginTop: 0 }}>Todo el historial registrado, sin los gastos personales.</p>
+        <p className="muted" style={{ marginTop: 0 }}>
+          Todo el historial registrado, sólo con lo que se reparte entre los dos.
+        </p>
         <CategoryBars
           data={categories}
           currency={currency}
@@ -190,7 +193,12 @@ function Tendencia() {
             <tr>
               <th>Mes</th>
               <th>Comunes</th>
-              <th>Personales</th>
+              {/* La columna de lo personal era el resumen del otro bolsillo:
+                  sin ese modo no hay dónde ir a mirarlo en detalle, así que
+                  mostrar el total suelto sería una cifra sin pantalla detrás.
+                  La plata no se pierde —los movimientos siguen en la base y en
+                  la lista de Movimientos—, deja de tener columna propia. */}
+              {MODO_PERSONAL_VISIBLE && <th>Personales</th>}
               <th>Ingreso</th>
             </tr>
           </thead>
@@ -199,7 +207,7 @@ function Tendencia() {
               <tr key={m.month}>
                 <td>{monthLabel(m.month)}</td>
                 <td className="num">{money(m.shared, currency)}</td>
-                <td className="num">{money(m.personal, currency)}</td>
+                {MODO_PERSONAL_VISIBLE && <td className="num">{money(m.personal, currency)}</td>}
                 <td className="num">
                   {m.income ? (privado ? '•••••' : money(m.income, currency)) : '—'}
                 </td>

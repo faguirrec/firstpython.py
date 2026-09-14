@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { api, type Category, type Member, type Transaction } from '../lib/api';
 import { useSession } from '../lib/session';
 import { monthLabel, shiftMonth, today } from '../lib/format';
+import { MODO_PERSONAL_VISIBLE } from '../lib/modo';
 import Sheet from './Sheet';
 import { Avatar, FichaCategoria } from './Fichas';
 
@@ -188,29 +189,46 @@ export default function NuevoMovimiento({ month, existing, inicial, onClose, onS
               <input value={form.merchant} onChange={(e) => set('merchant', e.target.value)} placeholder="Jumbo" />
             </label>
 
-            <div className="label" style={{ marginBottom: 6 }}>¿Se reparte?</div>
-            <div className="segmentado" style={{ marginBottom: 12 }}>
-              <button type="button" className={form.scope === 'comun' ? 'activo' : ''} onClick={() => set('scope', 'comun')}>
-                Común
-              </button>
-              <button
-                type="button"
-                className={form.scope === 'personal' ? 'activo' : ''}
-                onClick={() => {
-                  // Al marcarlo personal, quien paga pasa a ser uno mismo:
-                  // comprarse algo propio con la cuenta común es la excepción,
-                  // no lo normal, y como valor por defecto salía del pozo del
-                  // hogar sin que nadie respondiera por esa plata.
-                  setForm((prev) => ({
-                    ...prev,
-                    scope: 'personal',
-                    fundedBy: prev.fundedBy === 'oficial' ? (user?.id ?? prev.fundedBy) : prev.fundedBy,
-                  }));
-                }}
-              >
-                Personal
-              </button>
-            </div>
+            {/*
+              * Elegir si el gasto se reparte o no.
+              *
+              * Con el modo personal escondido la pregunta no tiene sentido: si
+              * la app es sólo lo compartido, todo lo que uno anota acá es del
+              * hogar, y ofrecer la otra mitad dejaría a mano la única forma de
+              * crear movimientos que después no se verían en ninguna parte.
+              *
+              * Lo que no se toca es `form.scope` cuando se está editando: nace
+              * con el ámbito que el movimiento ya tenía. Un gasto personal
+              * viejo sigue siendo personal aunque se le corrija el monto, y no
+              * se cuela al reparto por haber pasado por este formulario.
+              */}
+            {MODO_PERSONAL_VISIBLE && (
+              <>
+                <div className="label" style={{ marginBottom: 6 }}>¿Se reparte?</div>
+                <div className="segmentado" style={{ marginBottom: 12 }}>
+                  <button type="button" className={form.scope === 'comun' ? 'activo' : ''} onClick={() => set('scope', 'comun')}>
+                    Común
+                  </button>
+                  <button
+                    type="button"
+                    className={form.scope === 'personal' ? 'activo' : ''}
+                    onClick={() => {
+                      // Al marcarlo personal, quien paga pasa a ser uno mismo:
+                      // comprarse algo propio con la cuenta común es la excepción,
+                      // no lo normal, y como valor por defecto salía del pozo del
+                      // hogar sin que nadie respondiera por esa plata.
+                      setForm((prev) => ({
+                        ...prev,
+                        scope: 'personal',
+                        fundedBy: prev.fundedBy === 'oficial' ? (user?.id ?? prev.fundedBy) : prev.fundedBy,
+                      }));
+                    }}
+                  >
+                    Personal
+                  </button>
+                </div>
+              </>
+            )}
 
             <div className="label" style={{ marginBottom: 6 }}>¿Quién lo pagó?</div>
             <div className="segmentado" style={{ marginBottom: 6 }}>

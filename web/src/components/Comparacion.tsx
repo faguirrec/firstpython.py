@@ -97,8 +97,11 @@ export default function Comparacion({ month }: { month: string }) {
           </div>
         </div>
         <p className="muted" style={{ marginBottom: 0, marginTop: 10 }}>
-          {monthLabel(data.month)}: {money(data.totalCurrent, currency)} en gastos comunes. Los gastos personales de
-          cada uno no entran en esta comparación.
+          {/* Se dice qué queda afuera sin nombrar el modo personal, que está
+              escondido: lo que importa acá es que la cifra compara lo que se
+              reparte, no de qué bolsillo salió el resto. */}
+          {monthLabel(data.month)}: {money(data.totalCurrent, currency)} en gastos comunes. Lo que cada uno gasta por
+          su cuenta no entra en esta comparación.
         </p>
       </div>
 
