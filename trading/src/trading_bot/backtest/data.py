@@ -55,10 +55,18 @@ def load_csv(path: str | Path) -> list[Bar]:
 
 
 def load_from_broker(
-    broker: Any, symbol: str, *, timeframe: str = "1Day", limit: int = 750
+    broker: Any,
+    symbol: str,
+    *,
+    timeframe: str = "1Day",
+    limit: int = 750,
+    start: datetime | None = None,
+    end: datetime | None = None,
 ) -> list[Bar]:
     """Historical bars from the Alpaca account already configured."""
-    return broker.get_bars(symbol, limit=limit, timeframe=timeframe)
+    if start is None and end is None:
+        return broker.get_bars(symbol, limit=limit, timeframe=timeframe)
+    return broker.get_bars(symbol, limit=limit, timeframe=timeframe, start=start, end=end)
 
 
 def load_yfinance(
@@ -110,6 +118,8 @@ def load_bars(
     limit: int = 750,
     days: int = 730,
     csv_dir: str | Path | None = None,
+    start: datetime | None = None,
+    end: datetime | None = None,
 ) -> dict[str, list[Bar]]:
     """Load bars for every symbol from the chosen source."""
     out: dict[str, list[Bar]] = {}
@@ -118,18 +128,33 @@ def load_bars(
         try:
             if source == "csv":
                 directory = Path(csv_dir or ".")
-                out[key] = load_csv(directory / f"{key}.csv")
+                bars = load_csv(directory / f"{key}.csv")
+                out[key] = _clip(bars, start, end)
             elif source == "yfinance":
-                out[key] = load_yfinance(key, timeframe=timeframe, days=days)
+                span = days if start is None else (utcnow() - to_utc(start)).days + 1
+                out[key] = _clip(load_yfinance(key, timeframe=timeframe, days=span), start, end)
             else:
                 if broker is None:
                     raise RuntimeError("source='alpaca' requiere un broker configurado.")
-                out[key] = load_from_broker(broker, key, timeframe=timeframe, limit=limit)
+                out[key] = load_from_broker(
+                    broker, key, timeframe=timeframe, limit=limit, start=start, end=end
+                )
         except Exception as exc:  # noqa: BLE001 - one bad symbol must not stop the run
             log.warning("bars_load_failed", extra={"event": {"symbol": key, "error": str(exc)}})
             continue
         log.info("bars_loaded", extra={"event": {"symbol": key, "bars": len(out[key])}})
     return {symbol: bars for symbol, bars in out.items() if bars}
+
+
+def _clip(bars: list[Bar], start: datetime | None, end: datetime | None) -> list[Bar]:
+    """Restrict a series to an explicit date range."""
+    if start is not None:
+        floor = to_utc(start)
+        bars = [bar for bar in bars if bar.timestamp >= floor]
+    if end is not None:
+        ceiling = to_utc(end)
+        bars = [bar for bar in bars if bar.timestamp <= ceiling]
+    return bars
 
 
 def _cell(row: Any, name: str) -> float:

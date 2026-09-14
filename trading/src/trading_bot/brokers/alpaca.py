@@ -209,15 +209,26 @@ class AlpacaBroker:
         return None
 
     # --------------------------------------------------------------- market data
-    def get_bars(self, symbol: str, *, limit: int = 120, timeframe: str = "15Min") -> list[Bar]:
+    def get_bars(
+        self,
+        symbol: str,
+        *,
+        limit: int = 120,
+        timeframe: str = "15Min",
+        start: datetime | None = None,
+        end: datetime | None = None,
+    ) -> list[Bar]:
+        """Historical bars. ``start``/``end`` override the derived window."""
         sdk = self._load_sdk()
         tf = _timeframe(timeframe, sdk)
-        # Ask for a generous window; the API returns fewer bars on thin sessions.
-        lookback_days = max(5, int(limit / 26) + 5)
+        window_start = to_utc(start) if start else utcnow() - timedelta(
+            days=lookback_days(limit, timeframe)
+        )
         request = sdk["StockBarsRequest"](
             symbol_or_symbols=symbol.upper(),
             timeframe=tf,
-            start=utcnow() - timedelta(days=lookback_days),
+            start=window_start,
+            end=to_utc(end) if end else None,
             limit=limit,
             feed=self.feed,
         )
@@ -419,6 +430,39 @@ def _as_datetime(value: Any) -> datetime | None:
         return to_utc(datetime.fromisoformat(text))
     except ValueError:
         return None
+
+
+def lookback_days(limit: int, timeframe: str) -> int:
+    """Calendar days to request so ``limit`` bars of ``timeframe`` come back.
+
+    The window has to know the timeframe. A fixed ~26-bars-per-day assumption is
+    right for 15-minute bars and badly wrong for daily ones: asking for 1,700
+    daily bars would have requested 70 days and returned about 48, so a "backtest
+    from 2020" would silently have run on two months of data.
+    """
+    amount, unit = _timeframe_parts(timeframe)
+    amount = max(amount, 1)
+    if unit == "day":
+        bars_per_day = 1 / amount
+    elif unit == "week":
+        bars_per_day = 1 / (5 * amount)
+    elif unit == "hour":
+        bars_per_day = 6.5 / amount
+    else:
+        bars_per_day = 390 / amount
+    trading_days = max(limit / bars_per_day, 1)
+    # ~252 trading days per 365 calendar days, plus a buffer for holidays.
+    return int(trading_days * 365 / 252) + 7
+
+
+def _timeframe_parts(spec: str) -> tuple[int, str]:
+    text = spec.strip().lower()
+    digits = "".join(ch for ch in text if ch.isdigit()) or "1"
+    amount = int(digits)
+    for unit in ("day", "hour", "week"):
+        if unit in text:
+            return amount, unit
+    return amount, "minute"
 
 
 def _timeframe(spec: str, sdk: dict[str, Any]) -> Any:

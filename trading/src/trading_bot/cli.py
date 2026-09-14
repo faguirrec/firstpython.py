@@ -18,8 +18,10 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import timedelta, timezone
 from typing import Any, Sequence
 
+from .clock import utcnow
 from .config import LIVE_URL, PAPER_URL, Settings
 from .db import Store
 from .engine import TradingEngine
@@ -100,6 +102,8 @@ def _add_data_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--limit", type=int, default=750, help="bars per symbol (alpaca source)")
     parser.add_argument("--days", type=int, default=730, help="lookback in days (yfinance source)")
     parser.add_argument("--csv-dir", default=".", help="directory holding <SYMBOL>.csv")
+    parser.add_argument("--start", default=None, help="YYYY-MM-DD; overrides --limit/--days")
+    parser.add_argument("--end", default=None, help="YYYY-MM-DD (default: today)")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -320,15 +324,50 @@ def _load_history(args: argparse.Namespace, settings: Settings, broker: Any | No
     if settings.benchmark not in symbols:
         symbols.append(settings.benchmark)
 
+    start = _as_utc_date(getattr(args, "start", None))
+    end = _as_utc_date(getattr(args, "end", None))
+    limit = args.limit
+    if start is not None:
+        # An explicit range is the honest way to ask for "since 2020"; derive the
+        # bar count from it so the broker request covers the whole window.
+        span_days = max((_as_utc_date(args.end) or utcnow()) - start, timedelta(days=1)).days
+        limit = max(limit, _bars_for(span_days, args.timeframe))
+
     return load_bars(
         symbols,
         source=args.source,
         broker=broker,
         timeframe=args.timeframe,
-        limit=args.limit,
+        limit=limit,
         days=args.days,
         csv_dir=args.csv_dir,
+        start=start,
+        end=end,
     )
+
+
+def _as_utc_date(value: str | None):
+    if not value:
+        return None
+    from datetime import datetime as _dt
+
+    try:
+        return _dt.strptime(value, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    except ValueError as exc:
+        raise SystemExit(f"Fecha inválida {value!r}: usa YYYY-MM-DD") from exc
+
+
+def _bars_for(span_days: int, timeframe: str) -> int:
+    """How many bars of ``timeframe`` fit in a calendar span."""
+    from .brokers.alpaca import _timeframe_parts
+
+    amount, unit = _timeframe_parts(timeframe)
+    amount = max(amount, 1)
+    trading_days = span_days * 252 / 365
+    per_day = {"day": 1 / amount, "week": 1 / (5 * amount), "hour": 6.5 / amount}.get(
+        unit, 390 / amount
+    )
+    return int(trading_days * per_day) + 10
 
 
 def _run_history_command(
@@ -369,9 +408,18 @@ def _run_history_command(
 def _backtest_text(result: Any, settings: Settings) -> str:
     summary = result.summary()
     metrics = result.metrics
+    span = ""
+    first, last = result.metrics.extra.get("span_years"), None
+    if summary["start"] and summary["end"]:
+        from .clock import parse_iso
+
+        a, b = parse_iso(summary["start"]), parse_iso(summary["end"])
+        if a and b:
+            span = f", {(b - a).days / 365.25:.1f} años"
     lines = [
         f"Backtest {', '.join(summary['symbols'])}",
-        f"  Periodo:        {summary['start']} → {summary['end']}  ({summary['bars']} barras)",
+        f"  Periodo:        {(summary['start'] or '')[:10]} → {(summary['end'] or '')[:10]}"
+        f"  ({summary['bars']} barras{span})",
         f"  Capital inicial:${metrics.start_equity:,.2f}  →  final ${metrics.current_equity:,.2f}",
         f"  P&L neto:       ${metrics.net_pnl:,.4f}  ({metrics.return_pct * 100:+.2f}%)",
         f"  Trades:         {metrics.trades_total} "
@@ -392,6 +440,15 @@ def _backtest_text(result: Any, settings: Settings) -> str:
             else "sin datos"
         ),
     ]
+    if summary.get("universe_buy_hold_pct") is not None:
+        lines.append(
+            f"  Comprar y mantener la misma canasta:  "
+            f"{summary['universe_buy_hold_pct'] * 100:+.2f}%  "
+            f"(exceso {summary['excess_vs_universe_pct'] * 100:+.2f}%)"
+        )
+        lines.append(
+            "    ↑ esta es la comparación que aísla la estrategia de la elección de símbolos"
+        )
     if summary["top_rejections"]:
         lines.append("  Motivos de rechazo: " + ", ".join(
             f"{k}={v}" for k, v in summary["top_rejections"].items()

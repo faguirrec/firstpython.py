@@ -65,6 +65,8 @@ class BacktestResult:
     end: str | None
     params: dict[str, Any] = field(default_factory=dict)
     store: Store | None = None
+    # Equal-weight buy & hold of the traded universe over the same window.
+    universe_buy_hold_pct: float | None = None
 
     def summary(self) -> dict[str, Any]:
         return {
@@ -84,6 +86,11 @@ class BacktestResult:
             "fee_to_pnl_ratio": self.metrics.fee_to_pnl_ratio,
             "benchmark_return_pct": self.metrics.benchmark_return_pct,
             "excess_return_pct": self.metrics.excess_return_pct,
+            "universe_buy_hold_pct": self.universe_buy_hold_pct,
+            "excess_vs_universe_pct": (
+                None if self.universe_buy_hold_pct is None
+                else round(self.metrics.return_pct - self.universe_buy_hold_pct, 6)
+            ),
             "top_rejections": dict(
                 sorted(self.rejections.items(), key=lambda kv: kv[1], reverse=True)[:6]
             ),
@@ -304,6 +311,9 @@ def run_backtest(
         store, starting_equity=risk_config.starting_equity, benchmark=settings.benchmark
     )
     result = BacktestResult(
+        universe_buy_hold_pct=_equal_weight_buy_hold(
+            {s: b for s, b in bars_by_symbol.items() if s in settings.universe} or bars_by_symbol
+        ),
         metrics=metrics,
         trades=store.closed_trades(),
         rejections=rejections,
@@ -321,6 +331,24 @@ def run_backtest(
 
 
 # -------------------------------------------------------------------- helpers
+def _equal_weight_buy_hold(bars_by_symbol: Mapping[str, Sequence[Bar]]) -> float | None:
+    """Return of holding the traded basket in equal weights, same window.
+
+    The honest comparison for a strategy that trades a hand-picked universe.
+    Beating SPY while holding names chosen in hindsight measures the choice of
+    names, not the strategy; beating the basket itself measures the strategy.
+    """
+    returns: list[float] = []
+    for bars in bars_by_symbol.values():
+        series = sorted(bars, key=lambda bar: bar.timestamp)
+        if len(series) < 2 or series[0].close <= 0:
+            continue
+        returns.append((series[-1].close - series[0].close) / series[0].close)
+    if not returns:
+        return None
+    return sum(returns) / len(returns)
+
+
 def _build_index(bars_by_symbol: Mapping[str, Sequence[Bar]]) -> dict[str, Any]:
     """Index bars by timestamp and expose a no-lookahead history accessor."""
     at: dict[str, dict[datetime, Bar]] = {}
