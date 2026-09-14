@@ -18,7 +18,7 @@ import { useDeslizarMes } from '../lib/deslizar';
 import { useVersionDatos } from '../lib/datos';
 import { verCategoria } from '../lib/verCategoria';
 import { CategoryBars, SplitBar, type CategorySlice } from '../components/Charts';
-import Cabecera from '../components/Cabecera';
+import BloqueDelMes from '../components/BloqueDelMes';
 import NuevoMovimiento from '../components/NuevoMovimiento';
 import { IconoAlerta, IconoBolsillo } from '../components/Icons';
 import { Avatar, FichaCategoria } from '../components/Fichas';
@@ -49,6 +49,14 @@ export default function Resumen() {
   const [buzones, setBuzones] = useState<number | null>(null);
   /** Cuánto debería haber en la cuenta del hogar. */
   const [reserve, setReserve] = useState<Reserve | null>(null);
+  /*
+   * Los últimos meses de gasto común, para la línea de fondo del bloque.
+   *
+   * Se pide aparte y sin bloquear: es decoración informativa, así que si la
+   * respuesta se demora o falla, el bloque se dibuja igual sin la silueta. Lo
+   * que no puede pasar es que la cifra del mes espere por un gráfico.
+   */
+  const [tendencia, setTendencia] = useState<number[] | undefined>(undefined);
   const [adding, setAdding] = useState(false);
   /*
    * Lo que se va a anotar al tocar el botón del encabezado, ya con el monto.
@@ -126,6 +134,13 @@ export default function Resumen() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    void api
+      .monthlyReport(6)
+      .then((r) => setTendencia(r.months.map((m) => m.shared)))
+      .catch(() => setTendencia(undefined));
+  }, [version]);
+
   const me = settlement?.members.find((m) => m.userId === user?.id);
 
   /*
@@ -142,201 +157,139 @@ export default function Resumen() {
       settlement.members.every((m) => m.contributed === 0),
   );
 
+  /*
+   * Lo que dice el bloque de arriba, resuelto antes de dibujarlo.
+   *
+   * Son cuatro situaciones distintas —un mes que no empezó, un hogar en cero,
+   * el mes corriendo, y el caso raro de no encontrarse a uno mismo en el
+   * reparto— y cada una cambia las cuatro cosas a la vez: la etiqueta, la
+   * cifra, la frase de apoyo y los botones. Decidirlas juntas acá, en vez de
+   * anidar cuatro ternarios dentro del JSX, es lo que permite leer de un
+   * vistazo qué dice la app en cada caso.
+   */
+  const proyeccionMia = proyeccion?.rows.find((r) => r.userId === user?.id);
+  const bloque = futuro
+    ? {
+        etiqueta: (proyeccionMia?.contributed ?? 0) > 0 ? 'Para quedar a mano' : 'Te va a tocar poner',
+        cifra: <Cifra valor={proyeccionMia?.pending ?? 0} moneda={currency} />,
+        apoyo: proyeccion
+          ? `Estimado sobre ${money(proyeccion.target, currency)} para el hogar, según ${proyeccion.basedOn}. Es una estimación, no una deuda: el mes no ha empezado.`
+          : 'Este mes todavía no empieza. Carga los sueldos y los gastos fijos para verlo estimado.',
+        acciones: null as React.ReactNode,
+      }
+    : sinDatos
+      ? {
+          /*
+           * El primer día.
+           *
+           * Con la base vacía la fórmula da cero y el encabezado anunciaba
+           * "PUSISTE DE MÁS — $0", una felicitación por no haber hecho nada.
+           */
+          etiqueta: 'Todavía no hay nada que repartir',
+          cifra: (
+            <span className="sin-cifra">
+              Cuando anoten el primer gasto común, acá va a decir cuánto le toca poner a cada uno.
+            </span>
+          ),
+          apoyo: null,
+          acciones: (
+            <>
+              <button className="primary" onClick={() => setAdding(true)}>Anotar un gasto</button>
+              <Link to="/liquidacion"><button className="ghost">Cargar los sueldos</button></Link>
+            </>
+          ),
+        }
+      : me
+        ? {
+            /*
+             * "Para quedar a mano" en vez de "te falta poner".
+             *
+             * Es la misma cifra, pero "falta" es una falta. La razón número uno
+             * por la que se abandona una app de presupuesto no es que sea fea:
+             * es que da vergüenza abrirla, y a la culpa se responde evitando.
+             * Una tarea con final —quedar a mano— no da vergüenza.
+             */
+            etiqueta: me.deviation < -0.5 ? 'Para quedar a mano' : 'Pusiste de más',
+            cifra: <Cifra valor={Math.abs(me.deviation)} moneda={currency} />,
+            apoyo:
+              me.deviation < -0.5
+                ? `De los ${money(me.fairShare, currency)} que te tocan este mes, llevas ${money(me.contributed, currency)}.`
+                : `Pusiste ${money(me.contributed, currency)} de los ${money(me.fairShare, currency)} que te tocaban.`,
+            /* El botón que hace lo que el número acaba de pedir, con el monto
+               puesto. Un toque en vez de tres pantallas. */
+            acciones:
+              me.deviation < -0.5 ? (
+                <>
+                  <button className="primary" onClick={() => setSaldando(Math.round(Math.abs(me.deviation)))}>
+                    Anotar {money(Math.abs(me.deviation), currency)}
+                  </button>
+                  <Link to="/liquidacion"><button className="ghost">Ver el reparto</button></Link>
+                </>
+              ) : null,
+          }
+        : {
+            etiqueta: 'Gastos comunes del mes',
+            cifra: <Cifra valor={settlement?.totalSharedExpenses ?? 0} moneda={currency} />,
+            apoyo: null,
+            acciones: null as React.ReactNode,
+          };
+
   return (
     <>
-      <Cabecera
+      <BloqueDelMes
         hogar={household?.name ?? 'Mi hogar'}
         month={month}
         onMonthChange={cambiarMes}
+        etiqueta={bloque.etiqueta}
+        cifra={bloque.cifra}
+        apoyo={bloque.apoyo}
+        tendencia={tendencia}
+        acciones={bloque.acciones}
       />
 
       {error && <div className="error">{error}</div>}
 
       {!settlement && <TarjetaCargando conCifra filas={2} />}
 
-      {/* En modo personal la pregunta es otra: no cuánto debo a la casa, sino
-          cuánto me queda después de todo, con el aporte al hogar descontado
-          como el gasto que es. */}
-      {esPersonal ? (
-        <div className="card principal">
-          {personal ? (
-            <>
-              <div className="label">
-                {personal.left >= 0 ? 'Te queda este mes' : 'Vas gastando de más'}
-              </div>
-              <Cifra
-                className="hero"
-                valor={Math.abs(personal.left)}
-                moneda={currency}
-                style={{ color: personal.left >= 0 ? 'var(--good-text)' : 'var(--critical)' }}
-              />
-              {personal.income > 0 ? (
-                <div className="muted">
-                  De {money(personal.income, currency)} de sueldo, {money(personal.contributedToHousehold, currency)}{' '}
-                  fueron a la casa y {money(personal.personalExpenses, currency)} a lo tuyo.
-                </div>
-              ) : (
-                <div className="muted">
-                  Falta declarar tu sueldo del mes en <Link to="/liquidacion">Reparto</Link> para saber cuánto te queda.
-                </div>
-              )}
+      {/*
+        * El reparto, ahora en su propia tarjeta.
+        *
+        * Antes vivía al pie de la tarjeta de la cifra. Con la cifra arriba en el
+        * bloque de marca, esto es otra cosa: la explicación de por qué a cada
+        * uno le toca lo que le toca. Se gana su tarjeta.
+        *
+        * Sin sueldos ni gastos no aparece: la barra diría "100%" sobre cero, que
+        * es una precisión sobre nada.
+        */}
+      {settlement && settlement.members.length > 0 && !sinDatos && (
+        <div className="card">
+          <div className="label" style={{ marginBottom: 8 }}>Reparto según sueldo</div>
+          <SplitBar
+            parts={settlement.members.map((m, i) => ({
+              name: m.name,
+              share: m.incomeShare,
+              color: i === 0 ? 'var(--series-1)' : 'var(--series-2)',
+            }))}
+          />
+          <div className="muted" style={{ marginTop: 2 }}>
+            {futuro
+              ? proyeccion
+                ? `Sobre ${money(proyeccion.target, currency)} estimados para el mes.`
+                : 'La proporción sale de los sueldos declarados.'
+              : `Sobre ${money(settlement.totalSharedExpenses, currency)} en gastos comunes del mes.`}
+          </div>
 
-              <div className="list" style={{ marginTop: 14 }}>
-                <div className="item">
-                  <div className="body"><div className="title">Sueldo</div></div>
-                  <div className="amount">{money(personal.income, currency)}</div>
-                </div>
-                <div className="item">
-                  <div className="body">
-                    <div className="title">A la casa</div>
-                    <div className="meta">Aportes y gastos comunes que pagaste tú</div>
-                  </div>
-                  <div className="amount">−{money(personal.contributedToHousehold, currency)}</div>
-                </div>
-                <div className="item">
-                  <div className="body"><div className="title">Tus gastos</div></div>
-                  <div className="amount">−{money(personal.personalExpenses, currency)}</div>
-                </div>
-              </div>
-
-              {personal.savingsRate != null && (
-                <div className="muted" style={{ marginTop: 10 }}>
-                  Estás guardando el {percent(personal.savingsRate)} de lo que ganas.
-                </div>
-              )}
-            </>
-          ) : (
-            <TarjetaCargando conCifra filas={2} />
+          {/* Esta línea se queda aunque el modo personal esté escondido: es la
+              única que da cuenta de la plata que se gastó y no entró al reparto.
+              Sacarla haría que un gasto anotado ayer no apareciera en ninguna
+              parte, que es exactamente lo que no puede pasar. Lo que se dejó de
+              nombrar es el modo; el hecho se sigue diciendo. */}
+          {settlement.totalPersonalExpenses > 0 && (
+            <div className="muted" style={{ marginTop: 10 }}>
+              Aparte, {money(settlement.totalPersonalExpenses, currency)} tuyos en gastos que no se reparten.
+            </div>
           )}
         </div>
-      ) : (
-      <div className="card principal">
-        {futuro ? (
-          <>
-            <div className="label">
-              {(proyeccion?.rows.find((r) => r.userId === user?.id)?.contributed ?? 0) > 0
-                ? 'Para quedar a mano'
-                : 'Te va a tocar poner'}
-            </div>
-            <Cifra
-              className="hero"
-              valor={proyeccion?.rows.find((r) => r.userId === user?.id)?.pending ?? 0}
-              moneda={currency}
-            />
-            <div className="muted">
-              {proyeccion
-                ? `Estimado sobre ${money(proyeccion.target, currency)} para el hogar, según ${proyeccion.basedOn}.`
-                : 'Este mes todavía no empieza. Carga los sueldos y los gastos fijos para verlo estimado.'}
-            </div>
-            <p className="muted" style={{ marginTop: 10, marginBottom: 0 }}>
-              Es una estimación, no una deuda: el mes no ha empezado. Sirve para saber cuánto apartar de un sueldo
-              que ya llegó.
-            </p>
-          </>
-        ) : sinDatos ? (
-          /*
-           * El primer día.
-           *
-           * Con la base vacía la fórmula da cero y el encabezado anunciaba
-           * "PUSISTE DE MÁS — $0" en verde, con "pusiste $0 de los $0 que te
-           * tocaban" debajo: una felicitación por no haber hecho nada. No es un
-           * error de cálculo, es que faltaba decidir qué decir cuando todavía no
-           * hay nada que decir.
-           */
-          <>
-            <div className="label">Todavía no hay nada que repartir</div>
-            <p className="hero-vacio">
-              Cuando anoten el primer gasto común, acá va a decir cuánto le toca
-              poner a cada uno.
-            </p>
-            <div className="hero-acciones">
-              <button className="primary" onClick={() => setAdding(true)}>Anotar un gasto</button>
-              <Link to="/liquidacion"><button className="ghost">Cargar los sueldos</button></Link>
-            </div>
-          </>
-        ) : me ? (
-          <>
-            {/* "Vas al día · $330.600" deja el número sin explicar: no es lo que
-                debes ni lo que gastaste, es lo que pusiste de más. */}
-            {/*
-               * "Para quedar a mano" en vez de "te falta poner".
-               *
-               * Es la misma cifra, pero "falta" es una falta. La razón número
-               * uno por la que se abandona una app de presupuesto no es que sea
-               * fea: es que da vergüenza abrirla, y a la culpa se responde
-               * evitando. Una tarea con final —quedar a mano— no da vergüenza.
-               */}
-            <div className="label">{me.deviation < -0.5 ? 'Para quedar a mano' : 'Pusiste de más'}</div>
-            <Cifra
-              className="hero"
-              valor={Math.abs(me.deviation)}
-              moneda={currency}
-              style={{
-                color:
-                  me.deviation < -0.5
-                    ? cerrado
-                      ? 'var(--critical)'
-                      : 'var(--text-primary)'
-                    : 'var(--good-text)',
-              }}
-            />
-            <div className="muted">
-              {me.deviation < -0.5
-                ? `De los ${money(me.fairShare, currency)} que te tocan este mes, llevas ${money(me.contributed, currency)}.`
-                : `Pusiste ${money(me.contributed, currency)} de los ${money(me.fairShare, currency)} que te tocaban.`}
-            </div>
-
-            {/* El botón que hace lo que el número acaba de pedir, con el monto
-                puesto. Un toque en vez de tres pantallas. */}
-            {me.deviation < -0.5 && (
-              <div className="hero-acciones">
-                <button className="primary" onClick={() => setSaldando(Math.round(Math.abs(me.deviation)))}>
-                  Anotar {money(Math.abs(me.deviation), currency)}
-                </button>
-                <Link to="/liquidacion"><button className="ghost">Ver el reparto</button></Link>
-              </div>
-            )}
-          </>
-        ) : (
-          <>
-            <div className="label">Gastos comunes del mes</div>
-            <Cifra className="hero" valor={settlement?.totalSharedExpenses ?? 0} moneda={currency} />
-          </>
-        )}
-
-        {/* Sin sueldos ni gastos, la barra dice "100%" sobre cero: una precisión
-            sobre nada. Aparece cuando hay algo que repartir. */}
-        {settlement && settlement.members.length > 0 && !sinDatos && (
-          <div style={{ marginTop: 16 }}>
-            <div className="label" style={{ marginBottom: 8 }}>Reparto según sueldo</div>
-            <SplitBar
-              parts={settlement.members.map((m, i) => ({
-                name: m.name,
-                share: m.incomeShare,
-                color: i === 0 ? 'var(--series-1)' : 'var(--series-2)',
-              }))}
-            />
-            <div className="muted" style={{ marginTop: 2 }}>
-              {futuro
-                ? proyeccion
-                  ? `Sobre ${money(proyeccion.target, currency)} estimados para el mes.`
-                  : 'La proporción sale de los sueldos declarados.'
-                : `Sobre ${money(settlement.totalSharedExpenses, currency)} en gastos comunes del mes.`}
-            </div>
-          </div>
-        )}
-
-        {/* Esta línea se queda aunque el modo personal esté escondido: es la
-            única que da cuenta de la plata que se gastó y no entró al reparto.
-            Sacarla haría que un gasto anotado ayer no apareciera en ninguna
-            parte, que es exactamente lo que no puede pasar. Lo que se dejó de
-            nombrar es el modo; el hecho se sigue diciendo. */}
-        {settlement && settlement.totalPersonalExpenses > 0 && (
-          <div className="muted" style={{ marginTop: 10 }}>
-            Aparte, {money(settlement.totalPersonalExpenses, currency)} tuyos en gastos que no se reparten.
-          </div>
-        )}
-      </div>
       )}
 
       {/*

@@ -45,10 +45,17 @@
   --plane: #f4f5f2;
   --text-primary: #141a16;
   --text-secondary: #4a544d;
-  /* Medido en pantalla contra --plane, que es el fondo más oscuro de los dos:
-     el gris de antes daba 2,87:1 y el mínimo legible (AA) es 4,5:1. Con éste
-     queda en 4,65:1 sin cambiar de tono. */
-  --text-muted: #69706a;
+  /*
+   * Calibrado contra el peor fondo de todos, que no es ninguna superficie
+   * neutra: es `--marca-suave`, el tinte verde de las tarjetas que proponen algo.
+   *
+   * Ajustarlo sólo contra `--plane` dejaba 4,65:1 ahí y menos de 4,5 en cuanto
+   * el fondo llevaba un tinte — pasó cuatro veces, en cuatro componentes
+   * distintos, y cada vez se arregló a mano en ese componente. Con este valor
+   * el token aguanta las tres superficies (4,60 sobre el tinte, 5,06 sobre el
+   * plano, 5,35 sobre la tarjeta) y el problema deja de volver.
+   */
+  --text-muted: #646a65;
   --grid: #dde0d9;
   --axis: #b9c0b8;
   --border: rgba(20, 26, 22, 0.1);
@@ -147,7 +154,7 @@
     --plane: #101410;
     --text-primary: #eef1ec;
     --text-secondary: #aab3ac;
-    --text-muted: #7f8a81; /* 4,67:1 contra --surface-1 */
+    --text-muted: #879289; /* 4,57:1 contra --marca-suave, que es el peor fondo */
     --grid: #2c332d;
     --axis: #3d453e;
     --border: rgba(238, 241, 236, 0.1);
@@ -175,7 +182,7 @@
   --plane: #101410;
   --text-primary: #eef1ec;
   --text-secondary: #aab3ac;
-  --text-muted: #7f8a81; /* 4,67:1 contra --surface-1 */
+  --text-muted: #879289; /* 4,57:1 contra --marca-suave, que es el peor fondo */
   --grid: #2c332d;
   --axis: #3d453e;
   --border: rgba(238, 241, 236, 0.1);
@@ -953,10 +960,15 @@ details.plegable > summary .resumen-dato {
  * más que una sola clase, y con `.hero-acciones button` el nowrap seguía
  * ganando. Es la misma colisión que ya rompió las fichas de categoría una vez.
  */
+/* Se reparten el ancho en vez de medirse por su texto. Con "Ordenarlos solo" y
+   "Verlos uno por uno" sumaban 369px en un contenedor de 324 y se apilaban, cada
+   uno ocupando la fila entera: dos botones gigantes donde iban dos normales. */
+.hero-acciones > * { flex: 1 1 0; min-width: 0; }
+.hero-acciones > a { text-decoration: none; }
 .hero-acciones button:not(.chip):not(.item) {
+  width: 100%;
   min-height: var(--tocable);
   white-space: normal;
-  max-width: 100%;
 }
 .hero-acciones > a { text-decoration: none; }
 
@@ -1542,6 +1554,219 @@ details.plegable > summary .resumen-dato {
 .cita-persona strong { font-size: var(--t-md); }
 .cita-persona .meta { font-size: var(--t-sm); color: var(--text-muted); }
 .cita-saldo { font-size: var(--t-sm); font-weight: 600; white-space: nowrap; }
+
+/* --------------------------- El bloque del mes --------------------------- */
+
+/*
+ * El color de marca sostiene la cifra.
+ *
+ * Es el patrón que comparten las cuatro apps de referencia —Copilot, Monarch,
+ * Empower y la chilena Kuanto— y no es la paleta: es que el color ocupa el
+ * borde superior y el número principal vive adentro, en blanco. Antes había una
+ * cabecera de 191px que no decía ninguna cifra y, debajo, una tarjeta blanca
+ * con el número: media pantalla para llegar a la respuesta.
+ *
+ * Sangra hasta los bordes y hasta arriba del todo —incluida la zona del notch,
+ * de ahí el padding con `safe-area-inset`— y se redondea sólo abajo, que es lo
+ * que lo hace leer como una pieza del teléfono y no como otra tarjeta más.
+ */
+.bloque-mes {
+  position: relative;
+  margin: calc(var(--e4) * -1) calc(var(--e4) * -1) var(--e4);
+  padding: calc(var(--e3) + env(safe-area-inset-top, 0px)) var(--e4) var(--e5);
+  background: linear-gradient(168deg, var(--marca) 0%, var(--seq-600) 100%);
+  border-radius: 0 0 26px 26px;
+  text-align: center;
+
+  /*
+   * Todo lo de adentro se pinta con estos dos, y no con los tokens globales.
+   *
+   * El fondo del bloque no es ninguna de las superficies de la app, así que
+   * `--text-primary` y compañía no aplican. `--sobre-acento` se redefine acá
+   * dentro a propósito: es lo que usan el logotipo y los botones para saber qué
+   * va encima de un relleno saturado, y así el mismo componente funciona sobre
+   * el verde sin escribir una versión aparte.
+   */
+  --en-bloque: #fff;
+  --velo: rgba(255, 255, 255, 0.16);
+  --sobre-acento: var(--en-bloque);
+  color: var(--en-bloque);
+}
+
+.bloque-top {
+  display: flex;
+  align-items: center;
+  gap: var(--e3);
+  text-align: left;
+}
+.bloque-top strong {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--display);
+  font-size: var(--t-lg);
+  letter-spacing: -0.015em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* El logotipo pinta su baldosa con `--marca`; acá se le pasa un blanco
+   translúcido y el mismo componente sirve sobre el verde sin una versión
+   aparte. Los trazos ya usan `--sobre-acento`, que sigue siendo blanco. */
+.bloque-logo {
+  flex: none;
+  display: inline-flex;
+  --marca: var(--velo);
+}
+
+/* El mes, adentro y centrado: es contexto de la cifra, no una preferencia de
+   la app. "$3.181 de septiembre" es una sola idea, no dos controles. */
+.bloque-selector {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--e1);
+  margin-top: var(--e4);
+}
+.bloque-selector button {
+  width: var(--tocable);
+  min-height: var(--tocable);
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--en-bloque);
+  font-size: var(--cifra-sm);
+  line-height: 1;
+  box-shadow: none;
+}
+.bloque-selector button:hover:not(:disabled) { background: var(--velo); }
+.bloque-selector button:disabled { opacity: 0.35; }
+.bloque-mes-actual {
+  font-family: var(--display);
+  font-size: var(--t-md);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  opacity: 0.92;
+}
+.bloque-porvenir {
+  margin-left: var(--e2);
+  padding: 2px var(--e2);
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--en-bloque) 40%, transparent);
+  font-size: var(--t-xs);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.bloque-etiqueta {
+  margin: var(--e4) 0 0;
+  font-size: var(--t-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.78;
+}
+
+.bloque-cifra {
+  font-family: var(--display);
+  font-size: var(--cifra-lg);
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.035em;
+  font-variant-numeric: tabular-nums;
+  margin-top: var(--e1);
+}
+/* Cuando todavía no hay número, el lugar del número lo ocupa una frase; no
+   puede heredar el tamaño de una cifra o grita. */
+.bloque-cifra.sin-cifra {
+  font-size: var(--t-lg);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  max-width: 28ch;
+  margin-inline: auto;
+}
+
+.bloque-apoyo {
+  margin: var(--e2) auto 0;
+  max-width: 34ch;
+  font-size: var(--t-sm);
+  opacity: 0.82;
+}
+
+/* La silueta de los últimos meses: textura con forma de dato. Sangra a los
+   costados para que la línea muera en los bordes y no dentro de un recuadro. */
+.bloque-silueta {
+  display: block;
+  width: calc(100% + var(--e4) * 2);
+  height: 44px;
+  margin: var(--e4) calc(var(--e4) * -1) 0;
+}
+
+.bloque-acciones {
+  display: flex;
+  gap: var(--e2);
+  margin-top: var(--e4);
+}
+.bloque-acciones > * { flex: 1 1 0; min-width: 0; }
+.bloque-acciones a { text-decoration: none; display: block; }
+/* Mismo peso de selector que el nowrap general de los botones, o las etiquetas
+   largas no se pueden cortar y estiran el bloque a lo ancho. */
+.bloque-acciones button:not(.chip):not(.item) {
+  width: 100%;
+  min-height: var(--tocable);
+  border: none;
+  border-radius: 12px;
+  font-weight: 600;
+  white-space: normal;
+  box-shadow: none;
+}
+/* El primario se invierte: sobre el verde, el relleno claro es lo que resalta.
+   El verde de marca encima del verde de marca no se vería. */
+.bloque-acciones button.primary {
+  background: var(--en-bloque);
+  color: var(--seq-600);
+}
+.bloque-acciones button.ghost {
+  background: var(--velo);
+  color: var(--en-bloque);
+}
+.bloque-acciones button:focus-visible {
+  outline: 2px solid var(--en-bloque);
+  outline-offset: 2px;
+}
+
+/*
+ * En oscuro, el verde de marca es el claro (#7fb69e): un bloque de media
+ * pantalla de ese color sobre fondo negro encandila a las once de la noche, que
+ * es cuando se abre una app de gastos. Así que el bloque se hace oscuro —del
+ * verde hondo al plano— y el texto de adentro se aclara. El degradado va en el
+ * mismo sentido, sólo cambian los extremos.
+ *
+ * Basta con redefinir los dos tokens del bloque: todo lo de adentro los usa.
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .bloque-mes {
+    background: linear-gradient(168deg, var(--seq-100) 0%, var(--plane) 100%);
+    --en-bloque: var(--text-primary);
+    --velo: rgba(255, 255, 255, 0.09);
+  }
+  /* Acá el relleno claro sí puede ser el verde de marca, porque el bloque es
+     oscuro; y encima va el mismo negro que en cualquier otro botón primario. */
+  :root:not([data-theme='light']) .bloque-acciones button.primary {
+    background: var(--marca);
+    color: #0f1611;
+  }
+}
+:root[data-theme='dark'] .bloque-mes {
+  background: linear-gradient(168deg, var(--seq-100) 0%, var(--plane) 100%);
+  --en-bloque: var(--text-primary);
+  --velo: rgba(255, 255, 255, 0.09);
+}
+:root[data-theme='dark'] .bloque-acciones button.primary {
+  background: var(--marca);
+  color: #0f1611;
+}
 
 /* ------------------------------- Cabecera -------------------------------- */
 

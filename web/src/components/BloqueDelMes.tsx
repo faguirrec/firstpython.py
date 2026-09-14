@@ -76,7 +76,9 @@ export default function BloqueDelMes({
       <div className="bloque-cifra">{cifra}</div>
       {apoyo && <p className="bloque-apoyo">{apoyo}</p>}
 
-      {tendencia && tendencia.length > 1 && <Silueta valores={tendencia} />}
+      {/* Con menos de tres meses no hay silueta que dibujar: dos puntos son una
+          recta, y una recta acá se lee como "viene parejo" sin serlo. */}
+      {tendencia && tendencia.length >= 3 && <Silueta valores={tendencia} />}
 
       {acciones && <div className="bloque-acciones">{acciones}</div>}
     </header>
@@ -93,8 +95,16 @@ export default function BloqueDelMes({
 function Silueta({ valores }: { valores: number[] }) {
   const ancho = 320;
   const alto = 44;
-  const max = Math.max(...valores, 1);
-  const min = Math.min(...valores, 0);
+  /*
+   * La escala va del menor al mayor de la serie, no desde cero.
+   *
+   * Anclada en cero, dos meses de $673.790 y $715.290 salían los dos pegados al
+   * borde de arriba: una línea plana que decía "no pasa nada" cuando sí pasó.
+   * Acá no hay eje ni etiquetas, así que la única información que la silueta
+   * puede dar es la forma, y la forma tiene que ser la de verdad.
+   */
+  const max = Math.max(...valores);
+  const min = Math.min(...valores);
   const rango = max - min || 1;
   // Se deja aire arriba y abajo para que ni el pico ni el valle toquen el borde.
   const y = (v: number) => alto - 6 - ((v - min) / rango) * (alto - 14);

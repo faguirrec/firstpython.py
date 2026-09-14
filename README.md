@@ -141,6 +141,16 @@ del día al lado, y filtrados con fichas —*Por revisar*, *Comunes*, *Sin
 categoría*, cada categoría— en vez de menús desplegables, que escondían cuál
 estaba puesto.
 
+**El bloque de marca.** El Resumen abre con un bloque verde que sangra hasta el
+borde superior y lleva adentro el nombre del hogar, el mes, la cifra que resume
+el mes, la silueta de los últimos meses y los botones. Es el patrón que
+comparten las apps de plata que la gente sí usa —Copilot, Monarch, Empower, la
+chilena Kuanto—, y lo que comparten no es la paleta (son azul, magenta, claro y
+morado): es que el color de marca ocupa el borde de arriba y el número vive
+adentro. Antes había una cabecera de 191px que no decía ninguna cifra y, debajo,
+una tarjeta blanca con el número: la respuesta empezaba a 649px de una pantalla
+de 844. Ahora empieza a 139.
+
 **La respuesta primero, y con su botón.** El Resumen abre con la cifra del mes;
 lo que falta por configurar va debajo, plegado en una línea. Y donde dice "para
 quedar a mano — $3.181" hay un botón que anota justo esos $3.181: decir qué hay
