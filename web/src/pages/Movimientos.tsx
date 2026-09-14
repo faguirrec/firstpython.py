@@ -4,11 +4,13 @@ import { api, type Category, type Transaction } from '../lib/api';
 import { useSession } from '../lib/session';
 import { diaLargo, money, monthLabel } from '../lib/format';
 import { cambiarMes, useMes } from '../lib/mes';
+import { useDeslizarMes } from '../lib/deslizar';
 import { useVersionDatos } from '../lib/datos';
 import Cabecera from '../components/Cabecera';
 import NuevoMovimiento from '../components/NuevoMovimiento';
 import Sheet from '../components/Sheet';
 import { FichaCategoria } from '../components/Fichas';
+import FilaDeslizable from '../components/FilaDeslizable';
 
 export default function Movimientos() {
   const { household } = useSession();
@@ -37,6 +39,9 @@ export default function Movimientos() {
   const month = mesCompartido;
   // Sube cuando se anota algo desde el botón flotante, que vive fuera de acá.
   const version = useVersionDatos();
+  // Deslizar de lado cambia de mes, para no obligar a estirar el pulgar
+  // hasta las flechas de la cabecera.
+  useDeslizarMes(month, !onlyPending);
   const [search, setSearch] = useState('');
 
   /** Cambia un filtro dejando los demás donde estaban. */
@@ -84,26 +89,14 @@ export default function Movimientos() {
     void api.categories().then((c) => setCategories(c.categories));
   }, []);
 
-  /*
-   * Traer a la vista la ficha de la categoría que está puesta.
-   *
-   * Al entrar desde una barra del desglose, la ficha marcada suele quedar fuera
-   * de la tira —hay doce categorías y caben tres—, así que la fila se veía sin
-   * nada elegido justo cuando sí había un filtro. Se mueve sólo la tira, no la
-   * página: `block: 'nearest'` evita que el teléfono salte al hacer scroll.
-   */
-  const tiraCategorias = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!categoryId || !tiraCategorias.current) return;
-    const activa = tiraCategorias.current.querySelector('.filtro-chip.activo');
-    activa?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
-  }, [categoryId, categories.length]);
+  /** La hoja para elegir categoría, que reemplazó a la tira de catorce fichas. */
+  const [eligiendoCategoria, setEligiendoCategoria] = useState(false);
 
   const total = rows.filter((r) => r.type === 'gasto').reduce((a, b) => a + b.amount, 0);
 
-  /* Cómo se llama lo que se está viendo, para poder decirlo y no sólo pintarlo
-     de verde en una ficha a media pantalla de distancia. */
-  const categoriaVista = categoryId
+  /* Cómo se llama lo que se está viendo, para poder decirlo en el botón del
+     filtro y en el encabezado, en vez de sólo pintarlo de verde. */
+  const categoriaVista: { name: string; emoji: string; color?: string | null } | null = categoryId
     ? categoryId === 'sin'
       ? { name: 'Sin categoría', emoji: '❓' }
       : categories.find((c) => c.id === categoryId) ?? null
@@ -217,31 +210,32 @@ export default function Movimientos() {
           </button>
         </div>
 
-        <div className="chips-fila" role="group" aria-label="Filtrar por categoría" ref={tiraCategorias}>
-          <button
-            className={`filtro-chip ${!categoryId ? 'activo' : ''}`}
-            onClick={() => ponerFiltro({ categoria: null })}
-          >
-            Todas
-          </button>
-          {/* Los que no tienen categoría son los que hay que ir a arreglar, así
-              que se pueden pedir como cualquier otra. */}
-          <button
-            className={`filtro-chip ${categoryId === 'sin' ? 'activo' : ''}`}
-            onClick={() => ponerFiltro({ categoria: categoryId === 'sin' ? null : 'sin' })}
-          >
-            <span aria-hidden="true">❓</span> Sin categoría
-          </button>
-          {categories.map((c) => (
-            <button
-              key={c.id}
-              className={`filtro-chip ${categoryId === c.id ? 'activo' : ''}`}
-              onClick={() => ponerFiltro({ categoria: categoryId === c.id ? null : c.id })}
-            >
-              <span aria-hidden="true">{c.emoji}</span> {c.name}
-            </button>
-          ))}
-        </div>
+        {/*
+          * Las categorías, detrás de un botón.
+          *
+          * Eran catorce fichas en una tira que había que recorrer de lado, y
+          * junto con el resto dejaban 39 controles en una pantalla que es, al
+          * final, una lista. Desde que se puede llegar acá filtrado tocando una
+          * barra del desglose, ése pasó a ser el camino principal y la tira
+          * dejó de ganarse el espacio permanente. El filtro puesto se sigue
+          * viendo sin abrir nada: lo dice el botón.
+          */}
+        <button
+          className={`filtro-categoria ${categoriaVista ? 'activo' : ''}`}
+          onClick={() => setEligiendoCategoria(true)}
+        >
+          <span className="filtro-categoria-etiqueta">Categoría</span>
+          <span className="filtro-categoria-valor">
+            {categoriaVista ? (
+              <>
+                <span aria-hidden="true">{categoriaVista.emoji}</span> {categoriaVista.name}
+              </>
+            ) : (
+              'Todas'
+            )}
+          </span>
+          <span className="filtro-categoria-flecha" aria-hidden="true">›</span>
+        </button>
       </div>
 
       {error && <div className="error">{error}</div>}
@@ -293,10 +287,21 @@ export default function Movimientos() {
 
             <div className="list">
               {grupo.movimientos.map((t) => (
-                <button
+                <FilaDeslizable
                   key={t.id}
-                  className="item ghost fila-movimiento"
                   onClick={() => setDetail(t)}
+                  acciones={
+                    <>
+                      <button className="fila-accion" onClick={() => setEditing(t)}>
+                        <span aria-hidden="true">✎</span>
+                        Editar
+                      </button>
+                      <button className="fila-accion borrar" onClick={() => void remove(t)}>
+                        <span aria-hidden="true">✕</span>
+                        Borrar
+                      </button>
+                    </>
+                  }
                 >
                   <FichaCategoria emoji={t.categoryEmoji} color={t.categoryColor} />
                   <div className="body">
@@ -320,7 +325,7 @@ export default function Movimientos() {
                     {t.type === 'aporte' ? '+' : ''}
                     {money(t.amount, currency)}
                   </div>
-                </button>
+                </FilaDeslizable>
               ))}
             </div>
           </div>
@@ -377,6 +382,43 @@ export default function Movimientos() {
               </button>
             )}
             <button className="danger" onClick={() => void remove(detail)}>Borrar</button>
+          </div>
+        </Sheet>
+      )}
+
+      {/* Elegir categoría: la lista completa, en vertical y con nombres enteros.
+          En la tira los nombres largos había que adivinarlos por el emoji. */}
+      {eligiendoCategoria && (
+        <Sheet title="Filtrar por categoría" onClose={() => setEligiendoCategoria(false)}>
+          <div className="list lista-categorias">
+            <button
+              className={`item ghost ${!categoryId ? 'elegida' : ''}`}
+              onClick={() => { ponerFiltro({ categoria: null }); setEligiendoCategoria(false); }}
+            >
+              <div className="body"><div className="title">Todas las categorías</div></div>
+              {!categoryId && <span aria-hidden="true">✓</span>}
+            </button>
+            {/* Los que entraron sin categoría son los que hay que ir a arreglar:
+                se piden como cualquier otra. */}
+            <button
+              className={`item ghost ${categoryId === 'sin' ? 'elegida' : ''}`}
+              onClick={() => { ponerFiltro({ categoria: 'sin' }); setEligiendoCategoria(false); }}
+            >
+              <FichaCategoria emoji="❓" color={null} />
+              <div className="body"><div className="title">Sin categoría</div></div>
+              {categoryId === 'sin' && <span aria-hidden="true">✓</span>}
+            </button>
+            {categories.map((c) => (
+              <button
+                key={c.id}
+                className={`item ghost ${categoryId === c.id ? 'elegida' : ''}`}
+                onClick={() => { ponerFiltro({ categoria: c.id }); setEligiendoCategoria(false); }}
+              >
+                <FichaCategoria emoji={c.emoji} color={c.color} />
+                <div className="body"><div className="title">{c.name}</div></div>
+                {categoryId === c.id && <span aria-hidden="true">✓</span>}
+              </button>
+            ))}
           </div>
         </Sheet>
       )}

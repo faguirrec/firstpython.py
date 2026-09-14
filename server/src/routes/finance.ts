@@ -27,6 +27,7 @@ import {
   listarGastosFijos,
 } from '../services/gastosFijos.js';
 import { compareMonths, computeBudgetStatus, computeGoals } from '../services/planning.js';
+import { cierreDelMes } from '../services/cierreDelMes.js';
 
 export const financeRouter = Router();
 financeRouter.use(requireAuth, requireHousehold);
@@ -119,6 +120,22 @@ financeRouter.get('/settlement/excedente', (req, res) => {
     return;
   }
   res.json(repartoDelExcedente(req.household!.id, month.data, req.household!.currency));
+});
+
+/**
+ * El mes contado para leerlo de a dos, antes de cerrarlo.
+ *
+ * Va aparte del cierre a propósito: se puede leer sin cerrar nada y sin
+ * comprometerse a nada. Lo que hace es juntar en una sola lectura lo que hoy
+ * está repartido en cuatro pantallas de gráficos.
+ */
+financeRouter.get('/settlement/cierre', (req, res) => {
+  const month = monthSchema.safeParse(req.query.month ?? currentMonth());
+  if (!month.success) {
+    res.status(400).json({ error: month.error.issues[0].message });
+    return;
+  }
+  res.json(cierreDelMes(req.household!.id, month.data, req.household!.currency));
 });
 
 /**

@@ -198,6 +198,10 @@
 
 * { box-sizing: border-box; }
 
+/* El contenedor que scrollea de verdad también tiene que contener el rebote
+   lateral, o el navegador se queda igual con el gesto. */
+html { overscroll-behavior-x: contain; }
+
 body {
   margin: 0;
   background: var(--plane);
@@ -210,6 +214,11 @@ body {
   line-height: 1.45;
   /* Evita el rebote elástico raro cuando corre como app instalada en iOS. */
   overscroll-behavior-y: none;
+  /* Y que un deslizamiento lateral dentro de la app dispare el "atrás" del
+     navegador: en el navegador el gesto de mes se comía la navegación y la
+     pestaña se iba a la página anterior. El borde izquierdo sigue siendo del
+     sistema —ver el guardado de `deslizar.ts`—, que es lo correcto. */
+  overscroll-behavior-x: contain;
 }
 
 /* Los títulos y las cifras llevan la cara de la marca. El cuerpo no: a 13px la
@@ -923,6 +932,79 @@ details.plegable > summary .resumen-dato {
 .card.viendo .meta { font-size: var(--t-sm); color: var(--text-secondary); }
 
 /*
+ * Lo que se puede hacer con la cifra que se acaba de leer.
+ *
+ * Va pegado al número y no al pie de la tarjeta: la distancia entre el dato y
+ * la acción es lo que decide si la acción existe. El primario ocupa el ancho
+ * que necesita y el secundario lo acompaña; en pantalla angosta se apilan.
+ */
+.hero-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e2);
+  margin-top: var(--e4);
+}
+/*
+ * Las etiquetas acá pueden ser largas —"Usarlo como estimado del mes"— y a
+ * 320px no caben en una línea. El nowrap general de los botones está pensado
+ * para etiquetas cortas tipo "Cerrar mes"; acá estorba y estiraba la página.
+ *
+ * El selector repite `:not()` a propósito: `button:not(.chip):not(.item)` pesa
+ * más que una sola clase, y con `.hero-acciones button` el nowrap seguía
+ * ganando. Es la misma colisión que ya rompió las fichas de categoría una vez.
+ */
+.hero-acciones button:not(.chip):not(.item) {
+  min-height: var(--tocable);
+  white-space: normal;
+  max-width: 100%;
+}
+.hero-acciones > a { text-decoration: none; }
+
+/*
+ * Regla general: sobre un fondo teñido, el gris apagado no alcanza.
+ *
+ * `--text-muted` está calibrado contra las superficies neutras. Cualquier
+ * tarjeta con un tinte de marca encima lo deja bajo el mínimo legible —medido:
+ * 4,1:1 y 4,2:1, contra 4,5 que hace falta—. Ya pasó tres veces con tres
+ * componentes distintos, así que va acá una vez y no en cada uno.
+ */
+.card.viendo .muted,
+.card.por-arreglar .muted,
+.leer-el-mes .meta,
+.filtro-categoria.activo .filtro-categoria-etiqueta,
+.filtro-categoria.activo .filtro-categoria-flecha,
+.sin-tope .muted {
+  color: var(--text-secondary);
+}
+
+/*
+ * Una tarea pendiente, con su botón.
+ *
+ * Se distingue de las tarjetas que informan sin llegar a ser una alerta: no
+ * pasó nada malo, hay algo que hacer. Por eso el borde de marca y no el ámbar.
+ */
+.card.por-arreglar {
+  border-color: color-mix(in srgb, var(--marca) 40%, transparent);
+  background: color-mix(in srgb, var(--marca) 5%, var(--surface-1));
+}
+
+/* Las categorías que gastan sin tope, al pie de la lista. */
+.sin-tope {
+  margin-top: var(--e4);
+  padding-top: var(--e3);
+  border-top: 1px solid var(--grid);
+}
+.sin-tope p { font-size: var(--t-sm); margin-bottom: var(--e2); }
+
+/* El texto que ocupa el lugar de la cifra cuando todavía no hay cifra. */
+.hero-vacio {
+  font-size: var(--t-md);
+  color: var(--text-secondary);
+  margin: var(--e2) 0 0;
+  max-width: 34ch;
+}
+
+/*
  * Una barra del desglose que se puede abrir.
  *
  * El área táctil llega a 44px por el padding, aunque la barra dibujada siga
@@ -1119,6 +1201,25 @@ details.plegable > summary .resumen-dato {
   margin-bottom: var(--e4);
 }
 
+/*
+ * La línea que reemplaza a la tarjeta desplegada: las tres barras de avance y
+ * el contador, en el renglón del título. Dice lo mismo en una línea en vez de
+ * en 168 píxeles.
+ */
+.primeros-pasos > summary .resumen-pasos {
+  display: flex;
+  align-items: center;
+  gap: var(--e3);
+  margin-top: var(--e2);
+}
+.primeros-pasos > summary .pasos-progreso {
+  margin-bottom: 0;
+  flex: 1;
+  max-width: 140px;
+}
+.primeros-pasos > summary .muted { display: inline; margin-top: 0; font-size: var(--t-sm); }
+.primeros-pasos[open] > summary .resumen-pasos { margin-bottom: var(--e3); }
+
 .pasos-progreso span {
   flex: 1;
   height: 4px;
@@ -1247,6 +1348,53 @@ details.plegable > summary .resumen-dato {
 
 .filtro-chip:active { transform: scale(0.96); }
 
+/*
+ * El filtro de categoría, ahora un solo control.
+ *
+ * Dice lo que está puesto sin tener que abrirlo, que era la única ventaja de la
+ * tira de fichas sobre un desplegable. Lo demás —catorce blancos que había que
+ * recorrer de lado para encontrar uno— se lo lleva la hoja.
+ */
+.filtro-categoria {
+  display: flex;
+  align-items: center;
+  gap: var(--e3);
+  width: 100%;
+  min-height: var(--tocable);
+  padding: var(--e2) var(--e3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  text-align: left;
+}
+.filtro-categoria.activo {
+  border-color: var(--marca);
+  background: var(--marca-suave);
+}
+.filtro-categoria-etiqueta {
+  font-size: var(--t-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  flex: none;
+}
+.filtro-categoria-valor {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--t-md);
+  font-weight: 600;
+  text-align: right;
+}
+.filtro-categoria-flecha { color: var(--text-muted); flex: none; font-size: var(--t-lg); }
+
+/* La lista de la hoja: nombres enteros, uno por línea. */
+.lista-categorias .item { width: 100%; text-align: left; border-radius: var(--radius-sm); }
+.lista-categorias .item.elegida { background: var(--marca-suave); font-weight: 600; }
+.lista-categorias .item > span { color: var(--marca); font-weight: 700; }
+
 /* -------------------------- Movimientos por día -------------------------- */
 
 /*
@@ -1285,6 +1433,115 @@ details.plegable > summary .resumen-dato {
   border-bottom: 1px solid var(--grid);
   border-radius: 0;
 }
+
+/*
+ * Una fila que se desliza para dejar ver sus acciones.
+ *
+ * El panel va debajo y quieto; lo que se mueve es la fila. Al revés —el panel
+ * entrando desde el borde— hay que sincronizar dos animaciones y en un teléfono
+ * lento se ve el corte entre las dos.
+ */
+.fila-deslizable {
+  position: relative;
+  overflow: hidden;
+  border-bottom: 1px solid var(--grid);
+}
+.fila-deslizable:last-child { border-bottom: none; }
+
+.fila-acciones {
+  position: absolute;
+  inset: 0 0 0 auto;
+  display: flex;
+  align-items: stretch;
+}
+
+.fila-accion {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  width: 66px;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-size: var(--t-xs);
+  font-weight: 600;
+  background: var(--plane);
+  color: var(--text-secondary);
+}
+.fila-accion span { font-size: var(--t-lg); line-height: 1; }
+.fila-accion.borrar { background: var(--critical); color: var(--sobre-acento); }
+
+.fila-frente {
+  position: relative;
+  background: var(--surface-1);
+  transition: transform 220ms cubic-bezier(0.2, 0.8, 0.25, 1);
+  will-change: transform;
+}
+/* La fila de adentro ya no dibuja su propia línea: la pone el contenedor, que
+   es el que abarca también el panel de acciones. */
+.fila-frente .fila-movimiento { border-bottom: none; }
+
+/* Sin dedos que deslizar, las acciones no se pueden alcanzar: en escritorio la
+   fila se abre al pasar el mouse por encima. */
+@media (hover: hover) and (pointer: fine) {
+  .fila-deslizable:hover .fila-frente,
+  .fila-deslizable:focus-within .fila-frente { transform: translateX(-132px); }
+}
+
+/* ------------------------- La cita de fin de mes ------------------------- */
+
+/*
+ * La invitación a leer el mes, arriba del botón de cerrar.
+ *
+ * No compite con el primario: es una fila ancha con el tono de la marca en el
+ * borde, del mismo alto que cualquier control tocable. Lo que ofrece es leer,
+ * no decidir, y tiene que verse así.
+ */
+/* Mismo peso que el nowrap general de los botones, o el subtítulo no puede
+   cortarse y estira la página a lo ancho. */
+.leer-el-mes:not(.chip):not(.item) {
+  display: flex;
+  align-items: center;
+  gap: var(--e3);
+  width: 100%;
+  text-align: left;
+  min-height: var(--tocable);
+  padding: var(--e3);
+  margin-bottom: var(--e3);
+  border: 1px solid color-mix(in srgb, var(--marca) 45%, transparent);
+  background: var(--marca-suave);
+  border-radius: var(--radius-sm);
+  white-space: normal;
+}
+/* Cuando va suelta en el Resumen es una tarjeta más de la columna. */
+.card.leer-el-mes { margin-bottom: var(--e4); }
+.leer-el-mes-texto { flex: 1; min-width: 0; }
+.leer-el-mes strong { display: block; font-family: var(--display); font-size: var(--t-md); }
+.leer-el-mes .meta { display: block; font-size: var(--t-sm); color: var(--text-secondary); margin-top: 2px; }
+.leer-el-mes > span[aria-hidden] { color: var(--marca); font-size: var(--cifra-sm); flex: none; }
+
+/* La lectura: bloques separados por aire, no por tarjetas. Son partes de un
+   mismo texto y encerrar cada una en su caja lo partiría en fichas sueltas. */
+.cita-bloque { padding-block: var(--e4); border-top: 1px solid var(--grid); }
+.cita-bloque:first-child { border-top: none; padding-top: 0; }
+.cita-bloque h3 { font-size: var(--t-md); margin-bottom: var(--e2); }
+.cita-bloque .hero { margin-block: var(--e1) var(--e2); }
+.cita-bloque .label { margin-bottom: 0; }
+
+.cita-personas { display: grid; gap: var(--e2); }
+.cita-persona {
+  display: flex;
+  align-items: center;
+  gap: var(--e3);
+  padding: var(--e2) 0;
+}
+.cita-persona > div { flex: 1; min-width: 0; }
+.cita-persona strong { font-size: var(--t-md); }
+.cita-persona .meta { font-size: var(--t-sm); color: var(--text-muted); }
+.cita-saldo { font-size: var(--t-sm); font-weight: 600; white-space: nowrap; }
 
 /* ------------------------------- Cabecera -------------------------------- */
 

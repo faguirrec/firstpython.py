@@ -272,7 +272,7 @@ export type Comparison = {
   biggestDecreases: CategoryChange[];
 };
 
-function shiftMonth(month: string, delta: number): string {
+export function shiftMonth(month: string, delta: number): string {
   const [year, m] = month.split('-').map(Number);
   const d = new Date(year, m - 1 + delta, 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;

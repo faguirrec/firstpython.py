@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react';
-import { Navigate, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useSession } from '../lib/session';
 import { money, monthLabel } from '../lib/format';
 import { cambiarMes, useMes } from '../lib/mes';
-import { useVersionDatos } from '../lib/datos';
+import { useDeslizarMes } from '../lib/deslizar';
+import { datosCambiaron, useVersionDatos } from '../lib/datos';
+import { avisar, avisarError } from '../lib/aviso';
 import { CategoryBars, TrendChart, type CategorySlice, type TrendPoint } from '../components/Charts';
 import { verCategoria } from '../lib/verCategoria';
+import PorArreglar from '../components/PorArreglar';
 import Cabecera from '../components/Cabecera';
 import Presupuesto from '../components/Presupuesto';
 import Comparacion from '../components/Comparacion';
@@ -35,6 +38,9 @@ export default function Reportes() {
   const vista: Vista = VISTAS.some((v) => v.key === pedida) ? pedida! : 'presupuesto';
   const setVista = (v: Vista) => setParams(v === 'presupuesto' ? {} : { vista: v }, { replace: true });
   const month = useMes();
+  // Deslizar de lado cambia de mes, para no obligar a estirar el pulgar
+  // hasta las flechas de la cabecera.
+  useDeslizarMes(month, vista !== 'tendencia');
 
   return (
     <>
@@ -52,6 +58,10 @@ export default function Reportes() {
         ))}
       </div>
 
+      {/* Antes de cualquier gráfico: lo que hay que ordenar para que los
+          gráficos digan la verdad. */}
+      {vista !== 'tendencia' && <PorArreglar month={month} />}
+
       {vista === 'presupuesto' && <Presupuesto month={month} />}
       {vista === 'fijos' && <GastosFijos month={month} />}
       {vista === 'comparacion' && <Comparacion month={month} />}
@@ -68,7 +78,11 @@ function Tendencia() {
   const version = useVersionDatos();
   const [months, setMonths] = useState<(TrendPoint & { income: number; personal: number })[]>([]);
   const [categories, setCategories] = useState<CategorySlice[]>([]);
+  const [guardandoEstimado, setGuardandoEstimado] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Tendencia mira el historial completo y no tiene selector de mes propio: el
+  // estimado se guarda para el mes en que uno está parado.
+  const mesActual = useMes();
 
   useEffect(() => {
     void (async () => {
@@ -111,6 +125,37 @@ function Tendencia() {
                 {' '}· {delta > 0 ? '▲' : '▼'} {Math.abs(delta * 100).toFixed(0)}% vs. el mes anterior
               </span>
             )}
+          </div>
+        )}
+        {/*
+          * La única decisión que este número permite tomar.
+          *
+          * El promedio de los últimos meses es la mejor estimación de lo que va
+          * a costar el que viene, y Reparto la usa para decir cuánto transferir.
+          * Hasta acá había que mirarla, memorizarla e ir a escribirla a mano en
+          * otra pantalla.
+          */}
+        {average > 0 && (
+          <div className="hero-acciones">
+            <button
+              className="primary"
+              disabled={guardandoEstimado}
+              onClick={async () => {
+                setGuardandoEstimado(true);
+                try {
+                  await api.guardarGastoEstimado({ month: mesActual, amount: Math.round(average) });
+                  avisar(`Estimado de ${monthLabel(mesActual)}: ${money(Math.round(average), currency)}.`);
+                  datosCambiaron();
+                } catch (err) {
+                  avisarError((err as Error).message);
+                } finally {
+                  setGuardandoEstimado(false);
+                }
+              }}
+            >
+              Usarlo como estimado del mes
+            </button>
+            <Link to="/liquidacion"><button className="ghost">Ver el reparto</button></Link>
           </div>
         )}
       </div>

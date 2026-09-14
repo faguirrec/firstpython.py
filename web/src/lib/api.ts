@@ -306,6 +306,26 @@ export type ResumenPersonal = {
   savingsRate: number | null;
 };
 
+/** El mes contado para leerlo de a dos, antes de cerrarlo. */
+export type CierreDelMes = {
+  month: string;
+  previousMonth: string;
+  nextMonth: string;
+  total: number;
+  promedio: number;
+  contraPromedio: number;
+  mesesDeHistoria: number;
+  subio: { categoryId: string | null; category: string; emoji: string; delta: number } | null;
+  bajo: { categoryId: string | null; category: string; emoji: string; delta: number } | null;
+  elGrande: {
+    id: string; amount: number; merchant: string | null; description: string | null;
+    occurredOn: string; categoryName: string | null; categoryEmoji: string | null;
+  } | null;
+  personas: { userId: string; name: string; fairShare: number; contributed: number; deviation: number }[];
+  automaticos: { porCorreo: number; total: number };
+  loQueViene: { fijos: number; total: number };
+};
+
 export type CategoryChange = {
   /** null en "Sin categoría"; sirve para abrir la lista de esa categoría. */
   categoryId: string | null;
@@ -443,6 +463,7 @@ export const api = {
   settlement: (month: string) => get<Settlement>(`/finance/settlement?month=${month}`),
   excedenteDelMes: (month: string) =>
     get<RepartoExcedente>(`/finance/settlement/excedente?month=${month}`),
+  cierreDelMes: (month: string) => get<CierreDelMes>(`/finance/settlement/cierre?month=${month}`),
   closeSettlement: (month: string, arrastrar = false, alAhorro: number | null = null) =>
     post<{ ok: true; arrastre: { arrastrado: number; hacia: string; ahorrado: number } | null }>(
       '/finance/settlement/close',

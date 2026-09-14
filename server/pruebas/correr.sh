@@ -58,7 +58,7 @@ correr t-detectar.ts
 correr t-migracion.ts
 
 # Éstas levantan su propio servidor y hablan con la API como dos personas.
-rm -f privacidad.db personal.db fijos.db periodo.db reparto.db arr.db cta.db cat.db
+rm -f privacidad.db personal.db fijos.db periodo.db reparto.db arr.db cta.db cat.db cita.db
 correr t-privacidad.ts
 correr t-personal.ts
 correr t-fijos.ts
@@ -67,6 +67,7 @@ correr t-reparto.ts
 correr t-arrastre.ts
 correr t-cuenta.ts
 correr t-categoria.ts
+correr t-cita.ts
 
 # Éstas sí: cada una con el buzón recién levantado.
 levantar_buzon && correr t-imap.ts

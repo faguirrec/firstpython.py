@@ -141,6 +141,35 @@ del día al lado, y filtrados con fichas —*Por revisar*, *Comunes*, *Sin
 categoría*, cada categoría— en vez de menús desplegables, que escondían cuál
 estaba puesto.
 
+**La respuesta primero, y con su botón.** El Resumen abre con la cifra del mes;
+lo que falta por configurar va debajo, plegado en una línea. Y donde dice "para
+quedar a mano — $3.181" hay un botón que anota justo esos $3.181: decir qué hay
+que hacer y no dejar hacerlo es la razón número uno por la que se abandona una
+app de presupuesto, y era exactamente lo que hacíamos. Lo mismo en Análisis:
+las categorías sin tope ofrecen ponerles uno, las excedidas ajustarlo, el
+promedio de los últimos meses convertirse en el estimado del mes, y los
+movimientos que entraron sin categoría ordenarse solos con las reglas de
+comercio que ya existen.
+
+**Deslizar.** De lado sobre el contenido cambia de mes, porque el selector `‹ ›`
+vive en el tercio de arriba —la zona a la que el pulgar no llega sin cambiar el
+agarre— y es de los controles que más se tocan. Una fila de movimiento se
+desliza para editarla o borrarla. El borde izquierdo se le deja al sistema: ahí
+el gesto significa "atrás" desde antes de que esta app existiera.
+
+**El mes, para leerlo de a dos.** Cerrar el mes era un botón que congelaba un
+número. Cuando el mes termina, el Resumen ofrece leerlo juntos: qué costó
+comparado con lo habitual, qué categoría se movió de verdad, cuál fue el gasto
+único más grande —sin contar los fijos, que ya se sabían—, cómo quedó cada uno y
+qué se viene el mes que entra. Nada que la app no supiera; lo que faltaba era
+juntarlo en una lectura en vez de repartirlo en cuatro pantallas de gráficos.
+
+No recomienda nada. No dice "podrían gastar menos en supermercado": dice cuánto
+fue y cuánto era antes. Y calla lo que no es noticia —una variación de mil pesos,
+o que "sin categoría" haya subido, que no es un cambio de hábito sino
+información que falta—. `server/pruebas/t-cita.ts` verifica justamente esas dos
+omisiones, que son donde vive el valor de la pantalla.
+
 **Entrar a una categoría.** Tocar una barra del desglose —en el Resumen, en el
 acumulado de Análisis, en el presupuesto o en la comparación— abre la lista de
 esos movimientos.

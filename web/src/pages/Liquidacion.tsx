@@ -3,6 +3,7 @@ import { api, type Member, type Projection, type RepartoExcedente, type Reserve,
 import { useSession } from '../lib/session';
 import { esMesCerrado, money, monthLabel, percent } from '../lib/format';
 import { cambiarMes, useMes } from '../lib/mes';
+import { useDeslizarMes } from '../lib/deslizar';
 import { useVersionDatos } from '../lib/datos';
 import Cabecera from '../components/Cabecera';
 import { SplitBar } from '../components/Charts';
@@ -10,6 +11,7 @@ import { Avatar } from '../components/Fichas';
 import SaldoCuenta from '../components/SaldoCuenta';
 import Metas from '../components/Metas';
 import NuevoMovimiento from '../components/NuevoMovimiento';
+import CitaDelMes from '../components/CitaDelMes';
 import { IconoOculto, IconoVer } from '../components/Icons';
 import { alternarPrivacidad, usePrivacidad } from '../lib/privacidad';
 
@@ -23,6 +25,9 @@ export default function Liquidacion() {
    * una deuda y se pinta en rojo.
    */
   const cerrado = esMesCerrado(month);
+  // Deslizar de lado cambia de mes, para no obligar a estirar el pulgar
+  // hasta las flechas de la cabecera.
+  useDeslizarMes(month);
   const version = useVersionDatos();
   const [settlement, setSettlement] = useState<Settlement | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
@@ -33,6 +38,8 @@ export default function Liquidacion() {
   /** Quiénes tienen sueldo declarado para *este* mes y no heredado. */
   const [propios, setPropios] = useState<Set<string>>(new Set());
   const [aporteDe, setAporteDe] = useState<{ userId: string; amount: number } | null>(null);
+  /** La lectura del mes, antes de decidir si se cierra. */
+  const [leyendoElMes, setLeyendoElMes] = useState(false);
   /** Qué hacer con lo que sobró, y cuánto de eso decide guardar el hogar. */
   const [excedente, setExcedente] = useState<RepartoExcedente | null>(null);
   const [alAhorro, setAlAhorro] = useState('');
@@ -401,6 +408,19 @@ export default function Liquidacion() {
         </>
       )}
 
+      {leyendoElMes && (
+        <CitaDelMes
+          month={month}
+          onClose={() => setLeyendoElMes(false)}
+          onCerrar={async () => {
+            setLeyendoElMes(false);
+            await api.closeSettlement(month, false);
+            setMessage('Mes cerrado y guardado.');
+            await load();
+          }}
+        />
+      )}
+
       {aporteDe && (
         <NuevoMovimiento
           month={month}
@@ -516,6 +536,24 @@ export default function Liquidacion() {
               </ul>
             )}
           </div>
+
+          {/*
+            * Leer el mes antes de cerrarlo.
+            *
+            * Cerrar era un botón que congelaba un número; el momento en que los
+            * dos se sientan a mirar la plata junta se estaba desaprovechando.
+            * Va arriba del botón y no lo reemplaza: quien ya sabe lo que hace
+            * sigue teniendo su camino de un toque.
+            */}
+          {!settlement.settledAt && (
+            <button className="leer-el-mes" onClick={() => setLeyendoElMes(true)}>
+              <span className="leer-el-mes-texto">
+                <strong>Leer el mes antes de cerrarlo</strong>
+                <span className="meta">Qué costó, qué cambió y qué viene, en una pasada</span>
+              </span>
+              <span aria-hidden="true">›</span>
+            </button>
+          )}
 
           {settlement.settledAt ? (
             <button

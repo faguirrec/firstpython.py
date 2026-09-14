@@ -108,6 +108,8 @@ export default function Presupuesto({ month }: { month: string }) {
 
   const conPresupuesto = status.categories.filter((c) => c.budget > 0);
   const sinPresupuesto = status.categories.filter((c) => c.budget === 0);
+  // Las que gastan sin control: las únicas sobre las que vale la pena insistir.
+  const sinTopeConGasto = sinPresupuesto.filter((c) => c.spent > 0);
   // Sólo el gasto de las categorías con tope es comparable con el presupuesto.
   const usoTotal = status.totalBudget > 0 ? status.budgetedSpent / status.totalBudget : 0;
 
@@ -164,7 +166,13 @@ export default function Presupuesto({ month }: { month: string }) {
 
       {(status.overBudget.length > 0 || status.nearLimit.length > 0) && !editing && (
         <div className="card" style={{ borderColor: 'color-mix(in srgb, var(--warning) 55%, transparent)' }}>
-          <h3>En qué se están pasando</h3>
+          <div className="card-head">
+            <h3 style={{ margin: 0 }}>En qué se están pasando</h3>
+            {/* Pasarse del tope tiene dos salidas de verdad: gastar menos o
+                reconocer que el tope estaba mal puesto. La segunda es la que la
+                app puede ofrecer, y hasta acá no ofrecía ninguna. */}
+            <button className="small ghost" onClick={() => setEditing(true)}>Ajustar los topes</button>
+          </div>
           <div className="list">
             {[...status.overBudget, ...status.nearLimit].map((c) => (
               <Link className="item" key={c.categoryId} to={abrir(c.categoryId)}>
@@ -237,6 +245,26 @@ export default function Presupuesto({ month }: { month: string }) {
             </div>
           ))}
         </div>
+
+        {/*
+          * Gastan y nadie les puso tope.
+          *
+          * Son las que no aparecen en ninguna barra de esta pantalla: se gastan
+          * en silencio. Ofrecer ponerles tope acá convierte un dato muerto en la
+          * única decisión que esta pantalla puede pedir.
+          */}
+        {!editing && sinTopeConGasto.length > 0 && (
+          <div className="sin-tope">
+            <p className="muted" style={{ marginTop: 0 }}>
+              {sinTopeConGasto.length === 1
+                ? 'Una categoría gastó este mes y no tiene tope:'
+                : `${sinTopeConGasto.length} categorías gastaron este mes y no tienen tope:`}{' '}
+              {sinTopeConGasto.slice(0, 4).map((c) => c.category).join(', ')}
+              {sinTopeConGasto.length > 4 && ` y ${sinTopeConGasto.length - 4} más`}.
+            </p>
+            <button className="primary small" onClick={() => setEditing(true)}>Ponerles tope</button>
+          </div>
+        )}
 
         {editing && (
           <p className="muted" style={{ marginBottom: 0, marginTop: 12 }}>

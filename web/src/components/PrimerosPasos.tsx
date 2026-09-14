@@ -83,18 +83,30 @@ export default function PrimerosPasos({ pasos }: { pasos: Paso[] }) {
   // por dónde empezar, y el orden importa —el reparto se apoya en los sueldos—.
   const siguiente = pasos.find((p) => !p.listo);
 
+  /*
+   * Plegado en cuanto hay un paso hecho.
+   *
+   * Desplegada, esta tarjeta medía 168px y se llevaba la primera pantalla
+   * entera: la cifra del mes —la respuesta que uno viene a buscar— quedaba a
+   * 649px de 844, o sea en el borde inferior, y justo durante las semanas en
+   * que se decide si la app se usa o no. Plegada dice lo mismo en una línea.
+   *
+   * Un hogar en cero la ve abierta: ahí los pasos no tapan la respuesta, son
+   * la respuesta.
+   */
   return (
-    <div className="card primeros-pasos">
-      <div className="card-head">
-        <h2>Para que esto empiece a servir</h2>
-        <span className="muted num" style={{ whiteSpace: 'nowrap' }}>{hechos} de {pasos.length}</span>
-      </div>
-
-      <div className="pasos-progreso" aria-hidden="true">
-        {pasos.map((p) => (
-          <span key={p.clave} className={p.listo ? 'listo' : ''} />
-        ))}
-      </div>
+    <details className="card primeros-pasos plegable" open={hechos === 0}>
+      <summary>
+        <strong>Para que esto empiece a servir</strong>
+        <span className="resumen-pasos">
+          <span className="pasos-progreso" aria-hidden="true">
+            {pasos.map((p) => (
+              <span key={p.clave} className={p.listo ? 'listo' : ''} />
+            ))}
+          </span>
+          <span className="muted num">{hechos} de {pasos.length}</span>
+        </span>
+      </summary>
 
       <ol className="pasos">
         {pasos.map((p) => (
@@ -132,6 +144,6 @@ export default function PrimerosPasos({ pasos }: { pasos: Paso[] }) {
           No mostrar más
         </button>
       )}
-    </div>
+    </details>
   );
 }

@@ -14,6 +14,7 @@ import { useSession } from '../lib/session';
 import { useModo } from '../lib/modo';
 import { dayLabel, monthLabel, esMesCerrado, esMesFuturo, money, percent } from '../lib/format';
 import { cambiarMes, useMes } from '../lib/mes';
+import { useDeslizarMes } from '../lib/deslizar';
 import { useVersionDatos } from '../lib/datos';
 import { verCategoria } from '../lib/verCategoria';
 import { CategoryBars, SplitBar, type CategorySlice } from '../components/Charts';
@@ -24,6 +25,8 @@ import { Avatar, FichaCategoria } from '../components/Fichas';
 import Cifra from '../components/Cifra';
 import PrimerosPasos, { pasosPendientes } from '../components/PrimerosPasos';
 import SaldoCuenta from '../components/SaldoCuenta';
+import PorArreglar from '../components/PorArreglar';
+import CitaDelMes from '../components/CitaDelMes';
 import { TarjetaCargando, Vacio } from '../components/Estados';
 
 export default function Resumen() {
@@ -31,6 +34,9 @@ export default function Resumen() {
   const currency = household?.currency ?? 'CLP';
   const month = useMes();
   const version = useVersionDatos();
+  // Deslizar de lado cambia de mes, para no obligar a estirar el pulgar
+  // hasta las flechas de la cabecera.
+  useDeslizarMes(month);
   const [settlement, setSettlement] = useState<Settlement | null>(null);
   const [categories, setCategories] = useState<CategorySlice[]>([]);
   const [recent, setRecent] = useState<Transaction[]>([]);
@@ -44,6 +50,17 @@ export default function Resumen() {
   /** Cuánto debería haber en la cuenta del hogar. */
   const [reserve, setReserve] = useState<Reserve | null>(null);
   const [adding, setAdding] = useState(false);
+  /*
+   * Lo que se va a anotar al tocar el botón del encabezado, ya con el monto.
+   *
+   * El encabezado dice "Para quedar a mano — $3.181" y hasta acá no había forma
+   * de hacerlo desde esta pantalla: había que ir a Reparto y bajar tres
+   * pantallas. Decir qué hacer y no dejar hacerlo es la razón número uno por la
+   * que se abandonan las apps de presupuesto.
+   */
+  const [saldando, setSaldando] = useState<number | null>(null);
+  /** La lectura del mes que terminó, antes de cerrarlo. */
+  const [leyendoElMes, setLeyendoElMes] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const modo = useModo();
   const esPersonal = modo === 'personal';
@@ -102,6 +119,20 @@ export default function Resumen() {
 
   const me = settlement?.members.find((m) => m.userId === user?.id);
 
+  /*
+   * Un hogar sin nada: ni un gasto común ni un sueldo declarado.
+   *
+   * No alcanza con mirar los gastos —alguien puede haber cargado los sueldos y
+   * todavía no gastar, y ahí el reparto sí tiene algo que decir—, ni sólo los
+   * sueldos. Es la conjunción la que significa "acá todavía no pasó nada".
+   */
+  const sinDatos = Boolean(
+    settlement &&
+      settlement.totalSharedExpenses === 0 &&
+      settlement.members.every((m) => m.income === 0) &&
+      settlement.members.every((m) => m.contributed === 0),
+  );
+
   return (
     <>
       <Cabecera
@@ -111,10 +142,6 @@ export default function Resumen() {
       />
 
       {error && <div className="error">{error}</div>}
-
-      {/* Sólo en el hogar: lo personal no necesita sueldos declarados ni gastos
-          fijos, y el buzón es del hogar. */}
-      {!esPersonal && <PrimerosPasos pasos={pasosPendientes(settlement, fijos, buzones ?? 0)} />}
 
       {!settlement && <TarjetaCargando conCifra filas={2} />}
 
@@ -197,6 +224,27 @@ export default function Resumen() {
               que ya llegó.
             </p>
           </>
+        ) : sinDatos ? (
+          /*
+           * El primer día.
+           *
+           * Con la base vacía la fórmula da cero y el encabezado anunciaba
+           * "PUSISTE DE MÁS — $0" en verde, con "pusiste $0 de los $0 que te
+           * tocaban" debajo: una felicitación por no haber hecho nada. No es un
+           * error de cálculo, es que faltaba decidir qué decir cuando todavía no
+           * hay nada que decir.
+           */
+          <>
+            <div className="label">Todavía no hay nada que repartir</div>
+            <p className="hero-vacio">
+              Cuando anoten el primer gasto común, acá va a decir cuánto le toca
+              poner a cada uno.
+            </p>
+            <div className="hero-acciones">
+              <button className="primary" onClick={() => setAdding(true)}>Anotar un gasto</button>
+              <Link to="/liquidacion"><button className="ghost">Cargar los sueldos</button></Link>
+            </div>
+          </>
         ) : me ? (
           <>
             {/* "Vas al día · $330.600" deja el número sin explicar: no es lo que
@@ -228,6 +276,17 @@ export default function Resumen() {
                 ? `De los ${money(me.fairShare, currency)} que te tocan este mes, llevas ${money(me.contributed, currency)}.`
                 : `Pusiste ${money(me.contributed, currency)} de los ${money(me.fairShare, currency)} que te tocaban.`}
             </div>
+
+            {/* El botón que hace lo que el número acaba de pedir, con el monto
+                puesto. Un toque en vez de tres pantallas. */}
+            {me.deviation < -0.5 && (
+              <div className="hero-acciones">
+                <button className="primary" onClick={() => setSaldando(Math.round(Math.abs(me.deviation)))}>
+                  Anotar {money(Math.abs(me.deviation), currency)}
+                </button>
+                <Link to="/liquidacion"><button className="ghost">Ver el reparto</button></Link>
+              </div>
+            )}
           </>
         ) : (
           <>
@@ -236,7 +295,9 @@ export default function Resumen() {
           </>
         )}
 
-        {settlement && settlement.members.length > 0 && (
+        {/* Sin sueldos ni gastos, la barra dice "100%" sobre cero: una precisión
+            sobre nada. Aparece cuando hay algo que repartir. */}
+        {settlement && settlement.members.length > 0 && !sinDatos && (
           <div style={{ marginTop: 16 }}>
             <div className="label" style={{ marginBottom: 8 }}>Reparto según sueldo</div>
             <SplitBar
@@ -264,6 +325,35 @@ export default function Resumen() {
         )}
       </div>
       )}
+
+      {/*
+        * La invitación a leer el mes, cuando el mes ya terminó.
+        *
+        * Vive también al pie de Reparto, pero ahí queda a más de dos mil
+        * píxeles del borde: nadie baja hasta el fondo de la pantalla más larga
+        * para descubrir que existe. Acá aparece sola, en el momento en que
+        * tiene sentido —el mes cerró y todavía no lo cerraron ustedes— y
+        * desaparece apenas se cierra.
+        */}
+      {!esPersonal && cerrado && settlement && !settlement.settledAt && (
+        <button className="card leer-el-mes" onClick={() => setLeyendoElMes(true)}>
+          <span className="leer-el-mes-texto">
+            <strong>{monthLabel(month)} terminó</strong>
+            <span className="meta">Léanlo juntos antes de cerrarlo: qué costó, qué cambió y qué viene</span>
+          </span>
+          <span aria-hidden="true">›</span>
+        </button>
+      )}
+
+      {/* Lo que hay que ordenar para que el desglose de más abajo diga la
+          verdad. En lo personal no aplica: lo que uno gasta por su cuenta no
+          entra en ningún gráfico común. */}
+      {!esPersonal && <PorArreglar month={month} />}
+
+      {/* Los primeros pasos, debajo de la respuesta y plegados.
+          Sólo en el hogar: lo personal no necesita sueldos declarados ni gastos
+          fijos, y el buzón es del hogar. */}
+      {!esPersonal && <PrimerosPasos pasos={pasosPendientes(settlement, fijos, buzones ?? 0)} />}
 
       {/* Lo que falta por pagar del mes. Va arriba porque es lo único de esta
           pantalla sobre lo que se puede actuar hoy mismo. */}
@@ -522,6 +612,33 @@ export default function Resumen() {
           onClose={() => setAdding(false)}
           onSaved={() => {
             setAdding(false);
+            void load();
+          }}
+        />
+      )}
+
+      {leyendoElMes && (
+        <CitaDelMes
+          month={month}
+          onClose={() => setLeyendoElMes(false)}
+          onCerrar={async () => {
+            setLeyendoElMes(false);
+            await api.closeSettlement(month, false);
+            await load();
+          }}
+        />
+      )}
+
+      {/* Anotar el aporte que deja el mes a mano, con el monto ya puesto: lo que
+          hay que confirmar es la fecha y de dónde salió, no volver a calcular
+          cuánto. */}
+      {saldando != null && (
+        <NuevoMovimiento
+          month={month}
+          inicial={{ type: 'aporte', userId: user?.id, amount: saldando }}
+          onClose={() => setSaldando(null)}
+          onSaved={() => {
+            setSaldando(null);
             void load();
           }}
         />
