@@ -238,9 +238,28 @@ export default function Resumen() {
               ) : (
                 `En ${household?.officialAccount ?? 'la cuenta del hogar'}: todo lo que entró menos todo lo que se pagó con ella.`
               ),
-            /* Lo que cada uno puso, ahora como detalle del saldo y no como
-               titular, con su botón al lado si hay algo que hacer. */
-            detalle: me ? <ComoVoy me={me} currency={currency} onSaldar={setSaldando} /> : null,
+            /*
+             * Los dos relojes de esta pantalla, uno al lado del otro.
+             *
+             * Arriba el saldo, que es de hoy y viene del banco. Acá el gasto del
+             * mes que se está mirando, que es cosa del hogar: los movimientos se
+             * asignan al mes contable que les corresponde y no al día en que el
+             * banco movió la plata. Son dos preguntas distintas y las dos hacen
+             * falta; ponerlas juntas es lo que evita que alguien trate de
+             * cuadrar una con la otra y no le dé.
+             *
+             * El total del mes estaba como frase gris al pie del reparto —"sobre
+             * $732.028 en gastos comunes"—, que es una nota al pie para el
+             * número del que dependen el reparto, el presupuesto y el cierre.
+             */
+            detalle: (
+              <DosRelojes
+                total={settlement?.totalSharedExpenses ?? 0}
+                me={me ?? null}
+                currency={currency}
+                onSaldar={setSaldando}
+              />
+            ),
             acciones: null as React.ReactNode,
           }
         : me
@@ -323,7 +342,7 @@ export default function Resumen() {
               ? proyeccion
                 ? `Sobre ${money(proyeccion.target, currency)} estimados para el mes.`
                 : 'La proporción sale de los sueldos declarados.'
-              : `Sobre ${money(settlement.totalSharedExpenses, currency)} en gastos comunes del mes.`}
+              : 'Así se reparte el gasto común del mes.'}
           </div>
 
           {/* Esta línea se queda aunque el modo personal esté escondido: es la
@@ -669,37 +688,50 @@ export default function Resumen() {
 }
 
 /**
- * Cómo voy yo, ahora como detalle del saldo y no como titular.
+ * Los dos relojes: lo gastado en el mes y cómo voy yo.
  *
- * Es la consecuencia del saldo, no el hecho: la plata que hay en la cuenta es
- * una, y lo que cada uno puso de más o de menos explica cómo se llegó a ella.
- * Va en una línea, con el botón que resuelve al lado cuando hay algo que hacer.
+ * El saldo de arriba es de hoy y viene del banco. Estos dos son del mes que se
+ * está mirando y son cosa del hogar: los movimientos se asignan al mes contable
+ * que les corresponde, no al día en que el banco movió la plata. Tenerlos juntos
+ * y bajo el saldo deja clara la jerarquía —hecho arriba, consecuencia abajo— sin
+ * esconder el número del que dependen el reparto, el presupuesto y el cierre.
  */
-function ComoVoy({
+function DosRelojes({
+  total,
   me,
   currency,
   onSaldar,
 }: {
-  me: Settlement['members'][number];
+  total: number;
+  me: Settlement['members'][number] | null;
   currency: string;
   onSaldar: (monto: number) => void;
 }) {
-  const falta = me.deviation < -0.5;
+  const falta = me != null && me.deviation < -0.5;
   return (
     <div className="bloque-detalle">
-      <span className="bloque-detalle-texto">
-        <span className="bloque-detalle-rotulo">{falta ? 'Para quedar a mano' : 'Pusiste de más'}</span>
-        <strong className="num">{money(Math.abs(me.deviation), currency)}</strong>
-        <span className="bloque-detalle-nota">
-          de {money(me.fairShare, currency)} que te tocan
-        </span>
+      <span className="bloque-detalle-dato">
+        {/* No se repite el nombre del mes: el selector lo dice dos centímetros
+            más arriba, y "GASTADO EN SEP 26" se partía en dos líneas. */}
+        <span className="bloque-detalle-rotulo">Gasto del mes</span>
+        <strong className="num">{money(total, currency)}</strong>
       </span>
-      {falta ? (
-        <button className="primary small" onClick={() => onSaldar(Math.round(Math.abs(me.deviation)))}>
-          Anotar
-        </button>
-      ) : (
-        <Link to="/liquidacion"><button className="ghost small">Ver el reparto</button></Link>
+
+      {me && (
+        <>
+          <span className="bloque-detalle-linea" aria-hidden="true" />
+          <span className="bloque-detalle-dato">
+            <span className="bloque-detalle-rotulo">{falta ? 'Te falta poner' : 'Pusiste de más'}</span>
+            <strong className="num">{money(Math.abs(me.deviation), currency)}</strong>
+          </span>
+          {falta ? (
+            <button className="primary small" onClick={() => onSaldar(Math.round(Math.abs(me.deviation)))}>
+              Anotar
+            </button>
+          ) : (
+            <Link to="/liquidacion"><button className="ghost small">Reparto</button></Link>
+          )}
+        </>
       )}
     </div>
   );

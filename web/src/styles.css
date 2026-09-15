@@ -1777,20 +1777,54 @@ details.plegable > summary .resumen-dato {
  */
 .bloque-detalle {
   display: flex;
-  align-items: center;
-  gap: var(--e3);
+  /* Estirados, no centrados: si una etiqueta se parte en dos líneas y la otra
+     no, centrar deja las dos cifras a distinta altura y la franja se lee
+     torcida. Estirando, las cifras se apoyan siempre en la misma línea. */
+  align-items: stretch;
+  flex-wrap: wrap;
+  gap: var(--e2) var(--e3);
   margin-top: var(--e4);
   padding: var(--e2) var(--e3);
   border-radius: var(--radius-sm);
   background: var(--velo);
   text-align: left;
 }
-.bloque-detalle-texto { flex: 1; min-width: 0; display: grid; gap: 1px; }
+/*
+ * Los dos relojes del mes, uno al lado del otro.
+ *
+ * Arriba, en la cifra grande, va el saldo de hoy: eso lo dice el banco y no
+ * depende de nosotros. Acá abajo van las dos cifras que sí son del hogar —lo
+ * gastado en el mes que se está mirando y lo que cada uno puso de más o de
+ * menos—, y van juntas a propósito. Separadas, cualquiera intenta cuadrar una
+ * contra el saldo de arriba, que es de otra fecha y mide otra cosa.
+ */
+.bloque-detalle-dato {
+  flex: 1 1 0;
+  /* Con menos que esto la cifra se parte en dos líneas y deja de leerse
+     de un vistazo, que es lo único que esta franja tiene que lograr. */
+  min-width: 92px;
+  display: grid;
+  /* Etiqueta arriba, cifra abajo: así las dos cifras quedan a la misma altura
+     aunque una etiqueta ocupe dos líneas. */
+  grid-template-rows: 1fr auto;
+  gap: 1px;
+}
+/* El pelo que separa los dos datos: sin él se leen como una sola frase. */
+.bloque-detalle-linea {
+  flex: none;
+  align-self: stretch;
+  width: 1px;
+  min-height: 32px;
+  background: color-mix(in srgb, var(--en-bloque) 26%, transparent);
+}
+/* Más opaco que las otras etiquetas del bloque a propósito: éstas van sobre el
+   velo, que aclara el fondo, y al 0,78 quedaban en 3,77:1 —bajo el mínimo para
+   texto chico—. Sobre el verde pelado, 0,78 sí alcanza. */
 .bloque-detalle-rotulo {
   font-size: var(--t-xs);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  opacity: 0.78;
+  opacity: 0.92;
 }
 .bloque-detalle strong {
   font-family: var(--display);
@@ -1798,11 +1832,12 @@ details.plegable > summary .resumen-dato {
   line-height: 1.1;
   letter-spacing: -0.02em;
 }
-.bloque-detalle-nota { font-size: var(--t-xs); opacity: 0.72; }
 .bloque-detalle > a { text-decoration: none; flex: none; }
 /* Mismo peso de selector que el nowrap general, o la etiqueta no puede cortarse. */
+.bloque-detalle > a { align-self: center; }
 .bloque-detalle button:not(.chip):not(.item) {
   flex: none;
+  align-self: center;
   min-height: var(--tocable);
   border: none;
   border-radius: 10px;
@@ -1810,10 +1845,18 @@ details.plegable > summary .resumen-dato {
   box-shadow: none;
 }
 .bloque-detalle button.primary { background: var(--en-bloque); color: var(--seq-600); }
+/* Sobre el velo de la franja, un borde al 40% y fondo transparente se leía
+   como texto en negrita y no como algo que se toca. */
 .bloque-detalle button.ghost {
-  background: transparent;
+  background: color-mix(in srgb, var(--en-bloque) 12%, transparent);
   color: var(--en-bloque);
-  border: 1px solid color-mix(in srgb, var(--en-bloque) 40%, transparent);
+  border: 1px solid color-mix(in srgb, var(--en-bloque) 55%, transparent);
+}
+@media (max-width: 359px) {
+  .bloque-detalle > a,
+  .bloque-detalle button:not(.chip):not(.item) { width: 100%; }
+  .bloque-detalle > a { flex: 1 0 100%; }
+  .bloque-detalle button:not(.chip):not(.item) { flex: 1 0 100%; }
 }
 
 .bloque-acciones {
