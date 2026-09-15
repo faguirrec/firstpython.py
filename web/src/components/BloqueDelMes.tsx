@@ -26,6 +26,7 @@ export default function BloqueDelMes({
   cifra,
   apoyo,
   tendencia,
+  detalle,
   acciones,
   encabezado,
 }: {
@@ -45,6 +46,14 @@ export default function BloqueDelMes({
    * Análisis, que es donde ese gráfico está bien hecho.
    */
   tendencia?: number[];
+  /**
+   * La consecuencia de la cifra, en una línea bajo ella.
+   *
+   * Va entre la cifra y la silueta a propósito: es lectura, no acción, y
+   * ponerla debajo de los botones la convertiría en un pie de página que nadie
+   * mira. Con el saldo arriba, esto es lo que cada uno puso de más o de menos.
+   */
+  detalle?: ReactNode;
   acciones?: ReactNode;
   /** Lo que va arriba a la derecha, al lado del nombre del hogar. */
   encabezado?: ReactNode;
@@ -75,6 +84,8 @@ export default function BloqueDelMes({
       <p className="bloque-etiqueta">{etiqueta}</p>
       <div className="bloque-cifra">{cifra}</div>
       {apoyo && <p className="bloque-apoyo">{apoyo}</p>}
+
+      {detalle}
 
       {/* Con menos de tres meses no hay silueta que dibujar: dos puntos son una
           recta, y una recta acá se lee como "viene parejo" sin serlo. */}

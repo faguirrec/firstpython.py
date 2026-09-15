@@ -175,6 +175,7 @@ export default function Resumen() {
         apoyo: proyeccion
           ? `Estimado sobre ${money(proyeccion.target, currency)} para el hogar, según ${proyeccion.basedOn}. Es una estimación, no una deuda: el mes no ha empezado.`
           : 'Este mes todavía no empieza. Carga los sueldos y los gastos fijos para verlo estimado.',
+        detalle: null as React.ReactNode,
         acciones: null as React.ReactNode,
       }
     : sinDatos
@@ -192,6 +193,7 @@ export default function Resumen() {
             </span>
           ),
           apoyo: null,
+          detalle: null as React.ReactNode,
           acciones: (
             <>
               <button className="primary" onClick={() => setAdding(true)}>Anotar un gasto</button>
@@ -199,7 +201,49 @@ export default function Resumen() {
             </>
           ),
         }
-      : me
+      : reserve && !cerrado
+        ? {
+            /*
+             * Arriba, el saldo de la cuenta.
+             *
+             * Antes acá iba lo que uno había puesto de más o de menos, y esa es
+             * la consecuencia, no el hecho. Lo que se viene a mirar al abrir la
+             * app es cuánta plata hay: es el número que se cuadra contra la
+             * cartola del banco y del que dependen todas las demás decisiones.
+             * Lo que cada uno puso queda abajo, que es el lugar de un detalle.
+             *
+             * El saldo es de hoy y no del mes que se está mirando —la plata en
+             * el banco es una sola—, por eso la etiqueta dice "hoy" y por eso en
+             * un mes ya cerrado se vuelve al reparto: mostrar el saldo de hoy
+             * mientras se revisa agosto sería contestar otra pregunta.
+             */
+            etiqueta: 'Hoy en la cuenta del hogar',
+            cifra: <Cifra valor={reserve.balance} moneda={currency} />,
+            /*
+             * Un saldo negativo no se deja pasar en silencio.
+             *
+             * Significa una de dos cosas, y las dos hay que arreglarlas: o se
+             * pagó con la cuenta más de lo que había, o nunca se cuadró contra
+             * la cartola lo que ya estaba ahí antes de empezar a usar la app.
+             * Mostrar el número a secas dejaría a alguien mirando un menos sin
+             * saber cuál de las dos le pasó.
+             */
+            apoyo:
+              reserve.balance < 0 ? (
+                <>
+                  Sale negativo: o se pagó con la cuenta más de lo que había, o falta cuadrar
+                  contra la cartola lo que ya estaba ahí.{' '}
+                  <Link to="/liquidacion">Cuadrar con el banco</Link>.
+                </>
+              ) : (
+                `En ${household?.officialAccount ?? 'la cuenta del hogar'}: todo lo que entró menos todo lo que se pagó con ella.`
+              ),
+            /* Lo que cada uno puso, ahora como detalle del saldo y no como
+               titular, con su botón al lado si hay algo que hacer. */
+            detalle: me ? <ComoVoy me={me} currency={currency} onSaldar={setSaldando} /> : null,
+            acciones: null as React.ReactNode,
+          }
+        : me
         ? {
             /*
              * "Para quedar a mano" en vez de "te falta poner".
@@ -215,6 +259,7 @@ export default function Resumen() {
               me.deviation < -0.5
                 ? `De los ${money(me.fairShare, currency)} que te tocan este mes, llevas ${money(me.contributed, currency)}.`
                 : `Pusiste ${money(me.contributed, currency)} de los ${money(me.fairShare, currency)} que te tocaban.`,
+            detalle: null as React.ReactNode,
             /* El botón que hace lo que el número acaba de pedir, con el monto
                puesto. Un toque en vez de tres pantallas. */
             acciones:
@@ -231,6 +276,7 @@ export default function Resumen() {
             etiqueta: 'Gastos comunes del mes',
             cifra: <Cifra valor={settlement?.totalSharedExpenses ?? 0} moneda={currency} />,
             apoyo: null,
+            detalle: null as React.ReactNode,
             acciones: null as React.ReactNode,
           };
 
@@ -244,6 +290,7 @@ export default function Resumen() {
         cifra={bloque.cifra}
         apoyo={bloque.apoyo}
         tendencia={tendencia}
+        detalle={bloque.detalle}
         acciones={bloque.acciones}
       />
 
@@ -368,7 +415,12 @@ export default function Resumen() {
         </div>
       )}
 
-      {!esPersonal && reserve && (
+      {/* La tarjeta del saldo se fue: su cifra es ahora el titular del bloque de
+          arriba, y repetirla acá sería decir dos veces lo mismo. Sólo se muestra
+          cuando el bloque está contando otra cosa —un mes cerrado, uno que no
+          empezó—, porque ahí el saldo sigue siendo un dato que alguien puede
+          venir a buscar. */}
+      {!esPersonal && reserve && (cerrado || futuro || sinDatos) && (
         <SaldoCuenta
           reserve={reserve}
           settlement={settlement}
@@ -613,5 +665,42 @@ export default function Resumen() {
         />
       )}
     </>
+  );
+}
+
+/**
+ * Cómo voy yo, ahora como detalle del saldo y no como titular.
+ *
+ * Es la consecuencia del saldo, no el hecho: la plata que hay en la cuenta es
+ * una, y lo que cada uno puso de más o de menos explica cómo se llegó a ella.
+ * Va en una línea, con el botón que resuelve al lado cuando hay algo que hacer.
+ */
+function ComoVoy({
+  me,
+  currency,
+  onSaldar,
+}: {
+  me: Settlement['members'][number];
+  currency: string;
+  onSaldar: (monto: number) => void;
+}) {
+  const falta = me.deviation < -0.5;
+  return (
+    <div className="bloque-detalle">
+      <span className="bloque-detalle-texto">
+        <span className="bloque-detalle-rotulo">{falta ? 'Para quedar a mano' : 'Pusiste de más'}</span>
+        <strong className="num">{money(Math.abs(me.deviation), currency)}</strong>
+        <span className="bloque-detalle-nota">
+          de {money(me.fairShare, currency)} que te tocan
+        </span>
+      </span>
+      {falta ? (
+        <button className="primary small" onClick={() => onSaldar(Math.round(Math.abs(me.deviation)))}>
+          Anotar
+        </button>
+      ) : (
+        <Link to="/liquidacion"><button className="ghost small">Ver el reparto</button></Link>
+      )}
+    </div>
   );
 }

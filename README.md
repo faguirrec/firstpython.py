@@ -168,6 +168,14 @@ adentro. Antes había una cabecera de 191px que no decía ninguna cifra y, debaj
 una tarjeta blanca con el número: la respuesta empezaba a 649px de una pantalla
 de 844. Ahora empieza a 139.
 
+**Arriba, el saldo.** Lo primero del Resumen es cuánta plata debería haber hoy en
+la cuenta del hogar: es el número que se cuadra contra la cartola del banco y del
+que dependen todas las demás decisiones. Lo que cada uno puso de más o de menos
+—que antes era el titular— queda debajo, en una línea con su botón: es la
+consecuencia del saldo, no el hecho. Si el saldo sale negativo la app dice qué
+significa, porque un menos a secas no distingue entre haber gastado de más y no
+haber cuadrado nunca lo que ya estaba en la cuenta.
+
 **La respuesta primero, y con su botón.** El Resumen abre con la cifra del mes;
 lo que falta por configurar va debajo, plegado en una línea. Y donde dice "para
 quedar a mano — $3.181" hay un botón que anota justo esos $3.181: decir qué hay

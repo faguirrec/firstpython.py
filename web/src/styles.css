@@ -1768,6 +1768,54 @@ details.plegable > summary .resumen-dato {
   margin: var(--e4) calc(var(--e4) * -1) 0;
 }
 
+/*
+ * La consecuencia de la cifra, en una línea bajo ella.
+ *
+ * Lleva su propio recuadro translúcido para separarse del titular sin necesidad
+ * de una regla ni de un salto de tamaño: se lee como "y además", que es
+ * exactamente su papel ahora que el titular es el saldo de la cuenta.
+ */
+.bloque-detalle {
+  display: flex;
+  align-items: center;
+  gap: var(--e3);
+  margin-top: var(--e4);
+  padding: var(--e2) var(--e3);
+  border-radius: var(--radius-sm);
+  background: var(--velo);
+  text-align: left;
+}
+.bloque-detalle-texto { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.bloque-detalle-rotulo {
+  font-size: var(--t-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.78;
+}
+.bloque-detalle strong {
+  font-family: var(--display);
+  font-size: var(--cifra-sm);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+.bloque-detalle-nota { font-size: var(--t-xs); opacity: 0.72; }
+.bloque-detalle > a { text-decoration: none; flex: none; }
+/* Mismo peso de selector que el nowrap general, o la etiqueta no puede cortarse. */
+.bloque-detalle button:not(.chip):not(.item) {
+  flex: none;
+  min-height: var(--tocable);
+  border: none;
+  border-radius: 10px;
+  font-weight: 600;
+  box-shadow: none;
+}
+.bloque-detalle button.primary { background: var(--en-bloque); color: var(--seq-600); }
+.bloque-detalle button.ghost {
+  background: transparent;
+  color: var(--en-bloque);
+  border: 1px solid color-mix(in srgb, var(--en-bloque) 40%, transparent);
+}
+
 .bloque-acciones {
   display: flex;
   gap: var(--e2);
@@ -1818,7 +1866,8 @@ details.plegable > summary .resumen-dato {
   }
   /* Acá el relleno claro sí puede ser el verde de marca, porque el bloque es
      oscuro; y encima va el mismo negro que en cualquier otro botón primario. */
-  :root:not([data-theme='light']) .bloque-acciones button.primary {
+  :root:not([data-theme='light']) .bloque-acciones button.primary,
+  :root:not([data-theme='light']) .bloque-detalle button.primary {
     background: var(--marca);
     color: #0f1611;
   }
@@ -1828,7 +1877,8 @@ details.plegable > summary .resumen-dato {
   --en-bloque: var(--text-primary);
   --velo: rgba(255, 255, 255, 0.09);
 }
-:root[data-theme='dark'] .bloque-acciones button.primary {
+:root[data-theme='dark'] .bloque-acciones button.primary,
+:root[data-theme='dark'] .bloque-detalle button.primary {
   background: var(--marca);
   color: #0f1611;
 }
