@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { api, type CambiosHogar, type Household, type Member } from '../lib/api';
 import { useSession } from '../lib/session';
+import { cambiarTema, useTema } from '../lib/tema';
 import Categorias from '../components/AjustesCategorias';
 import CorreoPanel from '../components/AjustesCorreo';
 import ReglasCorreo from '../components/AjustesReglas';
+import AjustesAtajo from '../components/AjustesAtajo';
 import Invitacion from '../components/Invitacion';
 import Cabecera from '../components/Cabecera';
 
@@ -55,6 +57,7 @@ export default function Ajustes() {
 
 function PanelHogar() {
   const { user, signOut, refresh } = useSession();
+  const tema = useTema();
   const [household, setHousehold] = useState<Household | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [code, setCode] = useState<string | null>(null);
@@ -198,6 +201,32 @@ function PanelHogar() {
       </div>
 
       <PanelCorreo household={household} onSave={save} />
+
+      <AjustesAtajo />
+
+      <div className="card">
+        <h2>Apariencia</h2>
+        <p className="muted" style={{ marginTop: 0 }}>
+          Las cifras se leen distinto según el fondo, y no siempre conviene el mismo
+          que el resto del teléfono.
+        </p>
+        <div className="tabs" role="group" aria-label="Tema de la app">
+          {([
+            ['sistema', 'Como el teléfono'],
+            ['claro', 'Claro'],
+            ['oscuro', 'Oscuro'],
+          ] as const).map(([valor, etiqueta]) => (
+            <button
+              key={valor}
+              className={tema === valor ? 'active' : ''}
+              onClick={() => cambiarTema(valor)}
+              aria-pressed={tema === valor}
+            >
+              {etiqueta}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className="card">
         <h2>Instalar en el iPhone</h2>

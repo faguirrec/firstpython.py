@@ -141,6 +141,23 @@ del día al lado, y filtrados con fichas —*Por revisar*, *Comunes*, *Sin
 categoría*, cada categoría— en vez de menús desplegables, que escondían cuál
 estaba puesto.
 
+**Compras con Apple Pay.** Banco Falabella avisa las transferencias por correo
+pero no las compras con tarjeta: ésas sólo llegan como notificación push, y
+ninguna app de iOS puede leer las notificaciones de otra. Lo que sí se puede es
+enganchar el momento del pago: al pagar con una tarjeta de Apple Wallet, iOS
+dispara una automatización de Atajos que entrega monto y comercio, y desde ahí
+un POST a `/api/atajo/movimiento`.
+
+Ajustes entrega la llave y el paso a paso. La llave se guarda hasheada —llevarse
+la base no es llevarse una llave—, se compara en tiempo constante, y sólo sirve
+para crear un movimiento: no lee nada, no cierra meses, no toca sueldos. Si se
+filtra, lo peor que pasa es que alguien ensucie la lista.
+
+Todo lo que entra por ahí queda **sin revisar**, y la pantalla lo dice antes de
+que alguien arme el atajo y se confíe: el disparador de iOS pierde eventos en
+silencio y sólo ve lo que se paga acercando el teléfono. Es un adelanto, no la
+cuenta final; la cartola sigue siendo la fuente de verdad.
+
 **El bloque de marca.** El Resumen abre con un bloque verde que sangra hasta el
 borde superior y lleva adentro el nombre del hogar, el mes, la cifra que resume
 el mes, la silueta de los últimos meses y los botones. Es el patrón que

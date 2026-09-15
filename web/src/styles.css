@@ -1555,6 +1555,71 @@ details.plegable > summary .resumen-dato {
 .cita-persona .meta { font-size: var(--t-sm); color: var(--text-muted); }
 .cita-saldo { font-size: var(--t-sm); font-weight: 600; white-space: nowrap; }
 
+/* ---------------------- La llave del atajo del iPhone --------------------- */
+
+/* Lo que la función NO hace, dicho antes de que alguien la arme y se confíe. */
+.aviso-inline {
+  display: grid;
+  gap: var(--e1);
+  margin-top: var(--e3);
+  padding: var(--e3);
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--warning) 45%, transparent);
+  background: color-mix(in srgb, var(--warning) 8%, var(--surface-1));
+  font-size: var(--t-sm);
+  color: var(--text-secondary);
+}
+.aviso-inline strong { font-family: var(--display); color: var(--text-primary); }
+
+/* El secreto, que se ve una sola vez en la vida. */
+.llave-nueva {
+  margin-top: var(--e4);
+  padding: var(--e4);
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--marca);
+  background: var(--marca-suave);
+}
+.llave-nueva strong { display: block; font-family: var(--display); font-size: var(--t-lg); }
+.llave-nueva p { font-size: var(--t-sm); margin: var(--e1) 0 var(--e3); }
+.llave-texto {
+  display: block;
+  padding: var(--e3);
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  font-size: var(--t-sm);
+  /* Se corta donde sea: es una cadena sin espacios y en un teléfono no cabe. */
+  word-break: break-all;
+  user-select: all;
+}
+
+/* Un dato que hay que copiar, con su botón al lado. */
+.copiable {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  margin-top: var(--e2);
+  padding: var(--e2);
+  border-radius: var(--radius-sm);
+  background: var(--plane);
+}
+.copiable code { flex: 1; min-width: 0; word-break: break-all; background: none; padding: 0; }
+
+.pasos-atajo {
+  margin: var(--e3) 0;
+  padding-left: var(--e5);
+  display: grid;
+  gap: var(--e3);
+  font-size: var(--t-sm);
+  color: var(--text-secondary);
+}
+.pasos-atajo strong { color: var(--text-primary); }
+.pasos-atajo code { font-size: 0.9em; }
+
+.tabla-campos { width: 100%; margin-top: var(--e2); border-collapse: collapse; }
+.tabla-campos td { padding: var(--e1) 0; border-bottom: 1px solid var(--grid); }
+.tabla-campos td:first-child { width: 8rem; }
+
 /* --------------------------- El bloque del mes --------------------------- */
 
 /*

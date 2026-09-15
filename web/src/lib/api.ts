@@ -306,6 +306,16 @@ export type ResumenPersonal = {
   savingsRate: number | null;
 };
 
+export type ClaveAtajo = {
+  id: string;
+  nombre: string;
+  /** Los cuatro últimos caracteres: alcanza para reconocerla, no para usarla. */
+  cola: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+  revocadaAt: string | null;
+};
+
 /** El mes contado para leerlo de a dos, antes de cerrarlo. */
 export type CierreDelMes = {
   month: string;
@@ -456,6 +466,12 @@ export const api = {
   deleteTransaction: (id: string) => del<{ ok: true }>(`/transactions/${id}`),
   reviewAll: () => post<{ reviewed: number }>('/transactions/review-all'),
   recategorize: () => post<{ updated: number }>('/transactions/recategorize'),
+
+  /* Las llaves con las que un Atajo de iOS anota una compra. La llave entera
+     sólo vuelve una vez, al crearla: después ni el servidor la tiene. */
+  clavesAtajo: () => get<{ claves: ClaveAtajo[] }>('/atajo/claves'),
+  crearClaveAtajo: (nombre: string) => post<{ id: string; clave: string }>('/atajo/claves', { nombre }),
+  revocarClaveAtajo: (id: string) => del<{ ok: true }>(`/atajo/claves/${id}`),
 
   incomes: () => get<{ incomes: { id: string; month: string; amount: number; note: string | null; userId: string; userName: string }[] }>('/finance/incomes'),
   saveIncome: (body: { month: string; userId?: string; amount: number; note?: string | null }) =>

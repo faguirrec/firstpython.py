@@ -136,6 +136,38 @@ CREATE TABLE IF NOT EXISTS gmail_accounts (
 -- Cuentas leídas por IMAP con una contraseña de aplicación. Van aparte de
 -- gmail_accounts porque no comparten nada: aquélla guarda un token de OAuth que
 -- caduca, ésta una credencial permanente que se guarda cifrada.
+/*
+ * Llaves para que un Atajo de iOS pueda anotar un movimiento.
+ *
+ * Banco Falabella no manda correo por las compras con tarjeta —sólo por
+ * transferencias—, así que el camino que la app ya tiene no las ve. Lo que sí
+ * existe es el disparador de Atajos que se activa al pagar con una tarjeta de
+ * Apple Wallet y entrega monto y comercio: con eso, la compra puede llegar acá
+ * en segundos.
+ *
+ * Un Atajo no tiene sesión ni puede renovar un token, así que necesita una
+ * llave de larga duración. Se guarda **sólo el hash**: si alguien se lleva esta
+ * tabla, no se lleva ninguna llave utilizable. El texto completo se muestra una
+ * vez, cuando se crea, y no se puede volver a ver.
+ *
+ * Se revoca marcando la fecha en vez de borrar la fila: así queda registro de
+ * que existió y de cuándo se dio de baja, que es lo que uno quiere saber si
+ * algo raro pasó.
+ */
+CREATE TABLE IF NOT EXISTS claves_atajo (
+  id            TEXT PRIMARY KEY,
+  household_id  TEXT NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+  user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  nombre        TEXT NOT NULL,
+  -- SHA-256 del secreto. Nunca el secreto.
+  hash          TEXT NOT NULL UNIQUE,
+  -- Los cuatro últimos caracteres, para reconocer cuál es sin poder usarla.
+  cola          TEXT NOT NULL,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  last_used_at  TEXT,
+  revocada_at   TEXT
+);
+
 CREATE TABLE IF NOT EXISTS imap_accounts (
   id            TEXT PRIMARY KEY,
   household_id  TEXT NOT NULL REFERENCES households(id) ON DELETE CASCADE,

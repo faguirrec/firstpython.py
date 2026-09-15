@@ -11,6 +11,31 @@ Informe técnico para MyHaus. Fecha: 14 de septiembre de 2026.
 
 ---
 
+> ## Corrección posterior — 15 de septiembre de 2026
+>
+> Este informe se escribió **antes** de ver una cartola real, y en un punto se
+> equivoca. Al revisar una cartola de **cuenta corriente** de Banco Falabella
+> apareció que **sí trae las compras con tarjeta**, no sólo las transferencias:
+> en un período de ocho días había siete compras de comercio —supermercado,
+> minimarket, un pago por Webpay, una cuenta de luz— junto a las transferencias.
+> La aritmética de esa cartola cuadra al peso: abonos menos cargos da
+> exactamente el saldo final que declara.
+>
+> Dos consecuencias:
+>
+> 1. **El problema de cobertura ya está resuelto por la cartola.** Lo que falta
+>    no es *ver* las compras, es *verlas a tiempo*. Eso cambia el rol de la vía
+>    de Apple Pay: no tapa un hueco, acorta una espera.
+> 2. **El resumen de la cartola no se puede creer.** Declara "Redcompra $0"
+>    mientras las siete compras suman $316.113 y están todas en el detalle. Un
+>    parser tiene que sumar las líneas de movimiento y usar la columna de saldo
+>    como verificación, nunca fiarse de la caja de totales.
+>
+> Queda sin verificar si la tarjeta **CMR de crédito** se comporta igual: la
+> cartola revisada es de la cuenta corriente y las compras que trae parecen de
+> débito. Si el gasto del hogar va por la CMR, hay que mirar su estado de cuenta
+> aparte antes de dar esto por cerrado.
+
 ## 0. Respuesta corta, sin adornos
 
 **No existe hoy una vía automática, barata y legítima para que las compras con tarjeta de Banco Falabella entren solas a una app propia.** Ninguna de las cinco vías la resuelve completa.

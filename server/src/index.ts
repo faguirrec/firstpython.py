@@ -12,6 +12,7 @@ import { settingsRouter } from './routes/settings.js';
 import { gmailRouter } from './routes/gmail.js';
 import { tareasRouter } from './routes/tareas.js';
 import { imapRouter } from './routes/imap.js';
+import { atajoRouter } from './routes/atajo.js';
 import { vigilarCorreo } from './services/vigilanteCorreo.js';
 import { correoConfigurado } from './services/mailer.js';
 // (enviarReportesMensuales se importa más abajo junto al temporizador)
@@ -76,6 +77,9 @@ app.use('/api/settings', settingsRouter);
 app.use('/api/gmail', gmailRouter);
 app.use('/api/tareas', tareasRouter);
 app.use('/api/imap', imapRouter);
+/* La puerta del Atajo de iOS: se monta antes de cualquier middleware de sesión
+   porque se autentica con su propia llave, que puede mucho menos. */
+app.use('/api/atajo', atajoRouter);
 
 // En producción el servidor también sirve la PWA compilada (web/dist).
 const webDist = path.resolve(process.cwd(), '../web/dist');
