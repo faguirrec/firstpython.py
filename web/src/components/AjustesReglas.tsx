@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, type BankTemplate, type EmailRule } from '../lib/api';
+import { api, type BankTemplate, type EmailRule, type Member } from '../lib/api';
 import { useSession } from '../lib/session';
 import { money } from '../lib/format';
 import Sheet from './Sheet';
@@ -13,10 +13,14 @@ const EMPTY: Omit<EmailRule, 'id'> = {
   merchantRegex: 'en\\s+([^\\n,]{2,60})',
   dateRegex: '(\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4})',
   accountRegex: null,
+  periodRegex: null,
   cardFilter: null,
+  mustContain: null,
+  mustNotContain: null,
   type: 'gasto',
   scope: 'comun',
   accountLabel: null,
+  userId: null,
   priority: 100,
 };
 
@@ -37,6 +41,28 @@ export default function AjustesReglas() {
     void load();
   }, []);
 
+  /**
+   * Dos reglas de aporte activas para la misma persona.
+   *
+   * El banco manda dos correos por la misma transferencia —la copia del que
+   * envía y la del que recibe—, y si las dos llegan al mismo buzón, dos reglas
+   * de aporte para la misma persona la suman dos veces. No se puede detectar
+   * después: los movimientos son distintos, con distinto id de correo, y el
+   * único síntoma es que el mes cuadra de más.
+   */
+  const aportesRepetidos = rules
+    .filter((r) => r.enabled && r.type === 'aporte')
+    .reduce<Record<string, string[]>>((acc, r) => {
+      // Las que no tienen dueño se agrupan juntas, y es el caso que más
+      // importa: las reglas vienen sembradas sin dueño, así que dos activadas
+      // de un tirón caen las dos acá. Filtrarlas por tener dueño dejaba el
+      // aviso apagado justo cuando hacía falta.
+      const clave = r.userId ?? '(sin dueño)';
+      acc[clave] = [...(acc[clave] ?? []), r.name];
+      return acc;
+    }, {});
+  const conflictos = Object.values(aportesRepetidos).filter((nombres) => nombres.length > 1);
+
   async function toggle(rule: EmailRule) {
     await api.updateEmailRule(rule.id, { enabled: rule.enabled === 0 });
     await load();
@@ -52,6 +78,9 @@ export default function AjustesReglas() {
       merchantRegex: template.merchant_regex,
       dateRegex: template.date_regex,
       accountRegex: template.account_regex,
+      periodRegex: template.period_regex ?? null,
+      mustContain: template.must_contain ?? null,
+      mustNotContain: template.must_not_contain ?? null,
       type: template.type,
       scope: template.scope,
     });
@@ -60,6 +89,14 @@ export default function AjustesReglas() {
   return (
     <>
       {error && <div className="error">{error}</div>}
+
+      {conflictos.map((nombres) => (
+        <div className="alerta" key={nombres.join('|')}>
+          <strong>Ojo: dos reglas de aporte para la misma persona.</strong>{' '}
+          {nombres.join(' y ')} están activas las dos. Si el banco avisa la misma transferencia como
+          enviada y como recibida, esa plata va a entrar dos veces. Deja activa una sola.
+        </div>
+      ))}
 
       <div className="card">
         <div className="card-head">
@@ -78,8 +115,18 @@ export default function AjustesReglas() {
                 <div className="title">{rule.name}</div>
                 <div className="meta una-linea" style={{ fontFamily: 'ui-monospace, monospace' }}>{rule.gmailQuery}</div>
                 <div className="meta">
-                  {rule.type === 'aporte' ? 'crea aportes' : 'crea gastos'} · {rule.scope === 'comun' ? 'comunes' : 'personales'}
+                  {/* La regla sigue pudiendo marcar lo que entra como algo que
+                      no se reparte —es la forma de dejar afuera la tarjeta de
+                      uno—, pero se dice por lo que hace y no por el modo
+                      personal, que está escondido. */}
+                  {rule.type === 'aporte' ? 'crea aportes' : 'crea gastos'} ·{' '}
+                  {rule.scope === 'comun' ? 'comunes' : 'que no se reparten'}
                 </div>
+                {rule.desactualizada && (
+                  <div className="meta" style={{ color: 'var(--warning)' }}>
+                    La plantilla de este banco cambió desde que se creó esta regla.
+                  </div>
+                )}
               </div>
               <div className="actions">
                 <span className={`pill ${rule.enabled ? 'good' : ''}`}>{rule.enabled ? '● activa' : '○ inactiva'}</span>
@@ -88,6 +135,29 @@ export default function AjustesReglas() {
                     {rule.enabled ? 'Desactivar' : 'Activar'}
                   </button>
                   <button className="small ghost" onClick={() => setEditing(rule)}>Editar</button>
+                  {rule.desactualizada && (
+                    <button
+                      className="small"
+                      onClick={async () => {
+                        if (
+                          !confirm(
+                            `Traer a "${rule.name}" los patrones y filtros de la plantilla actual.\n\n` +
+                              'Se mantienen si está activa, de quién es y qué tarjetas mira.',
+                          )
+                        ) {
+                          return;
+                        }
+                        try {
+                          await api.reglaDesdePlantilla(rule.id);
+                          await load();
+                        } catch (err) {
+                          setError((err as Error).message);
+                        }
+                      }}
+                    >
+                      Actualizar
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -141,11 +211,17 @@ function EditorRegla({
   onError: (message: string) => void;
 }) {
   const [form, setForm] = useState(rule);
+  // Los integrantes del hogar, para poder decir de quién es un aporte.
+  const [miembros, setMiembros] = useState<Member[]>([]);
   const [sample, setSample] = useState('');
   const [isHtml, setIsHtml] = useState(false);
   const [test, setTest] = useState<Awaited<ReturnType<typeof api.testEmailRule>> | null>(null);
   const [busy, setBusy] = useState(false);
   const [explorer, setExplorer] = useState(false);
+
+  useEffect(() => {
+    void api.household().then((h) => setMiembros(h.members)).catch(() => undefined);
+  }, []);
 
   function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -159,10 +235,14 @@ function EditorRegla({
     merchantRegex: form.merchantRegex || null,
     dateRegex: form.dateRegex || null,
     accountRegex: form.accountRegex || null,
+    periodRegex: form.periodRegex || null,
     cardFilter: form.cardFilter || null,
+    mustContain: form.mustContain || null,
+    mustNotContain: form.mustNotContain || null,
     type: form.type,
     scope: form.scope,
     accountLabel: form.accountLabel || null,
+    userId: form.userId || null,
     priority: form.priority,
   };
 
@@ -216,7 +296,7 @@ function EditorRegla({
           <span>Se reparten</span>
           <select value={form.scope} onChange={(e) => set('scope', e.target.value as 'comun' | 'personal')}>
             <option value="comun">Sí, comunes</option>
-            <option value="personal">No, personales</option>
+            <option value="personal">No, quedan fuera del reparto</option>
           </select>
         </label>
       </div>
@@ -238,13 +318,74 @@ function EditorRegla({
         <input value={form.accountRegex ?? ''} onChange={(e) => set('accountRegex', e.target.value)} />
       </label>
       <label className="field">
+        <span>Mes al que cuenta (regex)</span>
+        <input
+          value={form.periodRegex ?? ''}
+          onChange={(e) => set('periodRegex', e.target.value)}
+          placeholder="Asunto[\\s\\S]{0,60}?mensualidad\\s*(\\w+)"
+        />
+        <em className="muted">
+          Opcional. Si el correo dice a qué mes corresponde la plata —el comentario "Mensualidad
+          septiembre" de una transferencia—, se usa eso en vez de la fecha. Entiende el nombre del mes,
+          "2026-09" y "09/2026".
+        </em>
+      </label>
+
+      <label className="field">
         <span>Sólo estas tarjetas (últimos 4 dígitos, separados por coma)</span>
         <input
           value={form.cardFilter ?? ''}
           onChange={(e) => set('cardFilter', e.target.value)}
           placeholder="1234, 5678"
         />
-        <em className="muted">Sirve para ignorar las tarjetas personales que no entran al reparto.</em>
+        <em className="muted">Sirve para ignorar las tarjetas que no entran al reparto.</em>
+      </label>
+
+      <label className="field">
+        <span>Sólo si el correo dice (uno por línea, tienen que estar todos)</span>
+        <textarea
+          rows={2}
+          value={form.mustContain ?? ''}
+          onChange={(e) => set('mustContain', e.target.value)}
+          placeholder={'Mercado Pago\nFrancisco Javier Aguirre'}
+        />
+        <em className="muted">
+          Para separar correos del mismo banco con el mismo formato: a qué cuenta llegó la plata, o quién la
+          envió.
+        </em>
+      </label>
+
+      <label className="field">
+        <span>Y NO dice (uno por línea, basta con uno para descartarlo)</span>
+        <textarea
+          rows={2}
+          value={form.mustNotContain ?? ''}
+          onChange={(e) => set('mustNotContain', e.target.value)}
+          placeholder={'Mercado Pago'}
+        />
+        <em className="muted">
+          Los bancos avisan la misma transferencia dos veces, como enviada y como recibida. Descartando acá la
+          cuenta del hogar, esa plata entra una sola vez y no como gasto y aporte a la vez.
+        </em>
+      </label>
+
+      <label className="field">
+        <span>Atribuir a</span>
+        <select value={form.userId ?? ''} onChange={(e) => set('userId', e.target.value || null)}>
+          <option value="">Nadie en particular</option>
+          {miembros.map((m) => (
+            <option key={m.id} value={m.id}>{m.name}</option>
+          ))}
+        </select>
+        {form.type === 'aporte' && !form.userId ? (
+          <em className="alerta">
+            Un aporte sin dueño no le cuenta a nadie en la liquidación. Elige de quién es.
+          </em>
+        ) : (
+          <em className="muted">
+            Obligatorio en los aportes: la liquidación suma lo que puso cada uno por su nombre.
+          </em>
+        )}
       </label>
 
       <div className="card" style={{ background: 'var(--plane)', boxShadow: 'none' }}>
@@ -279,11 +420,19 @@ function EditorRegla({
                 <div>Monto: {money(test.movement.amount, currency)}</div>
                 <div>Comercio: {test.movement.merchant ?? '—'}</div>
                 <div>Fecha: {test.movement.occurredOn}</div>
+                <div>
+                  Cuenta en: {test.movement.period ?? test.movement.occurredOn.slice(0, 7)}
+                  {!test.movement.period && ' (el mes de la fecha)'}
+                </div>
                 <div>Cuenta/tarjeta: {test.movement.account ?? '—'}</div>
               </div>
             ) : (
               <div className="error">
-                No calzó. Lo más común es que falle la regex del monto: revisa que el grupo 1 sea el número.
+                <strong>No calzó.</strong>
+                {/* El motivo concreto en vez del consejo genérico: "no calzó"
+                    tiene cinco causas posibles y adivinar cuál fue era el
+                    trabajo que quedaba de este lado. */}
+                <div>{test.motivo ?? 'Revisa que el grupo 1 de la regex del monto sea el número.'}</div>
               </div>
             )}
           </div>

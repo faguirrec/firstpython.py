@@ -117,7 +117,7 @@ export default function AjustesCategorias() {
           {rules.map((r) => (
             <div className="item" key={r.id}>
               <div className="body">
-                <div className="title" style={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.82rem' }}>
+                <div className="title" style={{ fontFamily: 'ui-monospace, monospace', fontSize: 'var(--t-sm)' }}>
                   {r.pattern}
                 </div>
                 <div className="meta">→ {r.categoryName}</div>

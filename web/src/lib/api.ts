@@ -1,3 +1,5 @@
+import { paramModo, type Modo } from './modo';
+
 export type User = { id: string; email: string; name: string };
 export type Household = {
   id: string;
@@ -5,6 +7,8 @@ export type Household = {
   currency: string;
   officialAccount: string;
   contingencyPct: number;
+  /** Tope de ahorro al cerrar el mes, como % del gasto mensual. */
+  savingsPct: number;
   sendMonthlyReport: number;
 };
 
@@ -16,6 +20,8 @@ export type Member = { id: string; name: string; email: string; role: string; jo
 export type Transaction = {
   id: string;
   occurredOn: string;
+  /** A qué mes cuenta, que no siempre es el de la fecha. */
+  period: string;
   amount: number;
   type: 'gasto' | 'aporte' | 'ingreso_extra';
   scope: 'comun' | 'personal';
@@ -43,7 +49,12 @@ export type MemberBreakdown = {
   fairShare: number;
   transferred: number;
   paidOutOfPocket: number;
+  /** Gastos personales suyos pagados con la cuenta del hogar; se descuentan. */
+  personalFromAccount: number;
   contributed: number;
+  /** Saldo que viene de un mes anterior, firmado. Negativo = viene debiendo. */
+  carriedOver: number;
+  carriedFrom: string | null;
   deviation: number;
 };
 
@@ -81,11 +92,40 @@ export type EmailRule = {
   merchantRegex: string | null;
   dateRegex: string | null;
   accountRegex: string | null;
+  /** De dónde leer el mes contable cuando el correo lo dice aparte de la fecha. */
+  periodRegex: string | null;
   cardFilter: string | null;
+  mustContain: string | null;
+  mustNotContain: string | null;
   type: 'gasto' | 'aporte';
   scope: 'comun' | 'personal';
   accountLabel: string | null;
+  /** A quién se le atribuye lo que importe esta regla. */
+  userId: string | null;
+  /** De qué plantilla salió, si salió de una. */
+  templateKey?: string | null;
+  /** La plantilla cambió desde que se copió esta regla. */
+  desactualizada?: boolean;
   priority: number;
+};
+
+/** Por qué las reglas no están tomando los correos del buzón. */
+export type DiagnosticoBuzon = {
+  cuentas: string[];
+  reglasActivas: string[];
+  reglasInactivas: string[];
+  correos: {
+    subject: string;
+    from: string;
+    date: string;
+    yaImportado: boolean;
+    reglas: {
+      regla: string;
+      resultado: 'calza' | 'fuera-de-busqueda' | 'descartado';
+      motivo: string | null;
+    }[];
+  }[];
+  errores: string[];
 };
 
 export type BankTemplate = {
@@ -96,6 +136,9 @@ export type BankTemplate = {
   merchant_regex: string | null;
   date_regex: string | null;
   account_regex: string | null;
+  period_regex?: string | null;
+  must_contain?: string | null;
+  must_not_contain?: string | null;
   type: 'gasto' | 'aporte';
   scope: 'comun' | 'personal';
 };
@@ -118,6 +161,17 @@ export type SyncResult = {
   }[];
 };
 
+export type CuentaImap = {
+  id: string;
+  email: string;
+  host: string;
+  port: number;
+  carpeta: string;
+  lastSyncAt: string | null;
+  /** Si hay una conexión abierta escuchando el buzón en este momento. */
+  escuchando: boolean;
+};
+
 export type MessagePreview = {
   id: string;
   from: string;
@@ -129,11 +183,30 @@ export type MessagePreview = {
 
 export type Projection = {
   baseBudget: number;
+  /** El total que el hogar dejó anotado, si hay uno. */
+  savedTarget?: number | null;
+  /** true si ese total viene de un mes anterior y no de éste. */
+  targetInherited?: boolean;
   contingencyPct: number;
   contingencyAmount: number;
   target: number;
   basedOn: string;
-  rows: { userId: string; name: string; share: number; base: number; contingency: number; amount: number }[];
+  rows: {
+    userId: string;
+    name: string;
+    share: number;
+    base: number;
+    contingency: number;
+    /** Saldo arrastrado del mes anterior, firmado. */
+    carriedOver: number;
+    carriedFrom: string | null;
+    /** Lo que le toca poner en el mes, completo. */
+    amount: number;
+    /** Lo que ya puso. */
+    contributed: number;
+    /** Lo que le falta. */
+    pending: number;
+  }[];
 };
 
 export type CategoryBudget = {
@@ -177,7 +250,95 @@ export type Goal = {
 
 export type GoalsView = { reserve: number; goals: Goal[]; unassigned: number };
 
+export type GastoFijo = {
+  id: string;
+  name: string;
+  /** Null cuando el monto cambia mes a mes. */
+  amount: number | null;
+  categoryId: string | null;
+  categoryName: string | null;
+  categoryEmoji: string | null;
+  dueDay: number | null;
+  matchText: string | null;
+  active: boolean;
+};
+
+export type EstadoGastoFijo = GastoFijo & {
+  expected: number;
+  expectedFrom: 'declarado' | 'promedio' | 'sin-datos';
+  paidWith: { id: string; amount: number; occurredOn: string; merchant: string | null } | null;
+  paid: boolean;
+};
+
+export type EstadoFijos = {
+  month: string;
+  items: EstadoGastoFijo[];
+  totalExpected: number;
+  totalPaid: number;
+  totalPending: number;
+  pendientes: EstadoGastoFijo[];
+  /** Todos los declarados, incluidos los apagados. */
+  all: GastoFijo[];
+};
+
+/** Un gasto fijo que la app reconoce en los movimientos que ya existen. */
+export type FijoDetectado = {
+  name: string;
+  amount: number | null;
+  categoryId: string | null;
+  categoryName: string | null;
+  categoryEmoji: string | null;
+  categoryColor: string | null;
+  dueDay: number | null;
+  meses: number;
+  mesesConDatos: number;
+  ultimo: number;
+};
+
+export type ResumenPersonal = {
+  month: string;
+  currency: string;
+  income: number;
+  personalExpenses: number;
+  /** Aportes a la cuenta del hogar más gastos comunes pagados de su bolsillo. */
+  contributedToHousehold: number;
+  left: number;
+  savingsRate: number | null;
+};
+
+export type ClaveAtajo = {
+  id: string;
+  nombre: string;
+  /** Los cuatro últimos caracteres: alcanza para reconocerla, no para usarla. */
+  cola: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+  revocadaAt: string | null;
+};
+
+/** El mes contado para leerlo de a dos, antes de cerrarlo. */
+export type CierreDelMes = {
+  month: string;
+  previousMonth: string;
+  nextMonth: string;
+  total: number;
+  promedio: number;
+  contraPromedio: number;
+  mesesDeHistoria: number;
+  subio: { categoryId: string | null; category: string; emoji: string; delta: number } | null;
+  bajo: { categoryId: string | null; category: string; emoji: string; delta: number } | null;
+  elGrande: {
+    id: string; amount: number; merchant: string | null; description: string | null;
+    occurredOn: string; categoryName: string | null; categoryEmoji: string | null;
+  } | null;
+  personas: { userId: string; name: string; fairShare: number; contributed: number; deviation: number }[];
+  automaticos: { porCorreo: number; total: number };
+  loQueViene: { fijos: number; total: number };
+};
+
 export type CategoryChange = {
+  /** null en "Sin categoría"; sirve para abrir la lista de esa categoría. */
+  categoryId: string | null;
   category: string;
   color: string;
   emoji: string;
@@ -200,8 +361,26 @@ export type Comparison = {
   biggestDecreases: CategoryChange[];
 };
 
+/** Qué hacer con lo que sobró en la cuenta al cerrar el mes. */
+export type RepartoExcedente = {
+  excedente: number;
+  /** Tope de ahorro del mes: un porcentaje del gasto. */
+  tope: number;
+  savingsPct: number;
+  sugeridoAlAhorro: number;
+  sugeridoComoCredito: number;
+  creditos: { userId: string; name: string; amount: number }[];
+};
+
 export type Reserve = {
   balance: number;
+  /** Plata que ya estaba en la cuenta antes de la app, o cuadrada a mano. */
+  adjustment: number;
+  adjustedAt: string | null;
+  /** Parte del saldo ya prometida como crédito a alguien. */
+  committed: number;
+  /** balance - committed: lo que de verdad puede financiar metas. */
+  free: number;
   totalContributed: number;
   totalSpentFromAccount: number;
   monthlyAverage: number;
@@ -288,11 +467,24 @@ export const api = {
   reviewAll: () => post<{ reviewed: number }>('/transactions/review-all'),
   recategorize: () => post<{ updated: number }>('/transactions/recategorize'),
 
+  /* Las llaves con las que un Atajo de iOS anota una compra. La llave entera
+     sólo vuelve una vez, al crearla: después ni el servidor la tiene. */
+  clavesAtajo: () => get<{ claves: ClaveAtajo[] }>('/atajo/claves'),
+  crearClaveAtajo: (nombre: string) => post<{ id: string; clave: string }>('/atajo/claves', { nombre }),
+  revocarClaveAtajo: (id: string) => del<{ ok: true }>(`/atajo/claves/${id}`),
+
   incomes: () => get<{ incomes: { id: string; month: string; amount: number; note: string | null; userId: string; userName: string }[] }>('/finance/incomes'),
   saveIncome: (body: { month: string; userId?: string; amount: number; note?: string | null }) =>
     put<{ ok: true }>('/finance/incomes', body),
   settlement: (month: string) => get<Settlement>(`/finance/settlement?month=${month}`),
-  closeSettlement: (month: string) => post<{ ok: true }>('/finance/settlement/close', { month }),
+  excedenteDelMes: (month: string) =>
+    get<RepartoExcedente>(`/finance/settlement/excedente?month=${month}`),
+  cierreDelMes: (month: string) => get<CierreDelMes>(`/finance/settlement/cierre?month=${month}`),
+  closeSettlement: (month: string, arrastrar = false, alAhorro: number | null = null) =>
+    post<{ ok: true; arrastre: { arrastrado: number; hacia: string; ahorrado: number } | null }>(
+      '/finance/settlement/close',
+      { month, arrastrar, alAhorro },
+    ),
   reopenSettlement: (month: string) => del<{ ok: true }>(`/finance/settlement/close?month=${month}`),
   projection: (month: string, budget?: number, contingency?: number) =>
     get<Projection>(
@@ -301,28 +493,59 @@ export const api = {
         (contingency != null ? `&contingency=${contingency}` : ''),
     ),
   reserve: () => get<Reserve>('/finance/reserve'),
+  cuadrarCuenta: (saldoReal: number) =>
+    put<{ ok: true; diferencia: number; reserve: Reserve }>('/finance/reserve/cuadrar', { saldoReal }),
 
   monthlyReport: (months = 12) =>
     get<{ months: { month: string; shared: number; personal: number; contributions: number; income: number }[] }>(
       `/finance/reports/monthly?months=${months}`,
     ),
-  byCategory: (month?: string, scope?: 'comun' | 'personal') => {
+  byCategory: (month?: string, scope?: 'comun' | 'personal', excluirFijos = false) => {
     const query = new URLSearchParams();
     if (month) query.set('month', month);
     if (scope) query.set('scope', scope);
-    return get<{ categories: { category: string; color: string; emoji: string; total: number; count: number }[] }>(
-      `/finance/reports/by-category?${query.toString()}`,
-    );
+    if (excluirFijos) query.set('excluirFijos', '1');
+    return get<{
+      categories: {
+        /* null en "Sin categoría", que no es una categoría sino su ausencia. */
+        categoryId: string | null;
+        category: string; color: string; emoji: string; total: number; count: number;
+      }[];
+    }>(`/finance/reports/by-category?${query.toString()}`);
   },
-  comparison: (month: string, lookback = 3) =>
-    get<Comparison>(`/finance/reports/comparison?month=${month}&lookback=${lookback}`),
+  // `modo` decide qué bolsillo se consulta. Va explícito en cada llamada en vez
+  // de leerse del almacenamiento acá dentro: así una pantalla puede mostrar los
+  // dos lados a la vez el día que haga falta.
+  comparison: (month: string, lookback = 3, modo: Modo = 'hogar') =>
+    get<Comparison>(
+      `/finance/reports/comparison?month=${month}&lookback=${lookback}${paramModo(modo)}`,
+    ),
 
-  budgets: (month: string) => get<BudgetStatus>(`/finance/budgets?month=${month}`),
-  saveBudget: (body: { categoryId: string; amount: number; month?: string | null }) =>
+  budgets: (month: string, modo: Modo = 'hogar') =>
+    get<BudgetStatus>(`/finance/budgets?month=${month}${paramModo(modo)}`),
+  saveBudget: (body: { categoryId: string; amount: number; month?: string | null; modo?: Modo }) =>
     put<{ ok: true }>('/finance/budgets', body),
 
-  goals: () => get<GoalsView>('/finance/goals'),
-  createGoal: (body: { name: string; targetAmount: number; targetDate?: string | null }) =>
+  guardarGastoEstimado: (body: { month: string; amount: number }) =>
+    put<{ ok: true }>('/finance/target', body),
+
+  gastosFijos: (month: string) => get<EstadoFijos>(`/finance/fixed?month=${month}`),
+  fijosSugeridos: () => get<{ sugerencias: FijoDetectado[] }>('/finance/fixed/sugerencias'),
+  aceptarFijosSugeridos: (nombres: string[]) =>
+    post<{ creados: number }>('/finance/fixed/sugerencias', { nombres }),
+  crearGastoFijo: (body: {
+    name: string; amount?: number | null; categoryId?: string | null;
+    dueDay?: number | null; matchText?: string | null;
+  }) => post<{ id: string }>('/finance/fixed', body),
+  actualizarGastoFijo: (id: string, body: Record<string, unknown>) =>
+    patch<{ ok: true }>(`/finance/fixed/${id}`, body),
+  borrarGastoFijo: (id: string) => del<{ ok: true }>(`/finance/fixed/${id}`),
+
+  /** Las finanzas de quien está usando la app, con el aporte al hogar incluido. */
+  resumenPersonal: (month: string) => get<ResumenPersonal>(`/finance/personal?month=${month}`),
+
+  goals: (modo: Modo = 'hogar') => get<GoalsView>(`/finance/goals?modo=${modo}`),
+  createGoal: (body: { name: string; targetAmount: number; targetDate?: string | null; modo?: Modo }) =>
     post<{ id: string }>('/finance/goals', body),
   updateGoal: (id: string, body: Record<string, unknown>) => patch<{ ok: true }>(`/finance/goals/${id}`, body),
   deleteGoal: (id: string) => del<{ ok: true }>(`/finance/goals/${id}`),
@@ -340,8 +563,10 @@ export const api = {
   createEmailRule: (body: Record<string, unknown>) => post<{ id: string }>('/settings/email-rules', body),
   updateEmailRule: (id: string, body: Record<string, unknown>) => patch<{ ok: true }>(`/settings/email-rules/${id}`, body),
   deleteEmailRule: (id: string) => del<{ ok: true }>(`/settings/email-rules/${id}`),
+  reglaDesdePlantilla: (id: string) => post<{ ok: true }>(`/settings/email-rules/${id}/desde-plantilla`, {}),
+
   testEmailRule: (body: { sample: string; isHtml: boolean; rule: Record<string, unknown> }) =>
-    post<{ matched: boolean; movement: { amount: number; merchant: string | null; occurredOn: string; account: string | null } | null; text: string }>(
+    post<{ matched: boolean; movement: { amount: number; merchant: string | null; occurredOn: string; period: string | null; account: string | null } | null; motivo: string | null; text: string }>(
       '/settings/email-rules/test',
       body,
     ),
@@ -364,4 +589,23 @@ export const api = {
     ),
   gmailMessage: (id: string) => get<{ subject: string; from: string; body: string }>(`/gmail/messages/${id}`),
   disconnectGmail: (id: string) => del<{ ok: true }>(`/gmail/accounts/${id}`),
+
+  imapStatus: () =>
+    get<{
+      accounts: CuentaImap[];
+      tiempoReal: boolean;
+      sondeoMinutos: number;
+      porDefecto: { host: string; port: number; carpeta: string };
+    }>('/imap/status'),
+  conectarImap: (body: { email: string; secreto: string; host?: string; port?: number; carpeta?: string }) =>
+    post<{ ok: true; carpeta: string; mensajes: number }>('/imap/accounts', body),
+  desconectarImap: (id: string) => del<{ ok: true }>(`/imap/accounts/${id}`),
+  imapSync: (dryRun = false) => post<SyncResult>('/imap/sync', { dryRun }),
+  imapDiagnostico: () => get<DiagnosticoBuzon>('/imap/diagnostico'),
+  imapSearch: (q: string, limit = 10) =>
+    get<{ messages: MessagePreview[]; errors: string[] }>(
+      `/imap/messages?q=${encodeURIComponent(q)}&limit=${limit}`,
+    ),
+  imapMessage: (id: string) =>
+    get<{ subject: string; from: string; body: string }>(`/imap/message?id=${encodeURIComponent(id)}`),
 };

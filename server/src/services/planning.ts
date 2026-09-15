@@ -1,14 +1,15 @@
 import { db } from '../lib/db.js';
-import { computeReserve, round2 } from './split.js';
+import { computePersonalSavings, computeReserve, round2 } from './split.js';
+import { HOGAR, filtroDuenio, filtroGastos, paramsAmbito, type Ambito } from '../lib/visibilidad.js';
 
 /**
  * Presupuestos, metas de ahorro y comparación entre meses.
  *
- * Todo acá mira **sólo los gastos comunes**: lo que cada uno gasta por su cuenta
- * queda registrado en la app pero no entra en el análisis del hogar.
+ * Las tres funcionan igual para los dos bolsillos —el del hogar y el de cada
+ * persona— y lo único que cambia es qué movimientos se cuentan y de quién son
+ * los topes y las metas. Por eso todas reciben un ámbito en vez de existir dos
+ * veces.
  */
-
-const SHARED = "type = 'gasto' AND scope = 'comun'";
 
 export type CategoryBudget = {
   categoryId: string;
@@ -22,6 +23,10 @@ export type CategoryBudget = {
   remaining: number;
   /** Proporción gastada (puede pasar de 1). */
   used: number;
+  /**
+   * `atencion` no significa "cerca del tope" sino "más rápido que el mes": ir
+   * en el 75% el día 15 es ir acelerado, aunque falte un cuarto por gastar.
+   */
   status: 'sin-presupuesto' | 'ok' | 'atencion' | 'excedido';
 };
 
@@ -54,7 +59,7 @@ function monthProgress(month: string): number {
   return now.getDate() / daysInMonth;
 }
 
-export function computeBudgetStatus(householdId: string, month: string): BudgetStatus {
+export function computeBudgetStatus(householdId: string, month: string, ambito: Ambito = HOGAR): BudgetStatus {
   const rows = db
     .prepare(
       `SELECT c.id AS categoryId, c.name AS category, c.color, c.emoji,
@@ -64,16 +69,18 @@ export function computeBudgetStatus(householdId: string, month: string): BudgetS
                 SELECT SUM(t.amount) FROM transactions t
                  WHERE t.household_id = c.household_id
                    AND t.category_id = c.id
-                   AND t.occurred_on LIKE ?
-                   AND ${SHARED}
+                   AND t.period = @mes
+                   AND ${filtroGastos(ambito)}
               ), 0) AS spent
          FROM categories c
          LEFT JOIN budgets bb ON bb.category_id = c.id AND bb.month IS NULL
-         LEFT JOIN budgets bm ON bm.category_id = c.id AND bm.month = ?
-        WHERE c.household_id = ? AND c.archived = 0
+              AND ${filtroDuenio(ambito, 'bb')}
+         LEFT JOIN budgets bm ON bm.category_id = c.id AND bm.month = @mesExacto
+              AND ${filtroDuenio(ambito, 'bm')}
+        WHERE c.household_id = @hogar AND c.archived = 0
         ORDER BY c.name`,
     )
-    .all(`${month}-%`, month, householdId) as {
+    .all({ mes: month, mesExacto: month, hogar: householdId, ...paramsAmbito(ambito) }) as {
     categoryId: string;
     category: string;
     color: string;
@@ -83,13 +90,19 @@ export function computeBudgetStatus(householdId: string, month: string): BudgetS
     spent: number;
   }[];
 
+  const avance = monthProgress(month);
+
   const categories: CategoryBudget[] = rows.map((r) => {
     const budget = r.budget ?? 0;
     const used = budget > 0 ? r.spent / budget : 0;
     let status: CategoryBudget['status'] = 'sin-presupuesto';
     if (budget > 0) {
       if (used > 1) status = 'excedido';
-      else if (used >= 0.8) status = 'atencion';
+      // Se compara contra cuánto mes ha pasado, no contra un porcentaje fijo.
+      // El margen evita que dos compras seguidas a principio de mes enciendan
+      // la alerta: un presupuesto no se gasta en cuotas iguales todos los días.
+      else if (used > avance + 0.15) status = 'atencion';
+      else if (used >= 0.9) status = 'atencion';
       else status = 'ok';
     }
     return {
@@ -111,10 +124,11 @@ export function computeBudgetStatus(householdId: string, month: string): BudgetS
   const totalSpentShared = (
     db
       .prepare(
-        `SELECT COALESCE(SUM(amount), 0) AS total FROM transactions
-          WHERE household_id = ? AND occurred_on LIKE ? AND ${SHARED}`,
+        `SELECT COALESCE(SUM(t.amount), 0) AS total FROM transactions t
+          WHERE t.household_id = @hogar AND t.period = @mes
+            AND ${filtroGastos(ambito)}`,
       )
-      .get(householdId, `${month}-%`) as { total: number }
+      .get({ hogar: householdId, mes: month, ...paramsAmbito(ambito) }) as { total: number }
   ).total;
 
   const budgetedSpent = withBudget.reduce((a, b) => a + b.spent, 0);
@@ -126,7 +140,7 @@ export function computeBudgetStatus(householdId: string, month: string): BudgetS
     budgetedSpent: round2(budgetedSpent),
     unbudgetedSpent: round2(totalSpentShared - budgetedSpent),
     categories,
-    monthProgress: monthProgress(month),
+    monthProgress: avance,
     overBudget: categories.filter((c) => c.status === 'excedido'),
     nearLimit: categories.filter((c) => c.status === 'atencion'),
   };
@@ -172,14 +186,25 @@ function monthsUntil(date: string): number {
  * orden de prioridad: la primera meta se completa antes de que la siguiente
  * reciba un peso.
  */
-export function computeGoals(householdId: string): GoalsView {
-  const reserve = computeReserve(householdId).balance;
+export function computeGoals(householdId: string, ambito: Ambito = HOGAR): GoalsView {
+  // Las metas del hogar se financian con el fondo de reserva; las de una
+  // persona, con lo que a esa persona le ha sobrado.
+  const reserve =
+    ambito.tipo === 'hogar'
+      ? // Lo libre, no el saldo entero: la parte prometida como crédito a
+        // alguien hay que devolverla, y financiar metas con eso sería contarla
+        // dos veces.
+        computeReserve(householdId).free
+      : computePersonalSavings(householdId, ambito.userId);
+
   const rows = db
     .prepare(
       `SELECT id, name, target_amount AS targetAmount, target_date AS targetDate, priority
-         FROM savings_goals WHERE household_id = ? ORDER BY priority, created_at`,
+         FROM savings_goals
+        WHERE household_id = @hogar AND ${filtroDuenio(ambito)}
+        ORDER BY priority, created_at`,
     )
-    .all(householdId) as {
+    .all({ hogar: householdId, ...paramsAmbito(ambito) }) as {
     id: string;
     name: string;
     targetAmount: number;
@@ -220,6 +245,8 @@ export function computeGoals(householdId: string): GoalsView {
 /* ------------------------- Comparación entre meses ------------------------ */
 
 export type CategoryChange = {
+  /** null en "Sin categoría"; sirve para abrir la lista de esa categoría. */
+  categoryId: string | null;
   category: string;
   color: string;
   emoji: string;
@@ -245,32 +272,41 @@ export type Comparison = {
   biggestDecreases: CategoryChange[];
 };
 
-function shiftMonth(month: string, delta: number): string {
+export function shiftMonth(month: string, delta: number): string {
   const [year, m] = month.split('-').map(Number);
   const d = new Date(year, m - 1 + delta, 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-export function compareMonths(householdId: string, month: string, lookback = 3): Comparison {
+export function compareMonths(
+  householdId: string,
+  month: string,
+  lookback = 3,
+  ambito: Ambito = HOGAR,
+): Comparison {
   const previousMonth = shiftMonth(month, -1);
   const since = shiftMonth(month, -lookback);
 
   const rows = db
     .prepare(
-      `SELECT COALESCE(c.name, 'Sin categoría') AS category,
+      /* El id va en la respuesta para poder entrar a la categoría desde la fila.
+         Null en "Sin categoría", que se pide del otro lado como `categoria=sin`. */
+      `SELECT c.id AS categoryId,
+              COALESCE(c.name, 'Sin categoría') AS category,
               COALESCE(c.color, '#898781') AS color,
               COALESCE(c.emoji, '❓') AS emoji,
-              substr(t.occurred_on, 1, 7) AS month,
+              t.period AS month,
               SUM(t.amount) AS total
          FROM transactions t
          LEFT JOIN categories c ON c.id = t.category_id
-        WHERE t.household_id = ?
-          AND t.type = 'gasto' AND t.scope = 'comun'
-          AND substr(t.occurred_on, 1, 7) >= ?
-          AND substr(t.occurred_on, 1, 7) <= ?
-        GROUP BY category, color, emoji, month`,
+        WHERE t.household_id = @hogar
+          AND ${filtroGastos(ambito)}
+          AND t.period >= @desde
+          AND t.period <= @hasta
+        GROUP BY t.category_id, month`,
     )
-    .all(householdId, since, month) as {
+    .all({ hogar: householdId, desde: since, hasta: month, ...paramsAmbito(ambito) }) as {
+    categoryId: string | null;
     category: string;
     color: string;
     emoji: string;
@@ -278,25 +314,35 @@ export function compareMonths(householdId: string, month: string, lookback = 3):
     total: number;
   }[];
 
-  const byCategory = new Map<string, { color: string; emoji: string; months: Map<string, number> }>();
+  /* Se agrupa por id y no por nombre: dos categorías distintas podrían llamarse
+     igual y quedarían sumadas en una fila que después no se puede abrir. La
+     clave '' es la de los movimientos sin categoría. */
+  const byCategory = new Map<
+    string,
+    { categoryId: string | null; category: string; color: string; emoji: string; months: Map<string, number> }
+  >();
   for (const row of rows) {
-    if (!byCategory.has(row.category)) {
-      byCategory.set(row.category, { color: row.color, emoji: row.emoji, months: new Map() });
+    const clave = row.categoryId ?? '';
+    if (!byCategory.has(clave)) {
+      byCategory.set(clave, {
+        categoryId: row.categoryId, category: row.category, color: row.color, emoji: row.emoji, months: new Map(),
+      });
     }
-    byCategory.get(row.category)!.months.set(row.month, row.total);
+    byCategory.get(clave)!.months.set(row.month, row.total);
   }
 
   const priorMonths: string[] = [];
   for (let i = 1; i <= lookback; i += 1) priorMonths.push(shiftMonth(month, -i));
 
-  const categories: CategoryChange[] = [...byCategory.entries()].map(([category, data]) => {
+  const categories: CategoryChange[] = [...byCategory.values()].map((data) => {
     const current = data.months.get(month) ?? 0;
     const previous = data.months.get(previousMonth) ?? 0;
     const priorValues = priorMonths.map((m) => data.months.get(m) ?? 0);
     const average = priorValues.reduce((a, b) => a + b, 0) / Math.max(priorValues.length, 1);
 
     return {
-      category,
+      categoryId: data.categoryId,
+      category: data.category,
       color: data.color,
       emoji: data.emoji,
       current: round2(current),

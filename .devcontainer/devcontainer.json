@@ -1,5 +1,5 @@
 {
-  "name": "Cuentas del Hogar",
+  "name": "MyHaus",
   "image": "mcr.microsoft.com/devcontainers/javascript-node:22-bookworm",
 
   // Deja el entorno listo: dependencias instaladas y flyctl disponible.
@@ -15,7 +15,7 @@
   "forwardPorts": [4000],
   "portsAttributes": {
     "4000": {
-      "label": "Cuentas del Hogar",
+      "label": "MyHaus",
       "onAutoForward": "notify"
     }
   },

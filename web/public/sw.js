@@ -9,7 +9,14 @@
  */
 const BUILD = '__BUILD__';
 const CACHE = `hogar-${BUILD}`;
-const SHELL = ['/index.html', '/manifest.webmanifest', '/icons/icon-192.png'];
+// La tipografía entra al shell: si no, la primera pantalla sin conexión sale
+// con la cara del sistema y la app se ve distinta cada vez.
+const SHELL = [
+  '/index.html',
+  '/manifest.webmanifest',
+  '/icons/icon-192.png',
+  '/fonts/bricolage-latin.woff2',
+];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

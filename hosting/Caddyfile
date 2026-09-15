@@ -1,0 +1,38 @@
+# Portero de myhaus.cl.
+#
+# Caddy pide y renueva los certificados solo, sin cron ni certbot: basta con que
+# los dominios de acá abajo apunten a la IP del servidor.
+{
+	# A esta dirección avisa Let's Encrypt si un certificado está por vencer o si
+	# hay un problema al renovarlo. Cámbiala por la tuya antes de levantar esto.
+	email correo@ejemplo.cl
+}
+
+# ------------------------------- El sitio -------------------------------
+www.myhaus.cl {
+	root * /sitio
+	encode zstd gzip
+	file_server
+
+	# Las imágenes y los iconos no cambian de nombre, así que se cachean poco
+	# tiempo: si se reemplaza una captura, se ve el cambio el mismo día.
+	@estaticos path /img/*
+	header @estaticos Cache-Control "public, max-age=86400"
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+}
+
+# El dominio pelado manda al sitio, para que exista una sola dirección buena.
+myhaus.cl {
+	redir https://www.myhaus.cl{uri} permanent
+}
+
+# -------------------------------- La app --------------------------------
+app.myhaus.cl {
+	encode zstd gzip
+	reverse_proxy app:8080
+}

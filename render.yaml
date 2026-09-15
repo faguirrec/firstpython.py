@@ -19,6 +19,13 @@ services:
     plan: starter
     region: ohio
     healthCheckPath: /api/health
+
+    # El dominio propio de la app. Declararlo acá evita tener que buscarlo en el
+    # panel: Render lo agrega al sincronizar el Blueprint. El certificado lo
+    # emite él, pero sólo después de que el DNS resuelva, así que el registro
+    # CNAME en Cloudflare tiene que existir igual —y en nube gris—.
+    domains:
+      - app.myhaus.cl
     # Con SQLite tiene que haber una sola instancia, o serían dos copias
     # distintas de la misma base.
     numInstances: 1
@@ -33,14 +40,53 @@ services:
       # la toma como origen público si no hay WEB_ORIGIN. Declararla sería una
       # referencia del servicio a sí mismo.
       #
-      # La primera cuenta se puede crear sin código porque la base está vacía;
-      # de ahí en adelante hace falta invitación.
+      # Abierto: cualquiera puede crear su cuenta y su propio hogar desde
+      # www.myhaus.cl. En `invite` sólo entraba la primera cuenta —la base
+      # estaba vacía— y de ahí en adelante todos recibían un 403, porque un
+      # código de invitación sirve para *unirse a un hogar*, que admite dos
+      # personas, no para crear uno nuevo.
+      #
+      # Se cierra de nuevo cambiando esto a `closed` sin tocar código.
       - key: ALLOW_SIGNUP
-        value: invite
+        value: open
       - key: TRUST_PROXY
         value: "1"
       # Render la genera sola y no queda escrita en ninguna parte del repo.
       - key: JWT_SECRET
+        generateValue: true
+      # Dirección pública definitiva. De acá salen el link de las invitaciones y
+      # la dirección de retorno de Google, así que tiene que ser el dominio
+      # propio y no la URL que Render inventa.
+      - key: WEB_ORIGIN
+        value: https://app.myhaus.cl
+      # Todo lo que llegue por la dirección de Render se redirige al dominio, así
+      # la app instalada en el teléfono es una sola.
+      - key: CANONICAL_HOST
+        value: app.myhaus.cl
+
+      # ---------------------- Envío de correo (SMTP) ----------------------
+      # Sin SMTP_HOST el correo queda apagado y la app funciona igual: las
+      # invitaciones se pasan a mano por el link o el QR, y no sale el resumen
+      # del mes. Con esto configurado, las dos cosas empiezan a andar solas.
+      #
+      # `sync: false` significa que el valor NO vive en este archivo: Render lo
+      # pide en el panel la primera vez y lo guarda cifrado. Las claves de
+      # correo no van al repositorio.
+      #
+      # Los pasos, con proveedor recomendado, están en CORREO.md.
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM
+        value: MyHaus <hola@myhaus.cl>
+      # Firma la llamada que dispara el resumen mensual desde fuera. Render la
+      # genera sola; hay que copiarla al cron que la llame.
+      - key: CRON_SECRET
         generateValue: true
 
     # Acá vive la base de datos. Sin esto, cada despliegue borraría todo.

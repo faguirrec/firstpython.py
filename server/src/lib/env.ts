@@ -63,7 +63,7 @@ export const env = {
     port: Number(process.env.SMTP_PORT ?? 587),
     user: process.env.SMTP_USER ?? '',
     pass: process.env.SMTP_PASS ?? '',
-    from: process.env.SMTP_FROM ?? process.env.SMTP_USER ?? 'Cuentas del Hogar <no-reply@localhost>',
+    from: process.env.SMTP_FROM ?? process.env.SMTP_USER ?? 'MyHaus <no-reply@localhost>',
   },
 
   /**
@@ -71,6 +71,19 @@ export const env = {
    * Sin ella, ese acceso queda cerrado.
    */
   cronSecret: process.env.CRON_SECRET ?? '',
+
+  /**
+   * Lectura del correo por IMAP.
+   *
+   * `tiempoReal` mantiene una conexión abierta con el buzón para que los gastos
+   * entren apenas llega el aviso del banco. Se puede apagar (CORREO_TIEMPO_REAL=0)
+   * si el proveedor cobra por conexiones largas o suspende la máquina al rato;
+   * en ese caso queda sólo el sondeo.
+   */
+  correo: {
+    tiempoReal: process.env.CORREO_TIEMPO_REAL !== '0',
+    sondeoMinutos: Number(process.env.CORREO_SONDEO_MINUTOS ?? 15),
+  },
 
   /**
    * Dominio definitivo de la app, si hay uno propio.

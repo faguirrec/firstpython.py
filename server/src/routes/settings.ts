@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { db, uid } from '../lib/db.js';
 import { requireAuth, requireHousehold } from '../lib/auth.js';
 import { env } from '../lib/env.js';
-import { applyRule, htmlToText, type EmailRule } from '../services/parser.js';
+import { evaluarRegla, htmlToText, type EmailRule } from '../services/parser.js';
 import { BANK_TEMPLATES } from '../services/bankTemplates.js';
 import { correoConfigurado, enviarCorreo, envoltorio, probarConexion } from '../services/mailer.js';
 import { construirReporte, mesPasado } from '../services/reporteMensual.js';
@@ -27,7 +27,7 @@ settingsRouter.post('/email/test', async (req, res) => {
 
   const envio = await enviarCorreo({
     para: req.user!.email,
-    asunto: 'Prueba de correo — Cuentas del Hogar',
+    asunto: 'Prueba de correo — MyHaus',
     html: envoltorio(
       'El correo está funcionando',
       `<p style="color:#52514e;margin:0;">
@@ -200,10 +200,14 @@ const emailRuleInput = z.object({
   merchantRegex: z.string().max(300).nullable().optional(),
   dateRegex: z.string().max(300).nullable().optional(),
   accountRegex: z.string().max(300).nullable().optional(),
+  periodRegex: z.string().max(300).nullable().optional(),
   cardFilter: z.string().max(120).nullable().optional(),
+  mustContain: z.string().max(400).nullable().optional(),
+  mustNotContain: z.string().max(400).nullable().optional(),
   type: z.enum(['gasto', 'aporte']).default('gasto'),
   scope: z.enum(['comun', 'personal']).default('comun'),
   accountLabel: z.string().max(80).nullable().optional(),
+  userId: z.string().nullable().optional(),
   priority: z.number().int().default(100),
 });
 
@@ -213,6 +217,7 @@ function validRegexes(input: z.infer<typeof emailRuleInput>): string | null {
     ['comercio', input.merchantRegex],
     ['fecha', input.dateRegex],
     ['cuenta', input.accountRegex],
+    ['mes', input.periodRegex],
   ] as const) {
     if (!pattern) continue;
     try {
@@ -227,13 +232,53 @@ function validRegexes(input: z.infer<typeof emailRuleInput>): string | null {
 settingsRouter.get('/email-rules', (req, res) => {
   const rules = db
     .prepare(
+      // Van todas las columnas que el formulario deja editar. Devolver menos
+      // hacía que abrir una regla mostrara vacíos los filtros de texto y el
+      // dueño, que sí estaban guardados: parecía que se habían perdido.
       `SELECT id, name, enabled, gmail_query AS gmailQuery, amount_regex AS amountRegex,
               merchant_regex AS merchantRegex, date_regex AS dateRegex, account_regex AS accountRegex,
-              card_filter AS cardFilter, type, scope, account_label AS accountLabel, priority
+              period_regex AS periodRegex, card_filter AS cardFilter,
+              must_contain AS mustContain, must_not_contain AS mustNotContain,
+              type, scope, account_label AS accountLabel, user_id AS userId,
+              template_key AS templateKey, priority
          FROM email_rules WHERE household_id = ? ORDER BY priority`,
     )
-    .all(req.household!.id);
-  res.json({ rules, templates: BANK_TEMPLATES });
+    .all(req.household!.id) as {
+    gmailQuery: string;
+    amountRegex: string;
+    merchantRegex: string | null;
+    dateRegex: string | null;
+    accountRegex: string | null;
+    periodRegex: string | null;
+    mustContain: string | null;
+    mustNotContain: string | null;
+    templateKey: string | null;
+  }[];
+
+  /*
+   * Qué reglas quedaron atrás respecto de su plantilla.
+   *
+   * Los bancos cambian el texto de sus avisos y las plantillas se corrigen en
+   * el código, pero la regla del hogar es una copia congelada en el día en que
+   * se creó. El síntoma de esa diferencia es el peor posible: la regla deja de
+   * calzar y no aparece ningún error, sólo dejan de entrar movimientos.
+   */
+  const conEstado = rules.map((r) => {
+    const plantilla = BANK_TEMPLATES.find((t) => t.key === r.templateKey);
+    if (!plantilla) return { ...r, desactualizada: false };
+    const difiere =
+      r.gmailQuery !== plantilla.gmail_query ||
+      r.amountRegex !== plantilla.amount_regex ||
+      r.merchantRegex !== plantilla.merchant_regex ||
+      r.dateRegex !== plantilla.date_regex ||
+      r.accountRegex !== plantilla.account_regex ||
+      r.periodRegex !== (plantilla.period_regex ?? null) ||
+      r.mustContain !== (plantilla.must_contain ?? null) ||
+      r.mustNotContain !== (plantilla.must_not_contain ?? null);
+    return { ...r, desactualizada: difiere };
+  });
+
+  res.json({ rules: conEstado, templates: BANK_TEMPLATES });
 });
 
 settingsRouter.post('/email-rules', (req, res) => {
@@ -252,12 +297,15 @@ settingsRouter.post('/email-rules', (req, res) => {
   db.prepare(
     `INSERT INTO email_rules
        (id, household_id, name, enabled, gmail_query, amount_regex, merchant_regex, date_regex,
-        account_regex, card_filter, type, scope, account_label, priority)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        account_regex, period_regex, card_filter, must_contain, must_not_contain, type, scope,
+        account_label, user_id, priority)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     id, req.household!.id, r.name, r.enabled ? 1 : 0, r.gmailQuery, r.amountRegex,
-    r.merchantRegex ?? null, r.dateRegex ?? null, r.accountRegex ?? null, r.cardFilter ?? null,
-    r.type, r.scope, r.accountLabel ?? null, r.priority,
+    r.merchantRegex ?? null, r.dateRegex ?? null, r.accountRegex ?? null,
+    r.periodRegex ?? null, r.cardFilter ?? null,
+    r.mustContain ?? null, r.mustNotContain ?? null, r.type, r.scope,
+    r.accountLabel ?? null, r.userId ?? null, r.priority,
   );
   res.status(201).json({ id });
 });
@@ -279,15 +327,59 @@ settingsRouter.patch('/email-rules/:id', (req, res) => {
         name = COALESCE(?, name), enabled = COALESCE(?, enabled), gmail_query = COALESCE(?, gmail_query),
         amount_regex = COALESCE(?, amount_regex), merchant_regex = COALESCE(?, merchant_regex),
         date_regex = COALESCE(?, date_regex), account_regex = COALESCE(?, account_regex),
-        card_filter = COALESCE(?, card_filter), type = COALESCE(?, type), scope = COALESCE(?, scope),
-        account_label = COALESCE(?, account_label), priority = COALESCE(?, priority)
+        period_regex = COALESCE(?, period_regex),
+        card_filter = COALESCE(?, card_filter), must_contain = COALESCE(?, must_contain),
+        must_not_contain = COALESCE(?, must_not_contain),
+        type = COALESCE(?, type), scope = COALESCE(?, scope),
+        account_label = COALESCE(?, account_label), user_id = COALESCE(?, user_id),
+        priority = COALESCE(?, priority)
       WHERE id = ? AND household_id = ?`,
   ).run(
     r.name ?? null, r.enabled === undefined ? null : r.enabled ? 1 : 0, r.gmailQuery ?? null,
     r.amountRegex ?? null, r.merchantRegex ?? null, r.dateRegex ?? null, r.accountRegex ?? null,
-    r.cardFilter ?? null, r.type ?? null, r.scope ?? null, r.accountLabel ?? null, r.priority ?? null,
+    r.periodRegex ?? null,
+    r.cardFilter ?? null, r.mustContain ?? null, r.mustNotContain ?? null, r.type ?? null, r.scope ?? null,
+    r.accountLabel ?? null, r.userId ?? null, r.priority ?? null,
     req.params.id, req.household!.id,
   );
+  res.json({ ok: true });
+});
+
+/**
+ * Traer a una regla los cambios de la plantilla de la que salió.
+ *
+ * Lo que se toca son los patrones y los filtros, que es lo que envejece cuando
+ * el banco cambia sus correos. Lo que decidió la persona —si está activa, de
+ * quién es el aporte, qué tarjetas mira, el nombre— se respeta: son decisiones
+ * de este hogar y una plantilla no tiene nada que decir sobre ellas.
+ */
+settingsRouter.post('/email-rules/:id/desde-plantilla', (req, res) => {
+  const regla = db
+    .prepare('SELECT template_key AS templateKey FROM email_rules WHERE id = ? AND household_id = ?')
+    .get(req.params.id, req.household!.id) as { templateKey: string | null } | undefined;
+
+  if (!regla) {
+    res.status(404).json({ error: 'Esa regla no existe.' });
+    return;
+  }
+  const plantilla = BANK_TEMPLATES.find((t) => t.key === regla.templateKey);
+  if (!plantilla) {
+    res.status(400).json({ error: 'Esta regla no salió de una plantilla, así que no hay de dónde traer nada.' });
+    return;
+  }
+
+  db.prepare(
+    `UPDATE email_rules SET
+        gmail_query = ?, amount_regex = ?, merchant_regex = ?, date_regex = ?,
+        account_regex = ?, period_regex = ?, must_contain = ?, must_not_contain = ?
+      WHERE id = ? AND household_id = ?`,
+  ).run(
+    plantilla.gmail_query, plantilla.amount_regex, plantilla.merchant_regex, plantilla.date_regex,
+    plantilla.account_regex, plantilla.period_regex ?? null,
+    plantilla.must_contain ?? null, plantilla.must_not_contain ?? null,
+    req.params.id, req.household!.id,
+  );
+
   res.json({ ok: true });
 });
 
@@ -322,14 +414,25 @@ settingsRouter.post('/email-rules/test', (req, res) => {
     merchant_regex: r.merchantRegex ?? null,
     date_regex: r.dateRegex ?? null,
     account_regex: r.accountRegex ?? null,
+    period_regex: r.periodRegex ?? null,
     card_filter: r.cardFilter ?? null,
+    must_contain: r.mustContain ?? null,
+    must_not_contain: r.mustNotContain ?? null,
     type: r.type ?? 'gasto',
     scope: r.scope ?? 'comun',
     account_label: r.accountLabel ?? null,
+    user_id: r.userId ?? null,
   };
 
   const body = parsed.data.isHtml ? htmlToText(parsed.data.sample) : parsed.data.sample;
-  const movement = applyRule({ from: '', subject: '', body, internalDate: Date.now() }, rule);
+  const resultado = evaluarRegla({ from: '', subject: '', body, internalDate: Date.now() }, rule);
 
-  res.json({ matched: movement != null, movement, text: body.slice(0, 2000) });
+  res.json({
+    matched: resultado.calza,
+    movement: resultado.calza ? resultado.movimiento : null,
+    // Qué condición lo descartó. Sin esto, "no calzó" tiene cinco causas
+    // posibles y no hay forma de saber cuál fue.
+    motivo: resultado.calza ? null : resultado.motivo,
+    text: body.slice(0, 2000),
+  });
 });
