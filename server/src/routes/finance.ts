@@ -26,6 +26,15 @@ import {
   gastoEsperadoDelMes,
   listarGastosFijos,
 } from '../services/gastosFijos.js';
+import {
+  actualizarRenglon,
+  agregarRenglon,
+  armarPlan,
+  borrarPlan,
+  borrarRenglon,
+  confirmarRenglon,
+  planDelMes,
+} from '../services/planDelMes.js';
 import { compareMonths, computeBudgetStatus, computeGoals } from '../services/planning.js';
 import { cierreDelMes } from '../services/cierreDelMes.js';
 
@@ -694,3 +703,99 @@ function sinceMonth(months: number): string {
   d.setMonth(d.getMonth() - months + 1);
   return d.toISOString().slice(0, 7);
 }
+
+/* ---------------------------- El plan del mes ----------------------------- */
+
+/**
+ * Lo que se espera gastar este mes y cuánto de eso ya salió.
+ *
+ * No crea nada por su cuenta: un mes sin plan responde `hayPlan: false` y la
+ * pantalla ofrece armarlo. Que el plan sea un acto explícito importa —si la app
+ * lo armara sola, el mes aparecería con expectativas que nadie declaró.
+ */
+financeRouter.get('/plan', (req, res) => {
+  const month = monthSchema.safeParse(req.query.month ?? currentMonth());
+  if (!month.success) {
+    res.status(400).json({ error: month.error.issues[0].message });
+    return;
+  }
+  res.json(planDelMes(req.household!.id, month.data));
+});
+
+financeRouter.post('/plan/armar', (req, res) => {
+  const parsed = z.object({ month: monthSchema }).safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0].message });
+    return;
+  }
+  const armado = armarPlan(req.household!.id, parsed.data.month);
+  res.json({ ...armado, plan: planDelMes(req.household!.id, parsed.data.month) });
+});
+
+const renglonInput = z.object({
+  name: z.string().min(1, 'Ponle un nombre').max(120),
+  amount: z.number().positive().nullable().optional(),
+  categoryId: z.string().nullable().optional(),
+  dueDay: z.number().int().min(1).max(31).nullable().optional(),
+  matchText: z.string().max(120).nullable().optional(),
+  modo: z.enum(['puntual', 'acumulado']).optional(),
+});
+
+financeRouter.post('/plan', (req, res) => {
+  const parsed = renglonInput.extend({ month: monthSchema }).safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0].message });
+    return;
+  }
+  const { month, ...datos } = parsed.data;
+  const id = agregarRenglon(req.household!.id, month, datos);
+  res.status(201).json({ id, plan: planDelMes(req.household!.id, month) });
+});
+
+financeRouter.patch('/plan/:id', (req, res) => {
+  const parsed = renglonInput.partial().safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0].message });
+    return;
+  }
+  if (!actualizarRenglon(req.household!.id, req.params.id, parsed.data)) {
+    res.status(404).json({ error: 'Ese renglón no existe' });
+    return;
+  }
+  res.json({ ok: true });
+});
+
+financeRouter.delete('/plan/:id', (req, res) => {
+  if (!borrarRenglon(req.household!.id, req.params.id)) {
+    res.status(404).json({ error: 'Ese renglón no existe' });
+    return;
+  }
+  res.json({ ok: true });
+});
+
+/** Anotar que un renglón se pagó: crea el movimiento real. */
+financeRouter.post('/plan/:id/anotar', (req, res) => {
+  const parsed = z
+    .object({ amount: z.number().positive().optional(), occurredOn: z.string().optional() })
+    .safeParse(req.body ?? {});
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0].message });
+    return;
+  }
+  const hecho = confirmarRenglon(req.household!.id, req.params.id, parsed.data);
+  if (!hecho) {
+    res.status(400).json({ error: 'No pude anotarlo: falta el monto o el renglón no existe' });
+    return;
+  }
+  res.status(201).json(hecho);
+});
+
+/** Borrar el plan entero del mes, para volver a armarlo de cero. */
+financeRouter.delete('/plan', (req, res) => {
+  const month = monthSchema.safeParse(req.query.month);
+  if (!month.success) {
+    res.status(400).json({ error: month.error.issues[0].message });
+    return;
+  }
+  res.json({ ok: true, borrados: borrarPlan(req.household!.id, month.data) });
+});

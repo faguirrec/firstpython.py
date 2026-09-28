@@ -281,6 +281,51 @@ export type EstadoFijos = {
   all: GastoFijo[];
 };
 
+/* ----------------------------- El plan del mes ---------------------------- */
+
+/**
+ * Un renglón de lo que se espera gastar este mes.
+ *
+ * No es un movimiento: dice que algo se espera, no que ocurrió. Lo que lo da por
+ * cumplido es un movimiento real que le calce, venga del correo, de Apple Pay o
+ * de haberlo anotado a mano.
+ */
+export type RenglonPlan = {
+  id: string;
+  name: string;
+  amount: number | null;
+  categoryId: string | null;
+  categoryName: string | null;
+  categoryEmoji: string | null;
+  categoryColor: string | null;
+  dueDay: number | null;
+  matchText: string | null;
+  /**
+   * 'puntual' lo cumple un solo pago —el arriendo, el internet—.
+   * 'acumulado' se va llenando con lo que se gaste en su categoría —el
+   * supermercado, la bencina—, así que la primera compra no lo cumple.
+   */
+  modo: 'puntual' | 'acumulado';
+  origin: 'fijo' | 'anterior' | 'mano';
+  expected: number;
+  expectedFrom: 'declarado' | 'promedio' | 'sin-datos';
+  gastado: number;
+  cumplidoCon: { id: string; amount: number; occurredOn: string; merchant: string | null } | null;
+  movimientos: number;
+  cumplido: boolean;
+};
+
+export type Plan = {
+  month: string;
+  hayPlan: boolean;
+  items: RenglonPlan[];
+  totalEsperado: number;
+  totalGastado: number;
+  totalPendiente: number;
+  /** Gasto real del mes que no estaba en ningún renglón. */
+  fueraDelPlan: number;
+};
+
 /** Un gasto fijo que la app reconoce en los movimientos que ya existen. */
 export type FijoDetectado = {
   name: string;
@@ -540,6 +585,21 @@ export const api = {
   actualizarGastoFijo: (id: string, body: Record<string, unknown>) =>
     patch<{ ok: true }>(`/finance/fixed/${id}`, body),
   borrarGastoFijo: (id: string) => del<{ ok: true }>(`/finance/fixed/${id}`),
+
+  plan: (month: string) => get<Plan>(`/finance/plan?month=${month}`),
+  armarPlan: (month: string) =>
+    post<{ creados: number; yaEstaban: number; desde: string; plan: Plan }>('/finance/plan/armar', { month }),
+  agregarAlPlan: (body: {
+    month: string; name: string; amount?: number | null; categoryId?: string | null;
+    dueDay?: number | null; matchText?: string | null; modo?: 'puntual' | 'acumulado';
+  }) => post<{ id: string; plan: Plan }>('/finance/plan', body),
+  actualizarRenglon: (id: string, body: Record<string, unknown>) =>
+    patch<{ ok: true }>(`/finance/plan/${id}`, body),
+  borrarRenglon: (id: string) => del<{ ok: true }>(`/finance/plan/${id}`),
+  /** Anotar que un renglón se pagó: crea el movimiento real. */
+  anotarRenglon: (id: string, body: { amount?: number; occurredOn?: string } = {}) =>
+    post<{ id: string; amount: number }>(`/finance/plan/${id}/anotar`, body),
+  borrarPlan: (month: string) => del<{ ok: true; borrados: number }>(`/finance/plan?month=${month}`),
 
   /** Las finanzas de quien está usando la app, con el aporte al hogar incluido. */
   resumenPersonal: (month: string) => get<ResumenPersonal>(`/finance/personal?month=${month}`),

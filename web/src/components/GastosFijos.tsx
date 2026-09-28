@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { api, type Category, type EstadoFijos, type GastoFijo } from '../lib/api';
 import { useSession } from '../lib/session';
 import { dayLabel, money } from '../lib/format';
@@ -60,6 +61,14 @@ export default function GastosFijos({ month }: { month: string }) {
           El arriendo, las cuentas, las suscripciones. Se declaran una vez y la app te va diciendo cuáles ya se
           pagaron este mes y cuáles no. <strong>No crea movimientos</strong>: sólo compara con lo que realmente
           pasó.
+        </p>
+        {/* Que se entienda la relación entre las dos pantallas. Sin esta línea
+            quedan dos listas parecidas que no se conocen entre sí, y nadie sabe
+            cuál tocar para qué. */}
+        <p className="muted">
+          Esto es la plantilla: lo que vale todos los meses. Cuando armes el plan de un mes en{' '}
+          <Link to="/movimientos">Movimientos</Link>, estos son los que entran, y ahí puedes cambiarles el monto
+          sólo para ese mes sin tocar lo de acá.
         </p>
 
         {estado && estado.items.length > 0 && (

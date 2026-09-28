@@ -12,6 +12,7 @@ import NuevoMovimiento from '../components/NuevoMovimiento';
 import Sheet from '../components/Sheet';
 import { FichaCategoria } from '../components/Fichas';
 import FilaDeslizable from '../components/FilaDeslizable';
+import PlanDelMes from '../components/PlanDelMes';
 
 export default function Movimientos() {
   const { household } = useSession();
@@ -247,6 +248,21 @@ export default function Movimientos() {
       </div>
 
       {error && <div className="error">{error}</div>}
+
+      {/*
+        * El plan del mes, antes de la lista de lo que ya pasó.
+        *
+        * Va acá y no en Análisis porque el problema aparece justo acá: uno
+        * cambia de mes para empezar a ordenarlo y se encuentra la lista en
+        * blanco, con la única salida de anotar todo de nuevo a mano. Lo
+        * planeado no se mezcla con lo gastado —vive en su propia tarjeta, no
+        * suma al total de abajo y no mueve el saldo ni el reparto—, pero está
+        * en la misma pantalla, que es donde hace falta.
+        *
+        * Con un filtro puesto se esconde: la pantalla ya está contestando otra
+        * pregunta y el plan del mes completo no tiene nada que hacer ahí.
+        */}
+      {!onlyPending && !categoriaVista && !todosLosMeses && <PlanDelMes month={month} />}
 
       {/*
         * Al entrar desde una barra del desglose, decir en qué se entró.

@@ -426,6 +426,52 @@ db.exec(`
   );
 `);
 
+/*
+ * El plan del mes: la instancia de un mes concreto.
+ *
+ * Los gastos fijos de arriba son la plantilla —"esto pasa todos los meses"— y
+ * esta tabla es cómo queda ese mes en particular. Nace de la plantilla más lo
+ * que se gastó el mes pasado, y desde ahí se edita libre: que en octubre el
+ * arriendo suba, que este mes además venga la patente del auto, que la
+ * suscripción se dio de baja. Nada de eso toca la plantilla.
+ *
+ * Sigue sin ser un movimiento, por la misma razón de siempre: dice que algo se
+ * espera, no que ocurrió. El cruce con los movimientos reales del mes es lo que
+ * lo da por cumplido, igual que con los fijos. Un plan no mueve el saldo de la
+ * cuenta ni le cobra nada a nadie en el reparto hasta que la plata sale de
+ * verdad.
+ */
+db.exec(`
+  CREATE TABLE IF NOT EXISTS planned_expenses (
+    id           TEXT PRIMARY KEY,
+    household_id TEXT NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+    -- El mes contable al que pertenece este renglón (YYYY-MM).
+    period       TEXT NOT NULL,
+    name         TEXT NOT NULL,
+    -- NULL cuando no se sabe cuánto va a ser: se estima con el promedio.
+    amount       REAL,
+    category_id  TEXT REFERENCES categories(id) ON DELETE SET NULL,
+    due_day      INTEGER,
+    -- Texto que debe aparecer en el comercio o la glosa para darlo por cumplido.
+    match_text   TEXT,
+    -- Cómo se cumple este renglón, que no es lo mismo para todo:
+    --   'puntual'   un solo pago lo cumple y queda listo (el arriendo, el
+    --               internet, la patente).
+    --   'acumulado' se va llenando con lo que se gaste en su categoría a lo
+    --               largo del mes (el supermercado, la bencina). Darlo por
+    --               cumplido con la primera compra seria mentir.
+    modo         TEXT NOT NULL DEFAULT 'puntual',
+    -- De dónde salió el renglón, para poder decirlo en pantalla:
+    -- 'fijo' (de la plantilla), 'anterior' (del mes pasado), 'mano'.
+    origin       TEXT NOT NULL DEFAULT 'mano',
+    -- La plantilla de la que salió, si salió de una. Se deja en NULL si esa
+    -- plantilla se borra: el renglón del mes ya planeado no desaparece por eso.
+    fixed_id     TEXT REFERENCES fixed_expenses(id) ON DELETE SET NULL,
+    created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_plan_mes ON planned_expenses (household_id, period);
+`);
+
 // Presupuestos y metas dejan de ser sólo del hogar: sin dueño son del hogar,
 // con dueño son de esa persona. Así la misma pantalla sirve para las dos cosas.
 addColumn('budgets', 'user_id', 'TEXT REFERENCES users(id) ON DELETE CASCADE');

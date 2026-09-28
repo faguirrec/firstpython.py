@@ -2215,3 +2215,141 @@ details.plegable > summary .resumen-dato {
 }
 
 
+
+/* ------------------------------ El plan del mes --------------------------- */
+
+/*
+ * Lo planeado tiene que verse distinto de lo gastado.
+ *
+ * Están en la misma pantalla a propósito —el problema aparece justo ahí, al
+ * cambiar de mes y encontrar la lista vacía— y eso obliga a que no se confundan
+ * ni por un segundo: un renglón del plan es plata que todavía no sale. Por eso
+ * la tarjeta va con borde punteado y fondo apenas teñido, que es como se ve
+ * todo lo provisorio en el resto de la app.
+ */
+.plan-vacio,
+.plan-mes {
+  border: 1px dashed color-mix(in srgb, var(--marca) 32%, transparent);
+  background: var(--marca-suave);
+}
+.plan-vacio h2,
+.plan-mes h2 { margin-bottom: var(--e2); }
+.plan-vacio p { margin-top: 0; }
+.plan-vacio button.primary { margin-top: var(--e2); }
+
+/* Las tres cifras de arriba: esperado, gastado, falta. */
+.plan-cifras {
+  display: flex;
+  align-items: stretch;
+  flex-wrap: wrap;
+  gap: var(--e2) var(--e3);
+  margin: var(--e3) 0;
+  padding: var(--e2) var(--e3);
+  border-radius: var(--radius-sm);
+  background: var(--plane);
+}
+.plan-cifra {
+  flex: 1 1 0;
+  min-width: 104px;
+  display: grid;
+  /* Rótulo arriba, cifra abajo, para que las tres se apoyen en la misma línea
+     aunque un rótulo se parta en dos. */
+  grid-template-rows: 1fr auto;
+  gap: 1px;
+}
+.plan-cifra-rotulo {
+  font-size: var(--t-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+.plan-cifra strong {
+  font-family: var(--display);
+  font-size: var(--cifra-sm);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+/* El pelo entre las dos cifras: sin él se leen como una sola frase. */
+.plan-cifra-linea {
+  flex: none;
+  align-self: stretch;
+  width: 1px;
+  min-height: 32px;
+  background: var(--border);
+}
+
+/* Por dónde va el mes, bajo las cifras. */
+.plan-avance { display: grid; gap: 5px; margin-bottom: var(--e3); }
+.plan-avance > .muted { font-size: var(--t-sm); }
+.plan-barra-total { height: 6px; margin-top: 0; }
+
+/* Cuánto lleva un renglón que se llena de a poco. */
+.plan-barra {
+  margin-top: 5px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+}
+.plan-barra > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--marca);
+}
+/* Lo que va gastado, bajo lo planeado: más chico, para que la cifra que manda
+   siga siendo la meta del mes. */
+.plan-llevado {
+  display: block;
+  font-size: var(--t-xs);
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.plan-anotar { margin-top: var(--e3); }
+.plan-anotar > .muted { display: block; margin-bottom: var(--e2); font-size: var(--t-sm); }
+/*
+ * Acá las fichas envuelven en vez de deslizarse.
+ *
+ * La tira que se desliza es lo correcto para los filtros, que son catorce y no
+ * caben nunca. Estas son tres o cuatro y la barra de scroll va oculta, así que
+ * deslizándose lo único que pasaba era que la última quedaba cortada contra el
+ * borde sin ninguna señal de que hubiera más.
+ */
+.plan-anotar .chips-fila {
+  flex-wrap: wrap;
+  overflow-x: visible;
+  padding-inline: 0;
+  margin-inline: 0;
+}
+
+.plan-pie {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e2);
+  margin-top: var(--e3);
+}
+/* Mismo peso de selector que el nowrap general de los botones, o las etiquetas
+   largas estiran la tarjeta a lo ancho en pantallas angostas. */
+.plan-pie button:not(.chip):not(.item) {
+  flex: 1 1 auto;
+  white-space: normal;
+}
+
+.plan-fuera { margin-bottom: 0; font-size: var(--t-sm); }
+
+/* Elegir cómo se paga, en el editor del renglón. */
+.plan-modo { border: none; padding: 0; margin: 0; }
+.plan-modo legend { font-size: var(--t-sm); font-weight: 600; margin-bottom: var(--e2); }
+.plan-modo label {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--e2);
+  padding: var(--e2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.plan-modo label + label { margin-top: 2px; }
+.plan-modo input { margin-top: 3px; flex: none; }
+.plan-modo span { display: grid; gap: 1px; }
+.plan-modo em { font-style: normal; font-size: var(--t-sm); }

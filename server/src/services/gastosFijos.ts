@@ -1,5 +1,6 @@
 import { db, uid } from '../lib/db.js';
 import { round2 } from './split.js';
+import { calzarConMovimientos, type MovimientoCalzable } from './calce.js';
 
 /**
  * Gastos fijos del hogar: el arriendo, las cuentas, las suscripciones.
@@ -85,9 +86,15 @@ export function listarGastosFijos(householdId: string): GastoFijo[] {
   ).map(aGastoFijo);
 }
 
-/** Promedio de lo que se pagó en meses anteriores, para los de monto variable. */
-function promedioHistorico(householdId: string, fijo: Fila, hasta: string): number | null {
-  if (!fijo.category_id) return null;
+/**
+ * Promedio de lo que se pagó en esa categoría en meses anteriores.
+ *
+ * Es lo que se usa cuando el monto no está declarado —la luz, el agua— para no
+ * mostrar un cero donde sí va a salir plata. Lo usan tanto los gastos fijos
+ * como el plan del mes.
+ */
+export function promedioDeLaCategoria(householdId: string, categoryId: string | null, hasta: string): number | null {
+  if (!categoryId) return null;
   const fila = db
     .prepare(
       `SELECT AVG(total) AS promedio FROM (
@@ -99,8 +106,56 @@ function promedioHistorico(householdId: string, fijo: Fila, hasta: string): numb
            ORDER BY period DESC
            LIMIT 3)`,
     )
-    .get({ hogar: householdId, categoria: fijo.category_id, hasta }) as { promedio: number | null };
+    .get({ hogar: householdId, categoria: categoryId, hasta }) as { promedio: number | null };
   return fila.promedio;
+}
+
+/**
+ * Promedio de lo que calzó con **esta** expectativa en los meses anteriores.
+ *
+ * Es lo que hay que usar cuando el monto no está declarado, y no el promedio de
+ * la categoría entera: si en "Cuentas" viven la luz y el agua, promediar la
+ * categoría le atribuye a la luz también el agua. Con dos cuentas de $46.800 y
+ * $31.200 la luz salía estimada en $78.000 —casi el doble de lo que es— y el
+ * agua quedaba contada dos veces.
+ *
+ * Se mira mes por mes y se cruza igual que en el mes corriente, así el texto de
+ * calce ("enel") hace su trabajo. Si nunca calzó nada se vuelve al promedio de
+ * la categoría, que con una sola cuenta adentro es exactamente lo mismo y es lo
+ * único que se puede decir cuando no hay con qué reconocerla.
+ */
+export function promedioDeLoQueCalzo(
+  householdId: string,
+  esperado: { categoryId: string | null; matchText: string | null },
+  hasta: string,
+  meses = 3,
+): number | null {
+  if (!esperado.categoryId && !esperado.matchText) return null;
+
+  const periodos = db
+    .prepare(
+      `SELECT DISTINCT period FROM transactions
+        WHERE household_id = ? AND type = 'gasto' AND scope = 'comun' AND period < ?
+        ORDER BY period DESC LIMIT ?`,
+    )
+    .all(householdId, hasta, meses) as { period: string }[];
+
+  const montos: number[] = [];
+  for (const { period } of periodos) {
+    const movimientos = db
+      .prepare(
+        `SELECT id, amount, occurred_on AS occurredOn, merchant, description, category_id AS categoryId
+           FROM transactions
+          WHERE household_id = ? AND period = ? AND type = 'gasto' AND scope = 'comun'
+          ORDER BY occurred_on`,
+      )
+      .all(householdId, period) as MovimientoCalzable[];
+    const [calce] = calzarConMovimientos([esperado], movimientos);
+    if (calce) montos.push(calce.amount);
+  }
+
+  if (montos.length === 0) return promedioDeLaCategoria(householdId, esperado.categoryId, hasta);
+  return montos.reduce((a, b) => a + b, 0) / montos.length;
 }
 
 /**
@@ -133,29 +188,22 @@ export function estadoDelMes(householdId: string, month: string): EstadoMes {
     categoryId: string | null;
   }[];
 
-  const usados = new Set<string>();
+  const calces = calzarConMovimientos(
+    fijos.map((f) => ({ categoryId: f.category_id, matchText: f.match_text })),
+    movimientos,
+  );
 
-  const items: EstadoGastoFijo[] = fijos.map((f) => {
-    const texto = f.match_text?.trim().toLowerCase();
-
-    const calce = movimientos.find((m) => {
-      if (usados.has(m.id)) return false;
-      if (f.category_id && m.categoryId !== f.category_id) return false;
-      if (texto) {
-        const donde = `${m.merchant ?? ''} ${m.description ?? ''}`.toLowerCase();
-        if (!donde.includes(texto)) return false;
-      }
-      // Sin categoría ni texto no hay con qué reconocerlo; se deja pendiente
-      // antes que dar por pagado cualquier cosa.
-      return Boolean(f.category_id || texto);
-    });
-
-    if (calce) usados.add(calce.id);
+  const items: EstadoGastoFijo[] = fijos.map((f, i) => {
+    const calce = calces[i];
 
     let expected = f.amount;
     let expectedFrom: EstadoGastoFijo['expectedFrom'] = 'declarado';
     if (expected == null) {
-      const promedio = promedioHistorico(householdId, f, month);
+      const promedio = promedioDeLoQueCalzo(
+        householdId,
+        { categoryId: f.category_id, matchText: f.match_text },
+        month,
+      );
       expected = promedio;
       expectedFrom = promedio == null ? 'sin-datos' : 'promedio';
     }
