@@ -3,7 +3,17 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import { SessionProvider } from './lib/session';
+import { aplicarTema, leerTema } from './lib/tema';
 import './styles.css';
+
+/*
+ * El tema elegido se estampa antes de montar nada.
+ *
+ * En un efecto de React la primera pintura saldría con el tema del sistema y se
+ * vería el cambio de golpe: una app que parpadea de oscuro a claro al abrir se
+ * siente rota aunque no lo esté.
+ */
+aplicarTema(leerTema());
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

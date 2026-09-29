@@ -41,7 +41,12 @@ function inviteCode(): string {
   return Array.from({ length: 6 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
 }
 
-function seedHousehold(householdId: string): void {
+/**
+ * Categorías, reglas de comercio y plantillas de banco de un hogar recién
+ * creado. Se exporta para poder ejercitar el mismo camino desde las pruebas: un
+ * hogar armado a mano no categoriza igual que uno real.
+ */
+export function seedHousehold(householdId: string): void {
   const insertCategory = db.prepare(
     'INSERT INTO categories (id, household_id, name, kind, color, emoji) VALUES (?, ?, ?, ?, ?, ?)',
   );
@@ -64,13 +69,16 @@ function seedHousehold(householdId: string): void {
   const insertEmailRule = db.prepare(
     `INSERT INTO email_rules
        (id, household_id, name, enabled, gmail_query, amount_regex, merchant_regex, date_regex,
-        account_regex, type, scope, account_label, priority)
-     VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        account_regex, period_regex, must_contain, must_not_contain, type, scope, account_label,
+        template_key, priority)
+     VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   BANK_TEMPLATES.forEach((t, i) => {
     insertEmailRule.run(
       uid(), householdId, t.name, t.gmail_query, t.amount_regex, t.merchant_regex,
-      t.date_regex, t.account_regex, t.type, t.scope, t.account_label, i * 10,
+      t.date_regex, t.account_regex, t.period_regex ?? null,
+      t.must_contain ?? null, t.must_not_contain ?? null,
+      t.type, t.scope, t.account_label, t.key, i * 10,
     );
   });
 }
@@ -112,7 +120,7 @@ householdRouter.get('/', requireHousehold, (req, res) => {
   const household = db
     .prepare(
       `SELECT id, name, currency, official_account AS officialAccount, contingency_pct AS contingencyPct,
-              send_monthly_report AS sendMonthlyReport
+              savings_pct AS savingsPct, send_monthly_report AS sendMonthlyReport
          FROM households WHERE id = ?`,
     )
     .get(req.household!.id);
@@ -143,6 +151,7 @@ householdRouter.patch('/', requireHousehold, (req, res) => {
       currency: z.string().length(3).optional(),
       officialAccount: z.string().max(80).optional(),
       contingencyPct: z.number().min(0).max(100).optional(),
+      savingsPct: z.number().min(0).max(100).optional(),
       sendMonthlyReport: z.boolean().optional(),
     })
     .safeParse(req.body);
@@ -150,13 +159,14 @@ householdRouter.patch('/', requireHousehold, (req, res) => {
     res.status(400).json({ error: parsed.error.issues[0].message });
     return;
   }
-  const { name, currency, officialAccount, contingencyPct, sendMonthlyReport } = parsed.data;
+  const { name, currency, officialAccount, contingencyPct, savingsPct, sendMonthlyReport } = parsed.data;
   db.prepare(
     `UPDATE households
         SET name = COALESCE(?, name),
             currency = COALESCE(?, currency),
             official_account = COALESCE(?, official_account),
             contingency_pct = COALESCE(?, contingency_pct),
+            savings_pct = COALESCE(?, savings_pct),
             send_monthly_report = COALESCE(?, send_monthly_report)
       WHERE id = ?`,
   ).run(
@@ -164,6 +174,7 @@ householdRouter.patch('/', requireHousehold, (req, res) => {
     currency?.toUpperCase() ?? null,
     officialAccount ?? null,
     contingencyPct ?? null,
+    savingsPct ?? null,
     sendMonthlyReport === undefined ? null : sendMonthlyReport ? 1 : 0,
     req.household!.id,
   );

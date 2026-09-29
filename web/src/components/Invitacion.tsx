@@ -25,6 +25,8 @@ function QR({ text, size = 190 }: { text: string; size?: number }) {
       viewBox={`-1 -1 ${path.count + 2} ${path.count + 2}`}
       role="img"
       aria-label="Código QR con el link de invitación"
+      /* Blanco fijo a propósito, también en modo oscuro: un QR sobre fondo
+         oscuro no lo lee la mitad de las cámaras. */
       style={{ background: '#fff', borderRadius: 10, padding: 4 }}
       shapeRendering="crispEdges"
     >
@@ -73,7 +75,7 @@ export default function Invitacion({ code, onChanged }: { code: string; onChange
   async function share() {
     if (navigator.share) {
       try {
-        await navigator.share({ title: 'Cuentas del Hogar', text: message, url: link });
+        await navigator.share({ title: 'MyHaus', text: message, url: link });
         return;
       } catch {
         // El usuario canceló la hoja de compartir: no es un error.
@@ -147,7 +149,7 @@ export default function Invitacion({ code, onChanged }: { code: string; onChange
       <div className="card" style={{ background: 'var(--plane)', boxShadow: 'none', marginBottom: 10 }}>
         <div className="label">O que escriba este código a mano</div>
         <div className="row">
-          <strong className="num" style={{ fontSize: '1.6rem', letterSpacing: '0.15em' }}>{code}</strong>
+          <strong className="num" style={{ fontSize: 'var(--cifra-md)', letterSpacing: '0.15em' }}>{code}</strong>
           <button className="small" onClick={() => void copy(code, 'code')}>
             {copied === 'code' ? '✓' : 'Copiar'}
           </button>

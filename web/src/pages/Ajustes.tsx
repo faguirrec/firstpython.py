@@ -1,17 +1,19 @@
 import { useEffect, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { api, type CambiosHogar, type Household, type Member } from '../lib/api';
 import { useSession } from '../lib/session';
+import { cambiarTema, useTema } from '../lib/tema';
 import Categorias from '../components/AjustesCategorias';
-import GmailPanel from '../components/AjustesGmail';
+import CorreoPanel from '../components/AjustesCorreo';
 import ReglasCorreo from '../components/AjustesReglas';
+import AjustesAtajo from '../components/AjustesAtajo';
 import Invitacion from '../components/Invitacion';
 import Cabecera from '../components/Cabecera';
 
 const TABS = [
   { key: 'hogar', label: 'Hogar' },
   { key: 'categorias', label: 'Categorías' },
-  { key: 'gmail', label: 'Gmail' },
+  { key: 'gmail', label: 'Correo' },
   { key: 'reglas', label: 'Reglas de correo' },
 ] as const;
 
@@ -21,6 +23,9 @@ export default function Ajustes() {
   const location = useLocation();
   const navigate = useNavigate();
   const fromUrl = location.pathname.split('/')[2] as TabKey | undefined;
+  // Los gastos fijos se mudaron a Análisis. La dirección vieja sigue viva
+  // porque anda dando vueltas en enlaces y en la pantalla de inicio.
+  const seMudo = fromUrl === ('fijos' as TabKey);
   const [tab, setTab] = useState<TabKey>(TABS.some((t) => t.key === fromUrl) ? fromUrl! : 'hogar');
 
   function select(key: TabKey) {
@@ -28,9 +33,11 @@ export default function Ajustes() {
     navigate(key === 'hogar' ? '/ajustes' : `/ajustes/${key}`, { replace: true });
   }
 
+  if (seMudo) return <Navigate to="/reportes?vista=fijos" replace />;
+
   return (
     <>
-      <Cabecera hogar="Ajustes" />
+      <Cabecera hogar="Ajustes" conModo={false} />
 
       <div className="tabs">
         {TABS.map((t) => (
@@ -42,7 +49,7 @@ export default function Ajustes() {
 
       {tab === 'hogar' && <PanelHogar />}
       {tab === 'categorias' && <Categorias />}
-      {tab === 'gmail' && <GmailPanel />}
+      {tab === 'gmail' && <CorreoPanel />}
       {tab === 'reglas' && <ReglasCorreo />}
     </>
   );
@@ -50,6 +57,7 @@ export default function Ajustes() {
 
 function PanelHogar() {
   const { user, signOut, refresh } = useSession();
+  const tema = useTema();
   const [household, setHousehold] = useState<Household | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [code, setCode] = useState<string | null>(null);
@@ -161,9 +169,64 @@ function PanelHogar() {
             Con 10%, si el gasto estimado del mes es $1.000.000 se juntan $1.100.000 y quedan $100.000 de reserva.
           </em>
         </label>
+
+        {/*
+          * Dos porcentajes distintos y conviene no confundirlos: la
+          * contingencia se junta *antes*, de más, todos los meses; el ahorro
+          * decide qué pasa con lo que sobró *después* de pagar todo.
+          */}
+        <h3 style={{ marginTop: 20 }}>Ahorro al cerrar el mes</h3>
+        <p className="muted" style={{ marginTop: 4 }}>
+          Cuando un mes cierra con plata de más en la cuenta, hasta este tope se queda en el hogar
+          para financiar las metas de ahorro. Lo que pase del tope vuelve como crédito a quien puso
+          de más: le baja el aporte del mes siguiente.
+        </p>
+        <label className="field" style={{ marginBottom: 0 }}>
+          <span>Tope de ahorro: {household.savingsPct}% del gasto del mes</span>
+          <input
+            type="range"
+            min={0}
+            max={50}
+            step={1}
+            defaultValue={household.savingsPct}
+            onChange={(e) => setHousehold({ ...household, savingsPct: Number(e.target.value) })}
+            onMouseUp={(e) => void save({ savingsPct: Number((e.target as HTMLInputElement).value) })}
+            onTouchEnd={(e) => void save({ savingsPct: Number((e.target as HTMLInputElement).value) })}
+          />
+          <em className="muted">
+            Con 10% y un gasto de $1.400.000 al mes, se guardan hasta $140.000 de lo que sobre.
+            En cero, todo lo que sobra vuelve a quien lo puso.
+          </em>
+        </label>
       </div>
 
       <PanelCorreo household={household} onSave={save} />
+
+      <AjustesAtajo />
+
+      <div className="card">
+        <h2>Apariencia</h2>
+        <p className="muted" style={{ marginTop: 0 }}>
+          Las cifras se leen distinto según el fondo, y no siempre conviene el mismo
+          que el resto del teléfono.
+        </p>
+        <div className="tabs" role="group" aria-label="Tema de la app">
+          {([
+            ['sistema', 'Como el teléfono'],
+            ['claro', 'Claro'],
+            ['oscuro', 'Oscuro'],
+          ] as const).map(([valor, etiqueta]) => (
+            <button
+              key={valor}
+              className={tema === valor ? 'active' : ''}
+              onClick={() => cambiarTema(valor)}
+              aria-pressed={tema === valor}
+            >
+              {etiqueta}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className="card">
         <h2>Instalar en el iPhone</h2>

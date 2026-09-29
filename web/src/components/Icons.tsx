@@ -131,24 +131,24 @@ export function Logo({ size = 40, ...rest }: SVGProps<SVGSVGElement> & { size?: 
       viewBox="0 0 48 48"
       fill="none"
       role="img"
-      aria-label="Cuentas del Hogar"
+      aria-label="MyHaus"
       {...rest}
     >
-      <rect width="48" height="48" rx="11" fill="var(--marca, #2a78d6)" />
+      <rect width="48" height="48" rx="11" fill="var(--marca, #2f5d4e)" />
       {/* Techo */}
       <path
         d="M9.5 22.5 24 10.5l14.5 12"
-        stroke="#fff"
+        stroke="var(--sobre-acento, #fff)"
         strokeWidth="3"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       {/* Las dos columnas: lo que las distingue es la altura, no el color. Con
           una más tenue se leía como una sola barra al achicar el icono. */}
-      <rect x="16" y="27" width="6" height="11" rx="1.6" fill="#fff" />
-      <rect x="26" y="22.5" width="6" height="15.5" rx="1.6" fill="#fff" />
+      <rect x="16" y="27" width="6" height="11" rx="1.6" fill="var(--sobre-acento, #fff)" />
+      <rect x="26" y="22.5" width="6" height="15.5" rx="1.6" fill="var(--sobre-acento, #fff)" />
       {/* Suelo */}
-      <path d="M12 38.8h24" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" />
+      <path d="M12 38.8h24" stroke="var(--sobre-acento, #fff)" strokeWidth="2.6" strokeLinecap="round" />
     </svg>
   );
 }
@@ -159,8 +159,10 @@ export function Marca({ size = 34 }: { size?: number }) {
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
       <Logo size={size} />
       <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1 }}>
-        <strong style={{ fontSize: '1.02rem', letterSpacing: '-0.01em' }}>Cuentas del Hogar</strong>
-        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>según lo que gana cada uno</span>
+        <strong style={{ fontFamily: 'var(--display)', fontSize: 'var(--t-lg)', letterSpacing: '-0.015em' }}>
+          MyHaus
+        </strong>
+        <span style={{ fontSize: 'var(--t-xs)', color: 'var(--text-muted)' }}>según lo que gana cada uno</span>
       </span>
     </span>
   );
