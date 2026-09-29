@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% set titulo = "En arriendo ahora" %}
+{% block contenido %}
+<div class="cabecera"><h1>En arriendo ahora</h1></div>
+<div class="tarjeta sin-relleno">
+  {% if filas %}
+  <div class="tabla-scroll"><table>
+    <thead><tr><th>Equipo</th><th class="num">Unid.</th><th>Cliente</th><th>Arriendo</th><th>Devuelve</th></tr></thead>
+    <tbody>{% for i, a in filas %}
+      <tr class="{{ 'fila-alerta' if a.atrasado }}">
+        <td><a href="{{ url_for('inventario.detalle', id=i.equipo.id) }}"><b>{{ i.equipo.nombre }}</b></a><br><span class="suave">{{ i.equipo.codigo }}</span></td>
+        <td class="num">{{ i.pendiente }}</td>
+        <td><a href="{{ url_for('clientes.detalle', id=a.cliente.id) }}">{{ a.cliente.nombre }}</a>{% if a.cliente.telefono %}<br><span class="suave">{{ a.cliente.telefono }}</span>{% endif %}</td>
+        <td><a href="{{ url_for('arriendos.detalle', id=a.id) }}">{{ a.numero }}</a></td>
+        <td>{{ a.fecha_fin|fecha }} {% if a.atrasado %}<span class="chip rojo">Atrasado {{ a.dias_atraso }} d</span>{% elif a.por_vencer_hoy %}<span class="chip ambar">Hoy</span>{% endif %}</td>
+      </tr>{% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}<div class="vacio">No hay equipos afuera en este momento.</div>{% endif %}
+</div>
+{% endblock %}

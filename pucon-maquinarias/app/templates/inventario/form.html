@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% from "_macros.html" import campo with context %}
+{% block contenido %}
+<div class="cabecera"><h1>{{ titulo }}</h1></div>
+<form method="post" class="tarjeta formulario">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <div class="campos">
+    {{ campo('codigo', 'Código interno', e.codigo, requerido=True, ayuda='Único. Ej: CO-001') }}
+    {{ campo('nombre', 'Nombre', e.nombre, requerido=True) }}
+    <div class="campo"><label for="categoria_id">Categoría</label>
+      <select id="categoria_id" name="categoria_id">
+        <option value="">Sin categoría</option>
+        {% for c in categorias %}<option value="{{ c.id }}" {{ 'selected' if e.categoria_id == c.id }}>{{ c.nombre }}</option>{% endfor %}
+      </select></div>
+    {{ campo('marca', 'Marca', e.marca) }}
+    {{ campo('modelo', 'Modelo', e.modelo) }}
+    {{ campo('ubicacion', 'Ubicación', e.ubicacion, ayuda='Bodega, patio, sucursal...') }}
+    {% if nuevo %}{{ campo('cantidad_total', 'Cantidad de unidades', e.cantidad_total, 'number', requerido=True, extra='min="1"', ayuda='1 para una máquina única; más para andamios, vallas, etc.') }}{% endif %}
+    {{ campo('tarifa_dia', 'Tarifa por día (CLP, neto)', e.tarifa_dia, 'number', requerido=True, extra='min="1"') }}
+    {{ campo('tarifa_semana', 'Tarifa por semana', e.tarifa_semana, 'number', extra='min="0"', ayuda='Opcional. Se usa si conviene al cliente.') }}
+    {{ campo('tarifa_mes', 'Tarifa por mes (30 días)', e.tarifa_mes, 'number', extra='min="0"', ayuda='Opcional.') }}
+    {{ campo('garantia', 'Garantía por unidad', e.garantia, 'number', extra='min="0"') }}
+    {{ campo('valor_reposicion', 'Valor de reposición', e.valor_reposicion, 'number', extra='min="0"', ayuda='Lo que se cobra si se pierde o daña sin arreglo.') }}
+    {{ campo('descripcion', 'Descripción / especificaciones', e.descripcion, 'textarea', ancho=True) }}
+  </div>
+  <p style="margin-bottom:0"><button class="btn" type="submit">Guardar</button>
+    <a class="btn sec" href="{{ url_for('inventario.detalle', id=e.id) if e.id else url_for('inventario.lista') }}">Cancelar</a></p>
+</form>
+{% endblock %}

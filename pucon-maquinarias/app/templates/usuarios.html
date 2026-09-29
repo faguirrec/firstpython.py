@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% from "_macros.html" import boton_post with context %}
+{% set titulo = "Usuarios" %}
+{% block contenido %}
+<div class="cabecera"><h1>Usuarios</h1></div>
+<div class="tarjeta sin-relleno">
+  <div class="tabla-scroll"><table>
+    <thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Estado</th><th></th></tr></thead>
+    <tbody>{% for u in usuarios %}
+      <tr><td><b>{{ u.nombre }}</b></td><td>{{ u.email }}</td><td>{{ roles[u.rol] }}</td>
+        <td>{% if u.activo %}<span class="chip verde">Activo</span>{% else %}<span class="chip">Desactivado</span>{% endif %}</td>
+        <td class="num" style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap">
+          <form method="post" action="{{ url_for('admin.restablecer_clave', id=u.id) }}" class="fila-form compacta">
+            <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+            <input type="password" name="password" placeholder="Nueva contraseña" minlength="8" autocomplete="new-password" style="width:170px" required>
+            <button class="btn sec chico" type="submit">Restablecer</button></form>
+          {% if u.id != usuario.id %}{{ boton_post(url_for('admin.alternar_usuario', id=u.id), 'Desactivar' if u.activo else 'Activar') }}{% endif %}
+        </td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+</div>
+<div class="tarjeta">
+  <h2>Nuevo usuario</h2>
+  <form method="post" action="{{ url_for('admin.crear_usuario') }}" class="fila-form">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div class="campo"><label>Nombre</label><input name="nombre" required></div>
+    <div class="campo"><label>Correo</label><input name="email" type="email" required></div>
+    <div class="campo"><label>Contraseña inicial</label><input name="password" type="password" minlength="8" autocomplete="new-password" required></div>
+    <div class="campo"><label>Rol</label><select name="rol">{% for k, v in roles.items() %}<option value="{{ k }}" {{ 'selected' if k == 'operador' }}>{{ v }}</option>{% endfor %}</select></div>
+    <button class="btn" type="submit" style="flex:0 0 auto">Crear</button>
+  </form>
+  <p class="ayuda">Los operadores gestionan clientes, inventario, cotizaciones, arriendos y pagos. Sólo los administradores eliminan registros, gestionan usuarios y editan la configuración.</p>
+</div>
+{% endblock %}

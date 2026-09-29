@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% from "_macros.html" import campo with context %}
+{% set titulo = "Configuración" %}
+{% block contenido %}
+<div class="cabecera"><h1>Configuración</h1></div>
+<form method="post" class="tarjeta formulario">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <p class="suave">Estos datos aparecen en las cotizaciones y contratos impresos.</p>
+  <div class="campos">
+    {{ campo('empresa_nombre', 'Nombre de la empresa', cfg.empresa_nombre, requerido=True) }}
+    {{ campo('empresa_rut', 'RUT de la empresa', cfg.empresa_rut) }}
+    {{ campo('empresa_giro', 'Giro', cfg.empresa_giro) }}
+    {{ campo('empresa_direccion', 'Dirección', cfg.empresa_direccion) }}
+    {{ campo('empresa_telefono', 'Teléfono', cfg.empresa_telefono) }}
+    {{ campo('empresa_email', 'Correo', cfg.empresa_email, 'email') }}
+    {{ campo('iva_pct', 'IVA (%)', cfg.iva_pct, 'number', requerido=True, extra='min="0" max="100"', ayuda='Se aplica a los documentos nuevos; los existentes conservan el suyo.') }}
+    {{ campo('validez_dias', 'Validez de cotizaciones (días)', cfg.validez_dias, 'number', requerido=True, extra='min="1" max="365"') }}
+    {{ campo('condiciones_cotizacion', 'Condiciones al pie de la cotización', cfg.condiciones_cotizacion, 'textarea', ancho=True, extra='rows="4"') }}
+    {{ campo('condiciones_arriendo', 'Condiciones del contrato de arriendo', cfg.condiciones_arriendo, 'textarea', ancho=True, extra='rows="5"') }}
+  </div>
+  <p style="margin-bottom:0"><button class="btn" type="submit">Guardar</button></p>
+</form>
+{% endblock %}

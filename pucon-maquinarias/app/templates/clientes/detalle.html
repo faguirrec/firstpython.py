@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% from "_macros.html" import chip_arriendo, chip_cotizacion, boton_post with context %}
+{% set titulo = c.nombre %}
+{% block contenido %}
+<div class="cabecera">
+  <div><div class="migas"><a href="{{ url_for('clientes.lista') }}">Clientes</a></div><h1>{{ c.nombre }}</h1></div>
+  <div class="acciones">
+    <a class="btn" href="{{ url_for('cotizaciones.nueva', cliente=c.id) }}">Cotizar</a>
+    <a class="btn sec" href="{{ url_for('arriendos.nuevo', cliente=c.id) }}">Arrendar</a>
+    <a class="btn sec" href="{{ url_for('clientes.editar', id=c.id) }}">Editar</a>
+    {% if usuario.es_admin %}{{ boton_post(url_for('clientes.eliminar', id=c.id), 'Eliminar', 'btn peligro', 'Se borra el cliente (o se archiva si tiene historial). ¿Continuar?') }}{% endif %}
+  </div>
+</div>
+<div class="rejilla c2">
+  <div class="tarjeta">
+    <h2>Datos</h2>
+    <dl class="datos">
+      <dt>Tipo</dt><dd>{{ c.TIPOS[c.tipo] }}</dd>
+      <dt>RUT</dt><dd>{{ c.rut|rut or '—' }}</dd>
+      {% if c.contacto %}<dt>Contacto</dt><dd>{{ c.contacto }}</dd>{% endif %}
+      <dt>Teléfono</dt><dd>{{ c.telefono or '—' }}</dd>
+      <dt>Correo</dt><dd>{{ c.email or '—' }}</dd>
+      <dt>Dirección</dt><dd>{{ c.direccion or '—' }}{% if c.ciudad %}, {{ c.ciudad }}{% endif %}</dd>
+      {% if c.notas %}<dt>Notas</dt><dd>{{ c.notas }}</dd>{% endif %}
+    </dl>
+  </div>
+  <div class="tarjeta">
+    <h2>Cuenta</h2>
+    <dl class="datos">
+      <dt>Arriendos</dt><dd>{{ c.arriendos|length }}</dd>
+      <dt>Cotizaciones</dt><dd>{{ c.cotizaciones|length }}</dd>
+      <dt>Saldo pendiente</dt><dd><b {% if c.saldo_pendiente > 0 %}style="color:var(--rojo)"{% endif %}>{{ c.saldo_pendiente|clp }}</b></dd>
+    </dl>
+  </div>
+</div>
+<div class="tarjeta sin-relleno">
+  <div style="padding:14px 18px 0"><h2>Arriendos</h2></div>
+  {% if c.arriendos %}
+  <div class="tabla-scroll"><table>
+    <thead><tr><th>N°</th><th>Período</th><th>Estado</th><th class="num">Total</th><th class="num">Saldo</th></tr></thead>
+    <tbody>{% for a in c.arriendos|sort(attribute='id', reverse=True) %}
+      <tr><td><a href="{{ url_for('arriendos.detalle', id=a.id) }}">{{ a.numero }}</a></td>
+          <td>{{ a.fecha_inicio|fecha }} → {{ a.fecha_fin|fecha }}</td><td>{{ chip_arriendo(a) }}</td>
+          <td class="num">{{ a.total|clp }}</td><td class="num">{{ a.saldo|clp }}</td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+  {% else %}<div class="vacio">Sin arriendos todavía.</div>{% endif %}
+</div>
+<div class="tarjeta sin-relleno">
+  <div style="padding:14px 18px 0"><h2>Cotizaciones</h2></div>
+  {% if c.cotizaciones %}
+  <div class="tabla-scroll"><table>
+    <thead><tr><th>N°</th><th>Fecha</th><th>Estado</th><th class="num">Total</th></tr></thead>
+    <tbody>{% for q in c.cotizaciones|sort(attribute='id', reverse=True) %}
+      <tr><td><a href="{{ url_for('cotizaciones.detalle', id=q.id) }}">{{ q.numero }}</a></td>
+          <td>{{ q.fecha|fecha }}</td><td>{{ chip_cotizacion(q) }}</td><td class="num">{{ q.total|clp }}</td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+  {% else %}<div class="vacio">Sin cotizaciones todavía.</div>{% endif %}
+</div>
+{% endblock %}

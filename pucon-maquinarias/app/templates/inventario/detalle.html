@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% from "_macros.html" import barra_stock, chip_arriendo, boton_post with context %}
+{% set titulo = e.nombre %}
+{% block contenido %}
+<div class="cabecera">
+  <div><div class="migas"><a href="{{ url_for('inventario.lista') }}">Inventario</a> / {{ e.codigo }}</div><h1>{{ e.nombre }}</h1></div>
+  <div class="acciones">
+    <a class="btn sec" href="{{ url_for('inventario.editar', id=e.id) }}">Editar</a>
+    {% if usuario.es_admin %}{{ boton_post(url_for('inventario.eliminar', id=e.id), 'Dar de baja del catálogo', 'btn peligro', 'El equipo se elimina del catálogo (o se oculta si tiene historial). ¿Continuar?') }}{% endif %}
+  </div>
+</div>
+
+<div class="rejilla c4" style="margin-bottom:18px">
+  <div class="kpi"><div class="valor">{{ stock.total }}</div><div class="etiqueta">Total</div></div>
+  <div class="kpi"><div class="valor" style="color:var(--verde)">{{ stock.disponible }}</div><div class="etiqueta">Disponibles ahora</div></div>
+  <div class="kpi"><div class="valor" style="color:var(--azul)">{{ stock.en_arriendo }}</div><div class="etiqueta">En arriendo{% if stock.reservado %} · {{ stock.reservado }} reservada(s){% endif %}</div></div>
+  <div class="kpi"><div class="valor" style="color:var(--ambar)">{{ stock.en_mantencion }}</div><div class="etiqueta">En mantención</div></div>
+</div>
+
+<div class="rejilla c2">
+  <div class="tarjeta">
+    <h2>Ficha</h2>
+    <dl class="datos">
+      <dt>Categoría</dt><dd>{{ e.categoria.nombre if e.categoria else '—' }}</dd>
+      <dt>Marca / modelo</dt><dd>{{ e.marca or '—' }} {{ e.modelo or '' }}</dd>
+      <dt>Ubicación</dt><dd>{{ e.ubicacion or '—' }}</dd>
+      <dt>Tarifa día</dt><dd>{{ e.tarifa_dia|clp }}</dd>
+      <dt>Tarifa semana</dt><dd>{{ e.tarifa_semana|clp if e.tarifa_semana else '—' }}</dd>
+      <dt>Tarifa mes</dt><dd>{{ e.tarifa_mes|clp if e.tarifa_mes else '—' }}</dd>
+      <dt>Garantía</dt><dd>{{ e.garantia|clp }} por unidad</dd>
+      <dt>Reposición</dt><dd>{{ e.valor_reposicion|clp }}</dd>
+      {% if e.descripcion %}<dt>Detalle</dt><dd>{{ e.descripcion }}</dd>{% endif %}
+    </dl>
+  </div>
+
+  <div class="tarjeta">
+    <h2>Movimiento de inventario</h2>
+    <form method="post" action="{{ url_for('inventario.movimiento', id=e.id) }}" class="fila-form compacta">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <div class="campo"><label>Tipo</label>
+        <select name="tipo"><option value="ingreso">Ingreso (compra)</option><option value="baja">Baja (pérdida, venta)</option><option value="ajuste">Ajuste (conteo real)</option></select></div>
+      <div class="campo" style="flex:0 1 90px"><label>Cantidad</label><input type="number" name="cantidad" min="1" value="1" required></div>
+      <div class="campo" style="flex:2 1 180px"><label>Motivo</label><input name="motivo" placeholder="Obligatorio en bajas y ajustes"></div>
+      <button class="btn" type="submit" style="flex:0 0 auto">Registrar</button>
+    </form>
+    <p class="ayuda">El <b>ajuste</b> fija el total al número contado. No se puede bajar de lo que está arrendado o en mantención.</p>
+
+    <h3 style="margin-top:14px">Enviar a mantención</h3>
+    <form method="post" action="{{ url_for('inventario.abrir_mantencion', id=e.id) }}" class="fila-form compacta">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <div class="campo" style="flex:0 1 90px"><label>Cantidad</label><input type="number" name="cantidad" min="1" value="1" required></div>
+      <div class="campo" style="flex:2 1 180px"><label>Motivo</label><input name="motivo" placeholder="Ej: cambio de aceite" required></div>
+      <button class="btn sec" type="submit" style="flex:0 0 auto">Enviar</button>
+    </form>
+  </div>
+</div>
+
+{% set abiertas = e.mantenciones|selectattr('abierta')|list %}
+{% if e.mantenciones %}
+<div class="tarjeta sin-relleno">
+  <div style="padding:14px 18px 0"><h2>Mantenciones</h2></div>
+  <div class="tabla-scroll"><table>
+    <thead><tr><th>Desde</th><th>Motivo</th><th class="num">Unid.</th><th>Hasta</th><th class="num">Costo</th><th></th></tr></thead>
+    <tbody>{% for m in e.mantenciones %}
+      <tr><td>{{ m.fecha_inicio|fecha }}</td><td>{{ m.motivo }}</td><td class="num">{{ m.cantidad }}</td>
+        <td>{% if m.abierta %}<span class="chip ambar">En curso</span>{% else %}{{ m.fecha_fin|fecha }}{% endif %}</td>
+        <td class="num">{{ m.costo|clp if not m.abierta else '' }}</td>
+        <td class="num">{% if m.abierta %}
+          <form method="post" action="{{ url_for('inventario.cerrar_mantencion', id=m.id) }}" class="fila-form compacta" style="justify-content:flex-end">
+            <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+            <input type="number" name="costo" min="0" placeholder="Costo $" style="width:110px">
+            <button class="btn verde chico" type="submit">Terminar</button></form>{% endif %}</td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+</div>
+{% endif %}
+
+<div class="tarjeta sin-relleno">
+  <div style="padding:14px 18px 0"><h2>Arriendos de este equipo</h2></div>
+  {% if lineas %}
+  <div class="tabla-scroll"><table>
+    <thead><tr><th>Arriendo</th><th>Cliente</th><th>Período</th><th class="num">Unid.</th><th>Estado</th></tr></thead>
+    <tbody>{% for i, a in lineas %}
+      <tr><td><a href="{{ url_for('arriendos.detalle', id=a.id) }}">{{ a.numero }}</a></td><td>{{ a.cliente.nombre }}</td>
+        <td>{{ a.fecha_inicio|fecha }} → {{ a.fecha_fin|fecha }}</td><td class="num">{{ i.cantidad }}</td><td>{{ chip_arriendo(a) }}</td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+  {% else %}<div class="vacio">Este equipo aún no se ha arrendado.</div>{% endif %}
+</div>
+
+<div class="tarjeta sin-relleno">
+  <div style="padding:14px 18px 0"><h2>Historial de inventario</h2></div>
+  <div class="tabla-scroll"><table>
+    <thead><tr><th>Fecha</th><th>Tipo</th><th class="num">Cambio</th><th>Motivo</th><th>Usuario</th></tr></thead>
+    <tbody>{% for m in e.movimientos %}
+      <tr><td>{{ m.fecha.strftime('%d-%m-%Y %H:%M') }}</td><td>{{ m.TIPOS[m.tipo] }}</td>
+          <td class="num">{{ '%+d'|format(m.cantidad) }}</td><td>{{ m.motivo or '' }}</td><td>{{ m.usuario.nombre if m.usuario else '' }}</td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+</div>
+{% endblock %}

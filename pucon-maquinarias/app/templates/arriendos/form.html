@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% from "_macros.html" import campo with context %}
+{% block contenido %}
+<div class="cabecera"><h1>{{ titulo }}</h1></div>
+<form method="post" class="formulario">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <div class="tarjeta">
+    <div class="campos">
+      <div class="campo"><label for="cliente_id">Cliente *</label>
+        <select id="cliente_id" name="cliente_id" required>
+          <option value="">Elegir cliente…</option>
+          {% for cl in clientes %}<option value="{{ cl.id }}" {{ 'selected' if a.cliente_id == cl.id }}>{{ cl.nombre }}{% if cl.rut %} · {{ cl.rut|rut }}{% endif %}</option>{% endfor %}
+        </select>
+        <span class="ayuda"><a href="{{ url_for('clientes.nuevo', siguiente=request.path) }}">+ Crear cliente nuevo</a></span></div>
+      {{ campo('fecha_inicio', 'Salida', a.fecha_inicio.isoformat() if a.fecha_inicio else '', 'date', requerido=True) }}
+      {{ campo('fecha_fin', 'Devolución prevista', a.fecha_fin.isoformat() if a.fecha_fin else '', 'date', requerido=True) }}
+      {{ campo('lugar_uso', 'Lugar de uso / obra', a.lugar_uso) }}
+    </div>
+  </div>
+  <div class="tarjeta">
+    <h2>Equipos</h2>
+    {% set doc = a %}{% set excluir = a.id or '' %}
+    {% include "_lineas.html" %}
+  </div>
+  <div class="tarjeta">
+    <div class="campos">
+      {{ campo('flete', 'Flete / despacho (neto)', a.flete or 0, 'number', extra='min="0"') }}
+      {{ campo('garantia_monto', 'Garantía recibida', a.garantia_monto or 0, 'number', extra='min="0"', ayuda='Se sugiere según los equipos; edítala si cambia.') }}
+      {{ campo('notas', 'Notas', a.notas, 'textarea', ancho=True) }}
+    </div>
+  </div>
+  <p style="display:flex;gap:8px;flex-wrap:wrap">
+    {% if not a.id %}
+      <button class="btn verde" type="submit" name="accion" value="entregar">Guardar y entregar ahora</button>
+      <button class="btn" type="submit" name="accion" value="reservar">Guardar como reserva</button>
+    {% else %}<button class="btn" type="submit">Guardar cambios</button>{% endif %}
+    <a class="btn sec" href="{{ url_for('arriendos.detalle', id=a.id) if a.id else url_for('arriendos.lista') }}">Cancelar</a></p>
+</form>
+{% endblock %}

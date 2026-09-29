@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% set titulo = "Clientes" %}
+{% block contenido %}
+<div class="cabecera">
+  <h1>Clientes</h1>
+  <div class="acciones">
+    <a class="btn sec" href="{{ url_for('clientes.exportar') }}">Exportar CSV</a>
+    <a class="btn" href="{{ url_for('clientes.nuevo') }}">Nuevo cliente</a>
+  </div>
+</div>
+<form class="filtros" method="get">
+  <input type="search" name="q" value="{{ q }}" placeholder="Buscar por nombre, RUT, correo o teléfono">
+  <button class="btn sec" type="submit">Buscar</button>
+</form>
+<div class="tarjeta sin-relleno">
+  {% if clientes %}
+  <div class="tabla-scroll"><table>
+    <thead><tr><th>Cliente</th><th>RUT</th><th>Contacto</th><th>Ciudad</th><th class="num">Saldo pendiente</th></tr></thead>
+    <tbody>
+    {% for c in clientes %}
+      <tr>
+        <td><a href="{{ url_for('clientes.detalle', id=c.id) }}"><b>{{ c.nombre }}</b></a>
+            {% if c.tipo == 'empresa' %}<span class="chip">Empresa</span>{% endif %}</td>
+        <td>{{ c.rut|rut }}</td>
+        <td>{{ c.telefono or '' }}{% if c.email %}<br><span class="suave">{{ c.email }}</span>{% endif %}</td>
+        <td>{{ c.ciudad or '' }}</td>
+        <td class="num">{% if c.saldo_pendiente > 0 %}<b style="color:var(--rojo)">{{ c.saldo_pendiente|clp }}</b>{% else %}<span class="suave">—</span>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}<div class="vacio">{{ 'Sin resultados.' if q else 'Todavía no hay clientes.' }}</div>{% endif %}
+</div>
+{% endblock %}

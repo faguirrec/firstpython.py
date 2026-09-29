@@ -1,0 +1,44 @@
+# Blueprint de Render para Pucón Maquinarias.
+#
+# Render sólo lee este archivo desde la raíz de un repositorio. Cuando esta
+# carpeta viva en su propio repositorio (lo recomendado para la entrega al
+# cliente), queda en la raíz y `rootDir` sobra: se puede borrar esa línea.
+#
+# No se ha desplegado aún: revisar nombres de plan y región en el panel de Render.
+
+databases:
+  - name: pucon-db
+    plan: basic-256mb # el plan free de Render borra la base a los 30 días
+    region: ohio
+
+services:
+  - type: web
+    name: pucon-maquinarias
+    runtime: python
+    rootDir: pucon-maquinarias
+    plan: starter
+    region: ohio
+    buildCommand: pip install -r requirements.txt
+    # --preload aplica las migraciones una sola vez, antes de crear los workers.
+    startCommand: gunicorn wsgi:app --preload --workers 2 --bind 0.0.0.0:$PORT
+    healthCheckPath: /salud
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: FLASK_ENV
+        value: production
+      - key: TRUST_PROXY
+        value: "1"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: pucon-db
+          property: connectionString
+      # Crean el primer administrador en el primer arranque (con la base vacía).
+      # Después conviene borrar ADMIN_PASSWORD del panel.
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false

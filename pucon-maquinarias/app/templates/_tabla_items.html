@@ -1,0 +1,20 @@
+{# Tabla de líneas y totales, de sólo lectura. Variable: doc #}
+<div class="tabla-scroll"><table>
+  <thead><tr><th>Equipo</th><th class="num">Cant.</th><th class="num">Precio unit.</th><th class="num">Desc.</th><th class="num">Subtotal</th></tr></thead>
+  <tbody>
+  {% for i in doc.items %}
+    <tr><td><b>{{ i.equipo.nombre }}</b><br><span class="suave">{{ i.equipo.codigo }}{% if i.equipo.marca %} · {{ i.equipo.marca }} {{ i.equipo.modelo or '' }}{% endif %}</span>
+        {% if i.notas_devolucion %}<br><span class="suave">Devolución: {{ i.notas_devolucion }}</span>{% endif %}</td>
+      <td class="num">{{ i.cantidad }}</td><td class="num">{{ i.precio_unitario|clp }}</td>
+      <td class="num">{{ i.descuento_pct ~ '%' if i.descuento_pct else '' }}</td><td class="num">{{ i.subtotal|clp }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+<div class="totales" style="padding:12px 18px">
+  <div><span>Subtotal equipos ({{ doc.dias }} día{{ 's' if doc.dias != 1 }})</span><span>{{ doc.neto_items|clp }}</span></div>
+  {% if doc.flete %}<div><span>Flete / despacho</span><span>{{ doc.flete|clp }}</span></div>{% endif %}
+  {% if doc.recargo %}<div><span>Recargo por atraso</span><span>{{ doc.recargo|clp }}</span></div>{% endif %}
+  <div><span>Neto</span><span>{{ doc.neto|clp }}</span></div>
+  <div><span>IVA {{ doc.iva_pct }}%</span><span>{{ doc.iva|clp }}</span></div>
+  <div class="total"><span>Total</span><span>{{ doc.total|clp }}</span></div>
+</div>

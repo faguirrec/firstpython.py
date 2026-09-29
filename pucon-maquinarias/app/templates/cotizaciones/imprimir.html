@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cotización {{ c.numero }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body>
+<div class="solo-pantalla-barra">
+  <a class="btn sec" href="{{ url_for('cotizaciones.detalle', id=c.id) }}">Volver</a>
+  <button class="btn" onclick="window.print()">Imprimir / guardar PDF</button>
+</div>
+<div class="documento">
+  <div class="encabezado">
+    <div><h1>{{ empresa.empresa_nombre }}</h1>
+      <div>{{ empresa.empresa_giro }}</div>
+      {% if empresa.empresa_rut %}<div>RUT {{ empresa.empresa_rut }}</div>{% endif %}
+      <div>{{ empresa.empresa_direccion }}</div>
+      <div>{{ empresa.empresa_telefono }} {{ empresa.empresa_email }}</div></div>
+    <div style="text-align:right"><h1>COTIZACIÓN</h1><div><b>{{ c.numero }}</b></div>
+      <div>Fecha: {{ c.fecha|fecha }}</div><div>Válida hasta: {{ c.fecha_vencimiento|fecha }}</div></div>
+  </div>
+  <p><b>Cliente:</b> {{ c.cliente.nombre }}{% if c.cliente.rut %} · RUT {{ c.cliente.rut|rut }}{% endif %}<br>
+     {% if c.cliente.contacto %}Atención: {{ c.cliente.contacto }}<br>{% endif %}
+     {{ c.cliente.telefono or '' }} {{ c.cliente.email or '' }}</p>
+  <p><b>Período de arriendo:</b> {{ c.fecha_inicio|fecha }} al {{ c.fecha_fin|fecha }} ({{ c.dias }} día{{ 's' if c.dias != 1 }})</p>
+  {% set doc = c %}{% include "_tabla_items.html" %}
+  <p><b>Garantía requerida:</b> {{ c.garantia_total|clp }} (reembolsable al devolver los equipos en buen estado).</p>
+  {% if c.notas %}<p><b>Notas:</b> {{ c.notas }}</p>{% endif %}
+  <div class="condiciones"><b>Condiciones</b>
+{{ empresa.condiciones_cotizacion }}</div>
+</div>
+</body>
+</html>

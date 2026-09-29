@@ -1,0 +1,42 @@
+{# Etiquetas de estado #}
+{% macro chip_cotizacion(c) %}
+  {% set e = c.estado_efectivo %}
+  <span class="chip {{ {'borrador':'','enviada':'azul','aceptada':'verde','rechazada':'rojo','vencida':'ambar'}[e] }}">{{ c.ESTADOS[e] }}</span>
+{% endmacro %}
+
+{% macro chip_arriendo(a) %}
+  {% if a.atrasado %}
+    <span class="chip rojo">Atrasado {{ a.dias_atraso }} d</span>
+  {% else %}
+    <span class="chip {{ {'reservado':'ambar','activo':'azul','finalizado':'verde','cancelado':''}[a.estado] }}">{{ a.ESTADOS[a.estado] }}</span>
+  {% endif %}
+{% endmacro %}
+
+{% macro barra_stock(s) %}
+  {% set t = s.total or 1 %}
+  <div class="barra-stock" title="Disponible {{ s.disponible }} · En arriendo {{ s.en_arriendo }} · En mantención {{ s.en_mantencion }}">
+    <i class="disp" style="width:{{ 100 * s.disponible / t }}%"></i>
+    <i class="arr" style="width:{{ 100 * s.en_arriendo / t }}%"></i>
+    <i class="mant" style="width:{{ 100 * s.en_mantencion / t }}%"></i>
+  </div>
+{% endmacro %}
+
+{% macro campo(nombre, etiqueta, valor='', tipo='text', ancho=False, requerido=False, ayuda='', extra='') %}
+  <div class="campo {{ 'ancho' if ancho }}">
+    <label for="{{ nombre }}">{{ etiqueta }}{% if requerido %} *{% endif %}</label>
+    {% if tipo == 'textarea' %}
+      <textarea id="{{ nombre }}" name="{{ nombre }}" {{ extra|safe }}>{{ valor or '' }}</textarea>
+    {% else %}
+      <input id="{{ nombre }}" name="{{ nombre }}" type="{{ tipo }}" value="{{ valor if valor is not none else '' }}" {{ 'required' if requerido }} {{ extra|safe }}>
+    {% endif %}
+    {% if ayuda %}<span class="ayuda">{{ ayuda }}</span>{% endif %}
+  </div>
+{% endmacro %}
+
+{% macro boton_post(url, texto, clase='btn sec chico', confirmar='', campos={}) %}
+  <form method="post" action="{{ url }}" class="en-linea" {% if confirmar %}data-confirmar="{{ confirmar }}"{% endif %}>
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    {% for k, v in campos.items() %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+    <button type="submit" class="{{ clase }}">{{ texto }}</button>
+  </form>
+{% endmacro %}

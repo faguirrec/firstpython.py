@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% from "_macros.html" import chip_arriendo, chip_cotizacion with context %}
+{% set titulo = "Resumen" %}
+{% block contenido %}
+<div class="cabecera">
+  <div><h1>Resumen</h1><span class="suave">{{ hoy|fecha }}</span></div>
+  <div class="acciones">
+    <a class="btn" href="{{ url_for('cotizaciones.nueva') }}">Nueva cotización</a>
+    <a class="btn sec" href="{{ url_for('arriendos.nuevo') }}">Nuevo arriendo</a>
+  </div>
+</div>
+
+<div class="rejilla c4" style="margin-bottom:18px">
+  <div class="kpi"><div class="valor">{{ ind.disponibles }}</div><div class="etiqueta">Unidades disponibles de {{ ind.unidades_total }}</div></div>
+  <div class="kpi"><div class="valor">{{ ind.en_arriendo }}</div><div class="etiqueta">En arriendo · {{ ind.utilizacion }}% de utilización</div></div>
+  <div class="kpi"><div class="valor">{{ ind.en_mantencion }}</div><div class="etiqueta">En mantención</div></div>
+  <div class="kpi {{ 'alerta' if ind.atrasados }}"><div class="valor">{{ ind.atrasados|length }}</div><div class="etiqueta">Arriendos atrasados</div></div>
+  <div class="kpi"><div class="valor">{{ ind.arriendos_activos }}</div><div class="etiqueta">Arriendos en curso · {{ ind.reservados }} reservado(s)</div></div>
+  <div class="kpi"><div class="valor">{{ ind.vencen_hoy|length }}</div><div class="etiqueta">Se devuelven hoy</div></div>
+  <div class="kpi"><div class="valor">{{ ind.ingresos_mes|clp }}</div><div class="etiqueta">Cobrado este mes</div></div>
+  <div class="kpi"><div class="valor">{{ ind.por_cobrar|clp }}</div><div class="etiqueta">Por cobrar</div></div>
+</div>
+
+{% if ind.atrasados or ind.vencen_hoy %}
+<div class="tarjeta sin-relleno">
+  <div style="padding:14px 18px 0"><h2>Devoluciones pendientes</h2></div>
+  <div class="tabla-scroll"><table>
+    <thead><tr><th>Arriendo</th><th>Cliente</th><th>Debía volver</th><th>Estado</th><th></th></tr></thead>
+    <tbody>
+    {% for a in ind.atrasados + ind.vencen_hoy %}
+      <tr class="{{ 'fila-alerta' if a.atrasado }}">
+        <td><a href="{{ url_for('arriendos.detalle', id=a.id) }}">{{ a.numero }}</a></td>
+        <td>{{ a.cliente.nombre }}{% if a.cliente.telefono %}<br><span class="suave">{{ a.cliente.telefono }}</span>{% endif %}</td>
+        <td>{{ a.fecha_fin|fecha }}</td>
+        <td>{% if a.atrasado %}<span class="chip rojo">Atrasado {{ a.dias_atraso }} d</span>{% else %}<span class="chip ambar">Hoy</span>{% endif %}</td>
+        <td class="num"><a class="btn chico" href="{{ url_for('arriendos.devolver', id=a.id) }}">Registrar devolución</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</div>
+{% endif %}
+
+<div class="rejilla c2">
+  <div class="tarjeta">
+    <h2>Cobrado por mes</h2>
+    <div class="grafico">
+      {% for mes, monto in ingresos %}
+      <div class="col">
+        <span class="v">{{ monto|clp if monto else '' }}</span>
+        <div class="b" style="height:{{ (100 * monto / maximo)|round(0)|int }}%"></div>
+        <small>{{ ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][mes.month] }}</small>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="tarjeta sin-relleno">
+    <div style="padding:14px 18px 0"><h2>Próximas salidas</h2></div>
+    {% if proximas %}
+    <table><tbody>
+      {% for a in proximas %}
+      <tr><td><a href="{{ url_for('arriendos.detalle', id=a.id) }}">{{ a.numero }}</a><br><span class="suave">{{ a.cliente.nombre }}</span></td>
+          <td class="num">{{ a.fecha_inicio|fecha }}</td></tr>
+      {% endfor %}
+    </tbody></table>
+    {% else %}<div class="vacio">Sin reservas próximas.</div>{% endif %}
+  </div>
+</div>
+
+<div class="tarjeta sin-relleno">
+  <div style="padding:14px 18px 0"><h2>Cotizaciones abiertas</h2></div>
+  {% if cotizaciones %}
+  <div class="tabla-scroll"><table>
+    <thead><tr><th>N°</th><th>Cliente</th><th>Vence</th><th>Estado</th><th class="num">Total</th></tr></thead>
+    <tbody>
+    {% for c in cotizaciones %}
+      <tr><td><a href="{{ url_for('cotizaciones.detalle', id=c.id) }}">{{ c.numero }}</a></td><td>{{ c.cliente.nombre }}</td>
+          <td>{{ c.fecha_vencimiento|fecha }}</td><td>{{ chip_cotizacion(c) }}</td><td class="num">{{ c.total|clp }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}<div class="vacio">No hay cotizaciones abiertas.</div>{% endif %}
+</div>
+{% endblock %}

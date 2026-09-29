@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#12343b">
+  <title>{% block titulo %}{{ titulo or "Panel" }}{% endblock %} · {{ empresa.empresa_nombre }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body>
+{% set ep = request.endpoint or '' %}
+{% macro enlace(endpoint, texto, prefijo) %}
+  <a href="{{ url_for(endpoint) }}" class="{{ 'activo' if ep.startswith(prefijo) }}">{{ texto }}</a>
+{% endmacro %}
+<div class="barra-movil">
+  <b>{{ empresa.empresa_nombre }}</b>
+  <button type="button" id="alternar-menu" aria-expanded="false" aria-controls="lateral">Menú</button>
+</div>
+<div class="app">
+  <aside class="lateral" id="lateral">
+    <div class="marca">
+      <div class="logo">P</div>
+      <div><b>{{ empresa.empresa_nombre }}</b><small>Gestión de arriendos</small></div>
+    </div>
+    <nav class="menu">
+      {{ enlace('dashboard.inicio', 'Resumen', 'dashboard.') }}
+      <div class="sep">Comercial</div>
+      {{ enlace('cotizaciones.lista', 'Cotizaciones', 'cotizaciones.') }}
+      {{ enlace('arriendos.lista', 'Arriendos', 'arriendos.') }}
+      {{ enlace('clientes.lista', 'Clientes', 'clientes.') }}
+      <div class="sep">Inventario</div>
+      {{ enlace('inventario.lista', 'Equipos', 'inventario.lista') }}
+      {{ enlace('inventario.en_arriendo', 'En arriendo ahora', 'inventario.en_arriendo') }}
+      <div class="sep">Administración</div>
+      {{ enlace('finanzas.resumen', 'Finanzas', 'finanzas.') }}
+      {% if usuario and usuario.es_admin %}
+        {{ enlace('admin.usuarios', 'Usuarios', 'admin.usuarios') }}
+        {{ enlace('admin.configuracion', 'Configuración', 'admin.configuracion') }}
+      {% endif %}
+    </nav>
+    {% if usuario %}
+    <div class="pie">
+      <div><b>{{ usuario.nombre }}</b><br><span class="suave">{{ usuario.email }}</span></div>
+      <div style="margin-top:8px">
+        <a href="{{ url_for('auth.cuenta') }}">Mi cuenta</a> ·
+        <form method="post" action="{{ url_for('auth.logout') }}" class="en-linea">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <button class="btn sec chico" type="submit">Salir</button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+  </aside>
+  <main class="contenido">
+    {% with mensajes = get_flashed_messages(with_categories=true) %}
+      {% if mensajes %}
+      <div class="avisos" role="status">
+        {% for categoria, texto in mensajes %}<div class="aviso {{ categoria }}">{{ texto }}</div>{% endfor %}
+      </div>
+      {% endif %}
+    {% endwith %}
+    {% block contenido %}{% endblock %}
+  </main>
+</div>
+<script>
+  (function () {
+    var b = document.getElementById('alternar-menu'), l = document.getElementById('lateral');
+    b.addEventListener('click', function () {
+      var abierto = l.classList.toggle('abierto');
+      b.setAttribute('aria-expanded', abierto);
+    });
+    // Confirmación en botones destructivos: <form data-confirmar="¿Seguro?">
+    document.addEventListener('submit', function (e) {
+      var msg = e.target.getAttribute('data-confirmar');
+      if (msg && !window.confirm(msg)) e.preventDefault();
+    });
+  })();
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

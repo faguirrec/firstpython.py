@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% from "_macros.html" import chip_arriendo, boton_post with context %}
+{% set titulo = a.numero %}
+{% block contenido %}
+<div class="cabecera">
+  <div><div class="migas"><a href="{{ url_for('arriendos.lista') }}">Arriendos</a></div>
+    <h1>{{ a.numero }} {{ chip_arriendo(a) }}</h1></div>
+  <div class="acciones">
+    <a class="btn sec" href="{{ url_for('arriendos.imprimir', id=a.id) }}" target="_blank" rel="noopener">Contrato / imprimir</a>
+    {% if a.editable %}<a class="btn sec" href="{{ url_for('arriendos.editar', id=a.id) }}">Editar</a>
+      {{ boton_post(url_for('arriendos.entregar', id=a.id), 'Entregar equipos', 'btn verde', 'Los equipos salen hoy con el cliente. ¿Confirmar entrega?') }}
+      {{ boton_post(url_for('arriendos.cancelar', id=a.id), 'Cancelar', 'btn peligro', '¿Cancelar la reserva? Los equipos quedan libres.') }}{% endif %}
+    {% if a.estado == 'activo' %}<a class="btn" href="{{ url_for('arriendos.devolver', id=a.id) }}">Registrar devolución</a>{% endif %}
+  </div>
+</div>
+
+<div class="rejilla c2">
+  <div class="tarjeta"><h2>Cliente</h2>
+    <dl class="datos">
+      <dt>Nombre</dt><dd><a href="{{ url_for('clientes.detalle', id=a.cliente.id) }}">{{ a.cliente.nombre }}</a></dd>
+      <dt>RUT</dt><dd>{{ a.cliente.rut|rut or '—' }}</dd>
+      <dt>Contacto</dt><dd>{{ a.cliente.telefono or '—' }} {{ a.cliente.email or '' }}</dd>
+      <dt>Lugar de uso</dt><dd>{{ a.lugar_uso or '—' }}</dd>
+    </dl></div>
+  <div class="tarjeta"><h2>Período</h2>
+    <dl class="datos">
+      <dt>Salida</dt><dd>{{ a.fecha_inicio|fecha }}</dd>
+      <dt>Devolución prevista</dt><dd>{{ a.fecha_fin|fecha }} ({{ a.dias }} día{{ 's' if a.dias != 1 }})</dd>
+      {% if a.fecha_devolucion %}<dt>Devuelto el</dt><dd>{{ a.fecha_devolucion|fecha }}</dd>{% endif %}
+      {% if a.cotizacion %}<dt>Cotización</dt><dd><a href="{{ url_for('cotizaciones.detalle', id=a.cotizacion.id) }}">{{ a.cotizacion.numero }}</a></dd>{% endif %}
+      {% if a.notas %}<dt>Notas</dt><dd>{{ a.notas }}</dd>{% endif %}
+    </dl></div>
+</div>
+
+<div class="tarjeta sin-relleno">
+  {% set doc = a %}{% include "_tabla_items.html" %}
+  {% if a.estado in ('activo', 'finalizado') %}
+  <div style="padding:0 18px 14px" class="suave">
+    Devolución: {% for i in a.items %}{{ i.equipo.nombre }} {{ i.cantidad_devuelta }}/{{ i.cantidad }}{{ ' · ' if not loop.last }}{% endfor %}
+  </div>{% endif %}
+</div>
+
+<div class="rejilla c2">
+  <div class="tarjeta sin-relleno">
+    <div style="padding:14px 18px 0"><h2>Pagos</h2></div>
+    <table>
+      <tbody>
+      {% for p in a.pagos %}
+        <tr><td>{{ p.fecha|fecha }}</td><td>{{ metodos[p.metodo] }}{% if p.referencia %}<br><span class="suave">{{ p.referencia }}</span>{% endif %}</td>
+            <td class="num">{{ p.monto|clp }}</td>
+            <td class="num">{% if usuario.es_admin %}{{ boton_post(url_for('arriendos.eliminar_pago', id=p.id), '×', 'btn peligro chico', '¿Eliminar este pago?') }}{% endif %}</td></tr>
+      {% else %}<tr><td class="vacio" colspan="4">Sin pagos registrados.</td></tr>{% endfor %}
+      </tbody>
+      <tfoot>
+        <tr><td colspan="2">Total del arriendo</td><td class="num" colspan="2">{{ a.total|clp }}</td></tr>
+        <tr><td colspan="2">Pagado</td><td class="num" colspan="2">{{ a.pagado|clp }}</td></tr>
+        <tr><td colspan="2">Saldo</td><td class="num" colspan="2" style="color:{{ 'var(--rojo)' if a.saldo > 0 else 'var(--verde)' }}">{{ a.saldo|clp }}</td></tr>
+      </tfoot>
+    </table>
+    {% if a.estado != 'cancelado' %}
+    <form method="post" action="{{ url_for('arriendos.pagar', id=a.id) }}" class="fila-form compacta" style="padding:14px 18px">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <div class="campo"><label>Monto</label><input type="number" name="monto" min="1" value="{{ a.saldo if a.saldo > 0 else '' }}" required></div>
+      <div class="campo"><label>Método</label>
+        <select name="metodo">{% for k, v in metodos.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
+      <div class="campo"><label>Referencia</label><input name="referencia" placeholder="N° de transferencia, boleta…"></div>
+      <div class="campo"><label>Fecha</label><input type="date" name="fecha" value="{{ hoy().isoformat() }}"></div>
+      <button class="btn" type="submit" style="flex:0 0 auto">Registrar pago</button>
+    </form>{% endif %}
+  </div>
+
+  <div class="tarjeta">
+    <h2>Garantía</h2>
+    <dl class="datos">
+      <dt>Monto</dt><dd>{{ a.garantia_monto|clp }}</dd>
+      <dt>Estado</dt><dd>{% if not a.garantia_monto %}—{% elif a.garantia_devuelta %}<span class="chip verde">Devuelta</span>{% else %}<span class="chip ambar">Retenida</span>{% endif %}</dd>
+    </dl>
+    {% if a.garantia_monto and a.estado == 'finalizado' %}
+      <p style="margin-bottom:0">{% if a.garantia_devuelta %}
+        {{ boton_post(url_for('arriendos.garantia', id=a.id), 'Marcar como retenida', campos={'devuelta': '0'}) }}
+      {% else %}{{ boton_post(url_for('arriendos.garantia', id=a.id), 'Marcar como devuelta', 'btn verde chico', campos={'devuelta': '1'}) }}{% endif %}</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% from "_macros.html" import chip_arriendo with context %}
+{% set titulo = "Arriendos" %}
+{% block contenido %}
+<div class="cabecera"><h1>Arriendos</h1>
+  <div class="acciones"><a class="btn" href="{{ url_for('arriendos.nuevo') }}">Nuevo arriendo</a></div></div>
+<form class="filtros" method="get">
+  <input type="search" name="q" value="{{ q }}" placeholder="Buscar por número o cliente">
+  <select name="estado" onchange="this.form.submit()">
+    <option value="">Todos los estados</option>
+    {% for k, v in {'reservado':'Reservados','activo':'En arriendo','atrasado':'Atrasados','por_cobrar':'Con saldo por cobrar','finalizado':'Finalizados','cancelado':'Cancelados'}.items() %}
+      <option value="{{ k }}" {{ 'selected' if estado == k }}>{{ v }}</option>{% endfor %}
+  </select>
+  <button class="btn sec" type="submit">Filtrar</button>
+</form>
+<div class="tarjeta sin-relleno">
+  {% if arriendos %}
+  <div class="tabla-scroll"><table>
+    <thead><tr><th>N°</th><th>Cliente</th><th>Período</th><th>Estado</th><th class="num">Total</th><th class="num">Saldo</th></tr></thead>
+    <tbody>{% for a in arriendos %}
+      <tr class="{{ 'fila-alerta' if a.atrasado }}"><td><a href="{{ url_for('arriendos.detalle', id=a.id) }}"><b>{{ a.numero }}</b></a></td>
+        <td>{{ a.cliente.nombre }}</td>
+        <td>{{ a.fecha_inicio|fecha }} → {{ a.fecha_fin|fecha }}</td>
+        <td>{{ chip_arriendo(a) }}</td><td class="num">{{ a.total|clp }}</td>
+        <td class="num">{% if a.saldo > 0 %}<b style="color:var(--rojo)">{{ a.saldo|clp }}</b>{% else %}<span class="suave">—</span>{% endif %}</td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+  {% else %}<div class="vacio">No hay arriendos con ese criterio.</div>{% endif %}
+</div>
+{% endblock %}

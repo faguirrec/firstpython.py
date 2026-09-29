@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% set titulo = "Devolución " ~ a.numero %}
+{% block contenido %}
+<div class="cabecera">
+  <div><div class="migas"><a href="{{ url_for('arriendos.detalle', id=a.id) }}">{{ a.numero }}</a></div><h1>Registrar devolución</h1></div>
+</div>
+<form method="post" class="tarjeta formulario">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <p><b>{{ a.cliente.nombre }}</b> · debía devolver el {{ a.fecha_fin|fecha }}.
+    {% if dias_extra %}<span class="chip rojo">{{ dias_extra }} día(s) de atraso</span>{% endif %}</p>
+  <div class="tabla-scroll"><table>
+    <thead><tr><th>Equipo</th><th class="num">Pendientes</th><th style="width:130px">Devuelve ahora</th><th>Estado / observaciones</th></tr></thead>
+    <tbody>
+    {% for i in a.items if i.pendiente > 0 %}
+      <tr><td><b>{{ i.equipo.nombre }}</b><br><span class="suave">{{ i.equipo.codigo }}</span></td>
+        <td class="num">{{ i.pendiente }}</td>
+        <td><input type="number" name="devuelve_{{ i.id }}" min="0" max="{{ i.pendiente }}" value="{{ i.pendiente }}"></td>
+        <td><input name="nota_{{ i.id }}" value="{{ i.notas_devolucion or '' }}" placeholder="Ej: falta la manguera, golpe en la carcasa"></td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  <div class="campos" style="margin-top:14px">
+    <div class="campo"><label for="recargo">Recargo por atraso (neto)</label>
+      <input id="recargo" name="recargo" type="number" min="0" value="{{ sugerido }}">
+      <span class="ayuda">{% if dias_extra %}Sugerido: tarifa diaria efectiva × {{ dias_extra }} día(s). Ajústalo si corresponde.{% else %}Devolución dentro del plazo: sin recargo.{% endif %}</span></div>
+  </div>
+  <p style="margin-bottom:0"><button class="btn verde" type="submit">Confirmar devolución</button>
+    <a class="btn sec" href="{{ url_for('arriendos.detalle', id=a.id) }}">Cancelar</a></p>
+</form>
+{% endblock %}

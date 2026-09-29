@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% from "_macros.html" import chip_cotizacion with context %}
+{% set titulo = "Cotizaciones" %}
+{% block contenido %}
+<div class="cabecera"><h1>Cotizaciones</h1>
+  <div class="acciones"><a class="btn" href="{{ url_for('cotizaciones.nueva') }}">Nueva cotización</a></div></div>
+<form class="filtros" method="get">
+  <input type="search" name="q" value="{{ q }}" placeholder="Buscar por número o cliente">
+  <select name="estado" onchange="this.form.submit()">
+    <option value="">Todos los estados</option>
+    {% for k, v in {'borrador':'Borrador','enviada':'Enviada','aceptada':'Aceptada','rechazada':'Rechazada','vencida':'Vencida'}.items() %}
+      <option value="{{ k }}" {{ 'selected' if estado == k }}>{{ v }}</option>{% endfor %}
+  </select>
+  <button class="btn sec" type="submit">Filtrar</button>
+</form>
+<div class="tarjeta sin-relleno">
+  {% if cotizaciones %}
+  <div class="tabla-scroll"><table>
+    <thead><tr><th>N°</th><th>Cliente</th><th>Fecha</th><th>Período</th><th>Estado</th><th class="num">Total</th></tr></thead>
+    <tbody>{% for c in cotizaciones %}
+      <tr><td><a href="{{ url_for('cotizaciones.detalle', id=c.id) }}"><b>{{ c.numero }}</b></a></td>
+        <td>{{ c.cliente.nombre }}</td><td>{{ c.fecha|fecha }}</td>
+        <td>{{ c.fecha_inicio|fecha }} → {{ c.fecha_fin|fecha }}</td>
+        <td>{{ chip_cotizacion(c) }}</td><td class="num">{{ c.total|clp }}</td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+  {% else %}<div class="vacio">No hay cotizaciones.</div>{% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% from "_macros.html" import barra_stock with context %}
+{% set titulo = "Inventario" %}
+{% block contenido %}
+<div class="cabecera">
+  <h1>Inventario</h1>
+  <div class="acciones">
+    <a class="btn sec" href="{{ url_for('inventario.exportar') }}">Exportar CSV</a>
+    <a class="btn" href="{{ url_for('inventario.nuevo') }}">Agregar equipo</a>
+  </div>
+</div>
+<div class="rejilla c4" style="margin-bottom:16px">
+  <div class="kpi"><div class="valor">{{ totales.total }}</div><div class="etiqueta">Unidades</div></div>
+  <div class="kpi"><div class="valor" style="color:var(--verde)">{{ totales.disponible }}</div><div class="etiqueta">Disponibles</div></div>
+  <div class="kpi"><div class="valor" style="color:var(--azul)">{{ totales.en_arriendo }}</div><div class="etiqueta">En arriendo</div></div>
+  <div class="kpi"><div class="valor" style="color:var(--ambar)">{{ totales.en_mantencion }}</div><div class="etiqueta">En mantención</div></div>
+</div>
+<form class="filtros" method="get">
+  <input type="search" name="q" value="{{ q }}" placeholder="Buscar por nombre, código, marca o modelo">
+  <select name="categoria" onchange="this.form.submit()">
+    <option value="">Todas las categorías</option>
+    {% for c in categorias %}<option value="{{ c.id }}" {{ 'selected' if categoria == c.id }}>{{ c.nombre }}</option>{% endfor %}
+  </select>
+  <select name="estado" onchange="this.form.submit()">
+    <option value="">Todo el stock</option>
+    <option value="disponible" {{ 'selected' if estado == 'disponible' }}>Con unidades disponibles</option>
+    <option value="agotado" {{ 'selected' if estado == 'agotado' }}>Sin disponibilidad</option>
+    <option value="mantencion" {{ 'selected' if estado == 'mantencion' }}>Con unidades en mantención</option>
+  </select>
+  <button class="btn sec" type="submit">Filtrar</button>
+</form>
+<div class="tarjeta sin-relleno">
+  {% if equipos %}
+  <div class="tabla-scroll"><table>
+    <thead><tr><th>Código</th><th>Equipo</th><th>Categoría</th><th class="num">Total</th><th class="num">Disp.</th><th class="num">En arriendo</th><th class="num">Mant.</th><th></th><th class="num">Tarifa día</th></tr></thead>
+    <tbody>
+    {% for e in equipos %}{% set s = stock[e.id] %}
+      <tr>
+        <td><a href="{{ url_for('inventario.detalle', id=e.id) }}">{{ e.codigo }}</a></td>
+        <td><b>{{ e.nombre }}</b>{% if e.marca %}<br><span class="suave">{{ e.marca }} {{ e.modelo or '' }}</span>{% endif %}</td>
+        <td>{{ e.categoria.nombre if e.categoria else '—' }}</td>
+        <td class="num">{{ s.total }}</td>
+        <td class="num"><b style="color:{{ 'var(--verde)' if s.disponible else 'var(--rojo)' }}">{{ s.disponible }}</b></td>
+        <td class="num">{{ s.en_arriendo }}{% if s.reservado %} <span class="suave" title="Reservadas para próximos arriendos">(+{{ s.reservado }})</span>{% endif %}</td>
+        <td class="num">{{ s.en_mantencion or '' }}</td>
+        <td>{{ barra_stock(s) }}</td>
+        <td class="num">{{ e.tarifa_dia|clp }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}<div class="vacio">No hay equipos con ese criterio.</div>{% endif %}
+</div>
+<div class="tarjeta">
+  <h2>Categorías</h2>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+    {% for c in categorias %}
+      <span class="chip">{{ c.nombre }}
+        {% if usuario.es_admin and not c.equipos %}
+          <form method="post" action="{{ url_for('inventario.eliminar_categoria', id=c.id) }}" class="en-linea" data-confirmar="¿Borrar la categoría?">
+            <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button style="border:0;background:none;cursor:pointer" title="Borrar">×</button></form>
+        {% endif %}
+      </span>
+    {% endfor %}
+  </div>
+  <form method="post" action="{{ url_for('inventario.crear_categoria') }}" class="fila-form compacta">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div class="campo"><input name="nombre" placeholder="Nueva categoría" required></div>
+    <button class="btn sec" type="submit" style="flex:0 0 auto">Agregar</button>
+  </form>
+</div>
+{% endblock %}

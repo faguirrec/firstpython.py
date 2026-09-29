@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% from "_macros.html" import campo with context %}
+{% block contenido %}
+<div class="cabecera"><h1>{{ titulo }}</h1></div>
+<form method="post" class="tarjeta formulario">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <div class="campos">
+    <div class="campo"><label for="tipo">Tipo</label>
+      <select id="tipo" name="tipo">
+        <option value="persona" {{ 'selected' if c.tipo == 'persona' }}>Persona</option>
+        <option value="empresa" {{ 'selected' if c.tipo == 'empresa' }}>Empresa</option>
+      </select></div>
+    {{ campo('nombre', 'Nombre o razón social', c.nombre, requerido=True) }}
+    {{ campo('rut', 'RUT', (c.rut|rut) if c.rut else '', ayuda='Ej: 12.345.678-5 (se valida el dígito verificador)') }}
+    {{ campo('contacto', 'Persona de contacto', c.contacto) }}
+    {{ campo('telefono', 'Teléfono', c.telefono, 'tel') }}
+    {{ campo('email', 'Correo', c.email, 'email') }}
+    {{ campo('direccion', 'Dirección', c.direccion) }}
+    {{ campo('ciudad', 'Ciudad', c.ciudad) }}
+    {{ campo('notas', 'Notas internas', c.notas, 'textarea', ancho=True) }}
+  </div>
+  <p style="margin-bottom:0"><button class="btn" type="submit">Guardar</button>
+    <a class="btn sec" href="{{ url_for('clientes.detalle', id=c.id) if c.id else url_for('clientes.lista') }}">Cancelar</a></p>
+</form>
+{% endblock %}

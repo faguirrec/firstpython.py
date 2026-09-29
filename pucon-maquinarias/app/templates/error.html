@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block contenido %}
+<div class="tarjeta centro" style="max-width:520px;margin:40px auto">
+  <h1>{{ codigo }}</h1>
+  <p>{{ mensaje }}</p>
+  <a class="btn" href="{{ url_for('dashboard.inicio') if usuario else url_for('auth.login') }}">Volver al inicio</a>
+</div>
+{% endblock %}

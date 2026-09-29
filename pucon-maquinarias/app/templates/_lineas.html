@@ -1,0 +1,49 @@
+{# Editor de líneas compartido por cotizaciones y arriendos.
+   Variables: doc (con .items, .flete, .iva), catalogo (lista de dicts), excluir (id de arriendo a ignorar en disponibilidad) #}
+{% macro fila(item) %}
+<tr class="linea">
+  <td data-etq="Equipo">
+    <select name="item_equipo" class="l-equipo" required>
+      <option value="">Elegir equipo…</option>
+      {% for e in catalogo %}
+        <option value="{{ e.id }}" {{ 'selected' if item and item.equipo_id == e.id }}>{{ e.codigo }} · {{ e.nombre }}</option>
+      {% endfor %}
+    </select>
+    <div class="disp-hint suave"></div>
+  </td>
+  <td data-etq="Cantidad"><input type="number" name="item_cantidad" class="l-cant" min="1" value="{{ item.cantidad if item else 1 }}" required></td>
+  <td data-etq="Precio unitario (período)"><input type="number" name="item_precio" class="l-precio" min="0" value="{{ item.precio_unitario if item else '' }}" {{ 'data-manual=1' if item }} required></td>
+  <td data-etq="Desc. %"><input type="number" name="item_descuento" class="l-desc" min="0" max="100" value="{{ item.descuento_pct if item else 0 }}"></td>
+  <td data-etq="Subtotal" class="num l-sub">$0</td>
+  <td><button type="button" class="btn peligro chico l-quitar" title="Quitar línea" aria-label="Quitar línea">×</button></td>
+</tr>
+{% endmacro %}
+
+<div id="editor-lineas" data-excluir="{{ excluir or '' }}" data-iva="{{ doc.iva_pct if doc.iva_pct is defined and doc.iva_pct else empresa.iva_pct }}"
+     data-url-base="{{ url_for('inventario.lista') }}api/">
+  <div class="tabla-scroll">
+  <table class="lineas">
+    <colgroup><col><col class="c-cant"><col class="c-precio"><col class="c-desc"><col class="c-sub"><col class="c-x"></colgroup>
+    <thead><tr><th>Equipo</th><th>Cant.</th><th>Precio unitario (período)</th><th>Desc. %</th><th class="num">Subtotal</th><th></th></tr></thead>
+    <tbody>
+      {% for item in doc.items %}{{ fila(item) }}{% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p><button type="button" class="btn sec" id="agregar-linea">+ Agregar equipo</button>
+     <span class="ayuda">El precio se calcula solo con las tarifas del equipo y los días; puedes cambiarlo a mano.</span></p>
+
+  <template id="plantilla-linea">{{ fila(none) }}</template>
+  <script type="application/json" id="catalogo">{{ catalogo|tojson }}</script>
+
+  <div class="totales">
+    <div><span>Subtotal equipos</span><span id="t-items">$0</span></div>
+    <div><span>Flete / despacho</span><span id="t-flete">$0</span></div>
+    {% if doc.recargo %}<div><span>Recargo por atraso</span><span>{{ doc.recargo|clp }}</span></div>{% endif %}
+    <div><span>Neto</span><span id="t-neto">$0</span></div>
+    <div><span>IVA <span id="t-iva-pct"></span>%</span><span id="t-iva">$0</span></div>
+    <div class="total"><span>Total</span><span id="t-total">$0</span></div>
+    <div class="suave"><span>Garantía sugerida</span><span id="t-garantia">$0</span></div>
+  </div>
+</div>
+<script src="{{ url_for('static', filename='js/lineas.js') }}"></script>

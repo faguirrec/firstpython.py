@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Contrato de arriendo {{ a.numero }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body>
+<div class="solo-pantalla-barra">
+  <a class="btn sec" href="{{ url_for('arriendos.detalle', id=a.id) }}">Volver</a>
+  <button class="btn" onclick="window.print()">Imprimir / guardar PDF</button>
+</div>
+<div class="documento">
+  <div class="encabezado">
+    <div><h1>{{ empresa.empresa_nombre }}</h1>
+      <div>{{ empresa.empresa_giro }}</div>
+      {% if empresa.empresa_rut %}<div>RUT {{ empresa.empresa_rut }}</div>{% endif %}
+      <div>{{ empresa.empresa_direccion }}</div>
+      <div>{{ empresa.empresa_telefono }} {{ empresa.empresa_email }}</div></div>
+    <div style="text-align:right"><h1>CONTRATO DE ARRIENDO</h1><div><b>{{ a.numero }}</b></div>
+      <div>Salida: {{ a.fecha_inicio|fecha }}</div><div>Devolución: {{ a.fecha_fin|fecha }}</div></div>
+  </div>
+  <p><b>Arrendatario:</b> {{ a.cliente.nombre }}{% if a.cliente.rut %} · RUT {{ a.cliente.rut|rut }}{% endif %}<br>
+     {{ a.cliente.direccion or '' }} {{ a.cliente.ciudad or '' }}<br>
+     {{ a.cliente.telefono or '' }} {{ a.cliente.email or '' }}</p>
+  {% if a.lugar_uso %}<p><b>Lugar de uso:</b> {{ a.lugar_uso }}</p>{% endif %}
+  {% set doc = a %}{% include "_tabla_items.html" %}
+  <p><b>Garantía recibida:</b> {{ a.garantia_monto|clp }}</p>
+  <div class="condiciones"><b>Condiciones</b>
+{{ empresa.condiciones_arriendo }}</div>
+  <div class="firmas"><div>{{ empresa.empresa_nombre }}</div><div>{{ a.cliente.nombre }}</div></div>
+</div>
+</body>
+</html>

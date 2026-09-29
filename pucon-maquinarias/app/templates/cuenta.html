@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block contenido %}
+<div class="cabecera"><h1>Mi cuenta</h1></div>
+<div class="tarjeta" style="max-width:520px">
+  <p><b>{{ usuario.nombre }}</b> · {{ usuario.email }} · <span class="chip">{{ usuario.ROLES[usuario.rol] }}</span></p>
+  <h2>Cambiar contraseña</h2>
+  <form method="post" class="formulario">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div class="campos">
+      <div class="campo ancho"><label for="actual">Contraseña actual</label><input id="actual" name="actual" type="password" autocomplete="current-password" required></div>
+      <div class="campo ancho"><label for="nueva">Nueva contraseña</label><input id="nueva" name="nueva" type="password" minlength="8" autocomplete="new-password" required><span class="ayuda">Mínimo 8 caracteres.</span></div>
+    </div>
+    <p><button class="btn" type="submit">Guardar</button></p>
+  </form>
+</div>
+{% endblock %}

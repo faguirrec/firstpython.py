@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% from "_macros.html" import chip_cotizacion, boton_post with context %}
+{% set titulo = c.numero %}
+{% block contenido %}
+<div class="cabecera">
+  <div><div class="migas"><a href="{{ url_for('cotizaciones.lista') }}">Cotizaciones</a></div>
+    <h1>{{ c.numero }} {{ chip_cotizacion(c) }}</h1></div>
+  <div class="acciones">
+    <a class="btn sec" href="{{ url_for('cotizaciones.imprimir', id=c.id) }}" target="_blank" rel="noopener">Ver / imprimir</a>
+    {% if c.editable %}<a class="btn sec" href="{{ url_for('cotizaciones.editar', id=c.id) }}">Editar</a>{% endif %}
+    {{ boton_post(url_for('cotizaciones.duplicar', id=c.id), 'Duplicar') }}
+    {% if c.arriendo %}<a class="btn" href="{{ url_for('arriendos.detalle', id=c.arriendo.id) }}">Ver arriendo {{ c.arriendo.numero }}</a>
+    {% else %}{{ boton_post(url_for('cotizaciones.convertir', id=c.id), 'Convertir en arriendo', 'btn verde', 'Se reservan los equipos y se crea el arriendo. ¿Continuar?') }}{% endif %}
+  </div>
+</div>
+
+<div class="rejilla c2">
+  <div class="tarjeta"><h2>Cliente</h2>
+    <dl class="datos">
+      <dt>Nombre</dt><dd><a href="{{ url_for('clientes.detalle', id=c.cliente.id) }}">{{ c.cliente.nombre }}</a></dd>
+      <dt>RUT</dt><dd>{{ c.cliente.rut|rut or '—' }}</dd>
+      <dt>Contacto</dt><dd>{{ c.cliente.telefono or '—' }} {{ c.cliente.email or '' }}</dd>
+    </dl></div>
+  <div class="tarjeta"><h2>Condiciones</h2>
+    <dl class="datos">
+      <dt>Emitida</dt><dd>{{ c.fecha|fecha }} · válida hasta {{ c.fecha_vencimiento|fecha }}</dd>
+      <dt>Período</dt><dd>{{ c.fecha_inicio|fecha }} → {{ c.fecha_fin|fecha }} ({{ c.dias }} día{{ 's' if c.dias != 1 }})</dd>
+      <dt>Garantía</dt><dd>{{ c.garantia_total|clp }}</dd>
+      {% if c.notas %}<dt>Notas</dt><dd>{{ c.notas }}</dd>{% endif %}
+    </dl></div>
+</div>
+
+<div class="tarjeta sin-relleno">
+  {% set doc = c %}{% include "_tabla_items.html" %}
+</div>
+
+{% if not c.arriendo %}
+<div class="tarjeta">
+  <h2>Estado de la cotización</h2>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    {% for k, txt in [('enviada','Marcar como enviada'),('aceptada','Marcar como aceptada'),('rechazada','Marcar como rechazada'),('borrador','Volver a borrador')] %}
+      {% if k != c.estado %}{{ boton_post(url_for('cotizaciones.cambiar_estado', id=c.id), txt, 'btn sec chico', campos={'estado': k}) }}{% endif %}
+    {% endfor %}
+    {% if c.estado != 'aceptada' %}{{ boton_post(url_for('cotizaciones.eliminar', id=c.id), 'Eliminar', 'btn peligro chico', '¿Eliminar esta cotización?') }}{% endif %}
+  </div>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% set titulo = "Finanzas" %}
+{% block contenido %}
+<div class="cabecera"><h1>Finanzas</h1>
+  <div class="acciones"><a class="btn sec" href="{{ url_for('finanzas.exportar_pagos') }}">Exportar pagos CSV</a></div></div>
+<div class="rejilla c4" style="margin-bottom:18px">
+  <div class="kpi"><div class="valor">{{ ingresos[-1][1]|clp }}</div><div class="etiqueta">Cobrado este mes</div></div>
+  <div class="kpi"><div class="valor">{{ total_por_cobrar|clp }}</div><div class="etiqueta">Por cobrar ({{ por_cobrar|length }} arriendos)</div></div>
+  <div class="kpi"><div class="valor">{{ facturado|clp }}</div><div class="etiqueta">Total arrendado (con IVA)</div></div>
+  <div class="kpi"><div class="valor">{{ mant_mes|clp }}</div><div class="etiqueta">Gasto en mantención este mes</div></div>
+</div>
+<div class="tarjeta">
+  <h2>Cobrado por mes (últimos 12)</h2>
+  <div class="grafico">
+    {% for mes, monto in ingresos %}
+    <div class="col"><div class="b" style="height:{{ (100 * monto / maximo)|round(0)|int }}%" title="{{ monto|clp }}"></div><small>{{ meses[mes.month] }}</small></div>
+    {% endfor %}
+  </div>
+</div>
+<div class="tarjeta sin-relleno">
+  <div style="padding:14px 18px 0"><h2>Cuentas por cobrar</h2></div>
+  {% if por_cobrar %}
+  <div class="tabla-scroll"><table>
+    <thead><tr><th>Arriendo</th><th>Cliente</th><th>Vence</th><th class="num">Total</th><th class="num">Saldo</th></tr></thead>
+    <tbody>{% for a in por_cobrar %}
+      <tr><td><a href="{{ url_for('arriendos.detalle', id=a.id) }}">{{ a.numero }}</a></td><td>{{ a.cliente.nombre }}</td>
+        <td>{{ a.fecha_fin|fecha }}</td><td class="num">{{ a.total|clp }}</td><td class="num"><b style="color:var(--rojo)">{{ a.saldo|clp }}</b></td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+  {% else %}<div class="vacio">No hay saldos pendientes.</div>{% endif %}
+</div>
+<div class="tarjeta sin-relleno">
+  <div style="padding:14px 18px 0"><h2>Últimos pagos</h2></div>
+  {% if pagos %}
+  <div class="tabla-scroll"><table>
+    <thead><tr><th>Fecha</th><th>Arriendo</th><th>Cliente</th><th>Método</th><th class="num">Monto</th></tr></thead>
+    <tbody>{% for p in pagos %}
+      <tr><td>{{ p.fecha|fecha }}</td><td><a href="{{ url_for('arriendos.detalle', id=p.arriendo.id) }}">{{ p.arriendo.numero }}</a></td>
+        <td>{{ p.arriendo.cliente.nombre }}</td><td>{{ p.METODOS[p.metodo] }}</td><td class="num">{{ p.monto|clp }}</td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+  {% else %}<div class="vacio">Sin pagos registrados.</div>{% endif %}
+</div>
+{% endblock %}
