@@ -144,6 +144,42 @@ async function main() {
   ok('ni para ver la liquidación', (await conLlave('GET', '/finance/settlement?month=2026-09')) === 401);
   ok('ni para ver el hogar', (await conLlave('GET', '/household')) === 401);
 
+  /*
+   * ───────────────────── lo que mandó el teléfono, tal cual
+   *
+   * Esto existe porque el formato con que iOS entrega el monto es la única
+   * incógnita real de todo el camino, y la que más caro sale si falla. Guardar
+   * el texto crudo al lado de cómo se interpretó convierte "no apareció y no sé
+   * por qué" en algo que se mira en pantalla.
+   */
+  const senales = (await s.pedir('GET', '/atajo/senales')).cuerpo.senales as any[];
+  ok('queda registrado lo que llegó', senales.length > 0, senales.length);
+  ok('con el texto crudo del monto, sin tocar',
+     senales.some((x) => x.montoCrudo === '$16.738' && x.montoLeido === 16_738),
+     senales.find((x) => x.montoCrudo === '$16.738'));
+  ok('y al lado, en cuánto quedó',
+     senales.every((x) => x.resultado !== 'creado' || typeof x.montoLeido === 'number'));
+
+  // Lo importante: lo ilegible también queda, que es lo que hay que mirar.
+  const raro = senales.find((x) => x.montoCrudo === 'no es plata');
+  ok('un monto que no se pudo leer NO se pierde en silencio',
+     raro != null && raro.resultado === 'no-pude-leer' && raro.montoLeido == null, raro);
+
+  const dup = senales.find((x) => x.resultado === 'duplicado');
+  ok('y el repetido queda marcado como repetido', dup != null, dup);
+  ok('cada señal dice a qué movimiento dio lugar',
+     senales.filter((x) => x.resultado === 'creado').every((x) => typeof x.transactionId === 'string'));
+
+  // No es un registro contable: no puede crecer para siempre.
+  for (let i = 0; i < 25; i += 1) {
+    await comoElAtajo(clave, { monto: String(1000 + i), comercio: `Relleno ${i}` });
+  }
+  const podadas = (await s.pedir('GET', '/atajo/senales')).cuerpo.senales as any[];
+  ok('se guardan las últimas, no todas para siempre', podadas.length === 20, podadas.length);
+  ok('y las más nuevas primero', podadas[0].comercioCrudo === 'Relleno 24', podadas[0].comercioCrudo);
+
+  ok('la llave no sirve para leer las señales', (await conLlave('GET', '/atajo/senales')) === 401);
+
   // ───────────────────────────────────────────── revocar
   const id = (await s.pedir('GET', '/atajo/claves')).cuerpo.claves[0].id;
   await s.pedir('DELETE', `/atajo/claves/${id}`);

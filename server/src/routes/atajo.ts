@@ -4,11 +4,13 @@ import { db, uid } from '../lib/db.js';
 import { requireAuth, requireHousehold } from '../lib/auth.js';
 import { categorize } from '../services/categorizer.js';
 import {
+  anotarSenal,
   crearClave,
   duenoDeLaClave,
   leerComercio,
   leerMonto,
   listarClaves,
+  listarSenales,
   revocarClave,
 } from '../services/atajo.js';
 
@@ -62,14 +64,26 @@ atajoRouter.post('/movimiento', (req, res) => {
     return;
   }
 
+  /*
+   * Desde acá se anota TODO lo que llegue, salga bien o mal.
+   *
+   * Lo que no se pudo leer es justamente lo que hay que poder mirar después: si
+   * iOS manda el monto con un formato que el parser no contempla, sin este
+   * registro el movimiento simplemente no aparece y no queda rastro de por qué.
+   * La llave ya está validada, así que se sabe a qué hogar pertenece.
+   */
+  const crudo = (req.body ?? {}) as { monto?: unknown; comercio?: unknown; tarjeta?: unknown };
+
   const parsed = compraEntrante.safeParse(req.body);
   if (!parsed.success) {
+    anotarSenal(dueno.householdId, dueno.id, crudo, { montoLeido: null, resultado: 'no-pude-leer' });
     res.status(400).json({ error: parsed.error.issues[0].message });
     return;
   }
 
   const monto = leerMonto(parsed.data.monto);
   if (monto == null) {
+    anotarSenal(dueno.householdId, dueno.id, crudo, { montoLeido: null, resultado: 'no-pude-leer' });
     // El mensaje nombra lo que llegó: si el Atajo manda el monto con un formato
     // raro, esto es lo único que va a tener el usuario para darse cuenta.
     res.status(400).json({ error: `No pude leer el monto "${String(parsed.data.monto).slice(0, 40)}"` });
@@ -103,6 +117,9 @@ atajoRouter.post('/movimiento', (req, res) => {
     )
     .get(dueno.householdId, monto, fecha, comercio) as { id: string } | undefined;
   if (yaEstaba) {
+    anotarSenal(dueno.householdId, dueno.id, crudo, {
+      montoLeido: monto, resultado: 'duplicado', transactionId: yaEstaba.id,
+    });
     res.status(200).json({ ok: true, id: yaEstaba.id, duplicado: true });
     return;
   }
@@ -127,12 +144,27 @@ atajoRouter.post('/movimiento', (req, res) => {
     parsed.data.tarjeta?.slice(0, 80) ?? null,
   );
 
+  anotarSenal(dueno.householdId, dueno.id, crudo, {
+    montoLeido: monto, resultado: 'creado', transactionId: id,
+  });
+
   res.status(201).json({ ok: true, id, monto, comercio });
 });
 
 /* ------------------------ La administración de llaves ---------------------- */
 
 atajoRouter.use(requireAuth, requireHousehold);
+
+/**
+ * Lo que mandó el teléfono, tal cual.
+ *
+ * Es la pantalla de diagnóstico del atajo: sirve para ver de una si iOS entrega
+ * el monto con un formato que la app entiende, sin tener que transcribir a mano
+ * lo que decía una notificación.
+ */
+atajoRouter.get('/senales', (req, res) => {
+  res.json({ senales: listarSenales(req.household!.id) });
+});
 
 atajoRouter.get('/claves', (req, res) => {
   res.json({ claves: listarClaves(req.household!.id, req.user!.id) });

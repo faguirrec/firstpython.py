@@ -2353,3 +2353,27 @@ details.plegable > summary .resumen-dato {
 .plan-modo input { margin-top: 3px; flex: none; }
 .plan-modo span { display: grid; gap: 1px; }
 .plan-modo em { font-style: normal; font-size: var(--t-sm); }
+
+/*
+ * El aviso cuando algo salió mal de verdad.
+ *
+ * El aviso normal es ámbar y dice "ojo con esto". Éste es para lo único que en
+ * esta pantalla está realmente roto: una compra que llegó y no se pudo leer, o
+ * sea plata que se gastó y no quedó anotada. Ahí el rojo corresponde.
+ */
+.aviso-inline.malo {
+  border-color: color-mix(in srgb, var(--critical) 45%, transparent);
+  background: color-mix(in srgb, var(--critical) 8%, var(--surface-1));
+}
+
+/* El texto crudo del monto, tal cual lo mandó iOS. Va en monoespaciada para que
+   se vean los caracteres exactos: un punto y una coma se distinguen. */
+.senal-crudo {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.95em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--plane);
+  color: var(--text-primary);
+}
+.senales .item .meta { line-height: 1.7; }

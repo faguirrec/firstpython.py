@@ -168,6 +168,33 @@ CREATE TABLE IF NOT EXISTS claves_atajo (
   revocada_at   TEXT
 );
 
+-- Lo que el atajo del iPhone mandó, tal cual llegó.
+--
+-- Existe para una cosa: iOS entrega el monto con el formato de la región del
+-- teléfono, y confundir el separador de miles con el decimal convierte $38.450
+-- en $38. Es el error mas caro posible en una app de plata y el mas silencioso.
+-- Guardando el texto crudo al lado de como se interpreto, el problema se ve en
+-- pantalla en vez de haber que adivinarlo.
+--
+-- Se guardan tambien los intentos que no se pudieron leer, que son justamente
+-- los que hay que mirar.
+CREATE TABLE IF NOT EXISTS senales_atajo (
+  id            TEXT PRIMARY KEY,
+  household_id  TEXT NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+  clave_id      TEXT REFERENCES claves_atajo(id) ON DELETE SET NULL,
+  recibida_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  -- El texto tal cual vino, sin tocar. Es el dato del que se trata todo esto.
+  monto_crudo   TEXT,
+  comercio_crudo TEXT,
+  tarjeta_cruda TEXT,
+  -- En cuanto quedo, o NULL si no se pudo leer.
+  monto_leido   REAL,
+  -- 'creado', 'duplicado' o 'no-pude-leer'.
+  resultado     TEXT NOT NULL,
+  transaction_id TEXT REFERENCES transactions(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_senales_hogar ON senales_atajo (household_id, recibida_at);
+
 CREATE TABLE IF NOT EXISTS imap_accounts (
   id            TEXT PRIMARY KEY,
   household_id  TEXT NOT NULL REFERENCES households(id) ON DELETE CASCADE,

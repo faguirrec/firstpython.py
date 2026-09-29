@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api, type ClaveAtajo } from '../lib/api';
+import { api, type ClaveAtajo, type SenalAtajo } from '../lib/api';
+import { useSession } from '../lib/session';
 import { avisar, avisarError } from '../lib/aviso';
-import { diaLargo } from '../lib/format';
+import { diaLargo, money } from '../lib/format';
 
 /**
  * Capturar las compras desde el iPhone, cuando el banco no manda correo.
@@ -20,13 +21,16 @@ import { diaLargo } from '../lib/format';
  */
 export default function AjustesAtajo() {
   const [claves, setClaves] = useState<ClaveAtajo[]>([]);
+  const [senales, setSenales] = useState<SenalAtajo[]>([]);
   const [nombre, setNombre] = useState('');
   const [reciencreada, setRecienCreada] = useState<string | null>(null);
   const [creando, setCreando] = useState(false);
 
   const cargar = useCallback(async () => {
     try {
-      setClaves((await api.clavesAtajo()).claves);
+      const [c, s] = await Promise.all([api.clavesAtajo(), api.senalesAtajo()]);
+      setClaves(c.claves);
+      setSenales(s.senales);
     } catch (err) {
       avisarError((err as Error).message);
     }
@@ -34,6 +38,23 @@ export default function AjustesAtajo() {
 
   useEffect(() => {
     void cargar();
+  }, [cargar]);
+
+  /*
+   * Volver a mirar cuando se vuelve a la app.
+   *
+   * El atajo se ejecuta en el mismo teléfono en el que está la app, así que
+   * nadie puede mirar las dos cosas a la vez: se sale a Atajos, se dispara, y
+   * se vuelve. Refrescar en ese momento es lo que hace que la señal ya esté
+   * cuando uno vuelve, sin botones ni esperas. Un sondeo cada tantos segundos
+   * pediría lo mismo decenas de veces para el único momento que importa.
+   */
+  useEffect(() => {
+    const alVolver = () => {
+      if (document.visibilityState === 'visible') void cargar();
+    };
+    document.addEventListener('visibilitychange', alVolver);
+    return () => document.removeEventListener('visibilitychange', alVolver);
   }, [cargar]);
 
   const vivas = claves.filter((c) => !c.revocadaAt);
@@ -208,6 +229,119 @@ export default function AjustesAtajo() {
           </p>
         </details>
       )}
+
+      {/*
+        * Lo que llegó del teléfono, al final y no antes del instructivo.
+        *
+        * En la primera visita esto se lee de arriba abajo —crear la llave, cómo
+        * armarlo, qué llegó— y esa es la secuencia real. Después, con el
+        * instructivo plegado en una línea, igual queda a la vista.
+        */}
+      {vivas.length > 0 && <Senales senales={senales} onRecargar={cargar} />}
     </div>
   );
+}
+
+/**
+ * Lo que mandó el teléfono, tal cual.
+ *
+ * Esta es la pieza que evita la pregunta imposible: "no apareció, ¿por qué?".
+ * El formato con que iOS entrega el monto es la única incógnita real de todo el
+ * camino —lo manda según la región del teléfono, y confundir el separador de
+ * miles con el decimal convierte $38.450 en $38—, así que acá se muestra el
+ * texto crudo al lado de en cuánto quedó. Si no calzan, se ve.
+ *
+ * Los que no se pudieron leer salen primero en rojo, porque son los únicos que
+ * piden hacer algo.
+ */
+function Senales({ senales, onRecargar }: { senales: SenalAtajo[]; onRecargar: () => Promise<void> }) {
+  const currency = useSession().household?.currency ?? 'CLP';
+  const [recargando, setRecargando] = useState(false);
+
+  async function recargar() {
+    setRecargando(true);
+    try {
+      await onRecargar();
+    } finally {
+      setRecargando(false);
+    }
+  }
+
+  if (senales.length === 0) {
+    return (
+      <div className="card senales">
+        <h2>Esperando la primera señal</h2>
+        <p className="muted" style={{ marginTop: 0 }}>
+          Todavía no llega nada desde el teléfono. Arma el atajo, dispáralo, y al volver acá vas a ver
+          exactamente qué mandó iOS y cómo lo entendió la app.
+        </p>
+        <button className="ghost small" onClick={() => void recargar()} disabled={recargando}>
+          {recargando ? 'Mirando…' : 'Mirar de nuevo'}
+        </button>
+      </div>
+    );
+  }
+
+  const ilegibles = senales.filter((s) => s.resultado === 'no-pude-leer');
+
+  return (
+    <div className="card senales">
+      <div className="card-head">
+        <h2>Lo que mandó el teléfono</h2>
+        <button className="ghost small" onClick={() => void recargar()} disabled={recargando}>
+          {recargando ? 'Mirando…' : 'Actualizar'}
+        </button>
+      </div>
+
+      {ilegibles.length > 0 ? (
+        <div className="aviso-inline malo">
+          <strong>Hay {ilegibles.length} que no pude leer.</strong>
+          <span>
+            Casi siempre es el formato del monto. Mándame el texto que aparece abajo en gris y lo arreglo.
+          </span>
+        </div>
+      ) : (
+        <p className="muted" style={{ marginTop: 0 }}>
+          A la izquierda va el texto tal cual lo mandó iOS; a la derecha, en cuánto quedó. Si no calzan, avísame.
+        </p>
+      )}
+
+      <div className="list">
+        {senales.map((s) => (
+          <div className="item" key={s.id}>
+            <div className="body">
+              <div className="title">{s.comercioCrudo ?? 'Sin comercio'}</div>
+              <div className="meta">
+                <code className="senal-crudo">{s.montoCrudo ?? '(sin monto)'}</code>
+                {' → '}
+                {s.montoLeido != null ? money(s.montoLeido, currency) : 'no pude leerlo'}
+              </div>
+              <div className="meta">{cuando(s.recibidaAt)}</div>
+            </div>
+            <span className={`pill ${etiqueta(s).clase}`}>{etiqueta(s).texto}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function etiqueta(s: SenalAtajo): { texto: string; clase: string } {
+  // La píldora dice la consecuencia y la línea de arriba dice la causa. Poner
+  // "no pude leerlo" en las dos no agrega nada: lo que falta saber es que esa
+  // compra quedó sin anotar.
+  if (s.resultado === 'no-pude-leer') return { texto: 'sin anotar', clase: 'alert' };
+  // Repetido no es un error: la automatización de iOS a veces se ejecuta de
+  // más, y que no se haya anotado dos veces es justamente lo correcto.
+  if (s.resultado === 'duplicado') return { texto: 'repetido', clase: '' };
+  return { texto: 'anotado', clase: 'good' };
+}
+
+/** La hora, que es lo que uno acaba de hacer, y la fecha sólo si es de antes. */
+function cuando(iso: string): string {
+  const d = new Date(iso.includes('T') ? iso : `${iso.replace(' ', 'T')}Z`);
+  if (Number.isNaN(d.getTime())) return iso;
+  const hora = d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
+  const hoy = new Date().toDateString() === d.toDateString();
+  return hoy ? `Hoy a las ${hora}` : `${diaLargo(d.toISOString().slice(0, 10))} a las ${hora}`;
 }

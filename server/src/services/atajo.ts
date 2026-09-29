@@ -156,3 +156,67 @@ export function leerComercio(bruto: unknown): string | null {
     .trim();
   return limpio.length > 0 ? limpio.slice(0, 120) : null;
 }
+
+/* ------------------------- Las señales que llegaron ----------------------- */
+
+export type Senal = {
+  id: string;
+  recibidaAt: string;
+  /** El texto del monto tal cual lo mandó iOS. Es el dato que importa. */
+  montoCrudo: string | null;
+  comercioCrudo: string | null;
+  tarjetaCruda: string | null;
+  montoLeido: number | null;
+  resultado: 'creado' | 'duplicado' | 'no-pude-leer';
+  transactionId: string | null;
+};
+
+/** Cuántas se guardan por hogar. Es un diagnóstico, no un registro contable. */
+const CUANTAS = 20;
+
+/**
+ * Anotar lo que llegó, se haya podido leer o no.
+ *
+ * Lo que no se pudo leer es justamente lo que hay que poder mirar: si iOS manda
+ * el monto con un formato que el parser no contempla, sin esto el movimiento
+ * simplemente no aparece y no queda rastro de por qué.
+ */
+export function anotarSenal(
+  householdId: string,
+  claveId: string | null,
+  crudo: { monto?: unknown; comercio?: unknown; tarjeta?: unknown },
+  desenlace: { montoLeido: number | null; resultado: Senal['resultado']; transactionId?: string | null },
+): void {
+  const texto = (v: unknown) => (v == null ? null : String(v).slice(0, 120));
+  db.prepare(
+    `INSERT INTO senales_atajo
+       (id, household_id, clave_id, monto_crudo, comercio_crudo, tarjeta_cruda,
+        monto_leido, resultado, transaction_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    uid(), householdId, claveId, texto(crudo.monto), texto(crudo.comercio), texto(crudo.tarjeta),
+    desenlace.montoLeido, desenlace.resultado, desenlace.transactionId ?? null,
+  );
+
+  // Se podan las viejas en el momento: esto no tiene por qué crecer para siempre.
+  db.prepare(
+    `DELETE FROM senales_atajo
+      WHERE household_id = ?
+        AND id NOT IN (
+          SELECT id FROM senales_atajo WHERE household_id = ?
+           ORDER BY recibida_at DESC, rowid DESC LIMIT ?)`,
+  ).run(householdId, householdId, CUANTAS);
+}
+
+export function listarSenales(householdId: string): Senal[] {
+  return db
+    .prepare(
+      `SELECT id, recibida_at AS recibidaAt, monto_crudo AS montoCrudo,
+              comercio_crudo AS comercioCrudo, tarjeta_cruda AS tarjetaCruda,
+              monto_leido AS montoLeido, resultado, transaction_id AS transactionId
+         FROM senales_atajo
+        WHERE household_id = ?
+        ORDER BY recibida_at DESC, rowid DESC`,
+    )
+    .all(householdId) as Senal[];
+}

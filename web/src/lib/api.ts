@@ -351,6 +351,24 @@ export type ResumenPersonal = {
   savingsRate: number | null;
 };
 
+/**
+ * Lo que el atajo del iPhone mandó, tal cual llegó.
+ *
+ * El texto crudo del monto es el dato del que se trata todo esto: iOS lo manda
+ * con el formato de la región del teléfono, y confundir el separador de miles
+ * con el decimal convierte $38.450 en $38.
+ */
+export type SenalAtajo = {
+  id: string;
+  recibidaAt: string;
+  montoCrudo: string | null;
+  comercioCrudo: string | null;
+  tarjetaCruda: string | null;
+  montoLeido: number | null;
+  resultado: 'creado' | 'duplicado' | 'no-pude-leer';
+  transactionId: string | null;
+};
+
 export type ClaveAtajo = {
   id: string;
   nombre: string;
@@ -517,6 +535,7 @@ export const api = {
   clavesAtajo: () => get<{ claves: ClaveAtajo[] }>('/atajo/claves'),
   crearClaveAtajo: (nombre: string) => post<{ id: string; clave: string }>('/atajo/claves', { nombre }),
   revocarClaveAtajo: (id: string) => del<{ ok: true }>(`/atajo/claves/${id}`),
+  senalesAtajo: () => get<{ senales: SenalAtajo[] }>('/atajo/senales'),
 
   incomes: () => get<{ incomes: { id: string; month: string; amount: number; note: string | null; userId: string; userName: string }[] }>('/finance/incomes'),
   saveIncome: (body: { month: string; userId?: string; amount: number; note?: string | null }) =>
