@@ -2,6 +2,9 @@ const S = self.MeliShared;
 const send = (msg) => new Promise((res) => chrome.runtime.sendMessage(msg, res));
 const $ = (s) => document.querySelector(s);
 let tab = 'tracked';
+const style = document.createElement('style');
+style.textContent = S.CHART_CSS;
+document.head.appendChild(style);
 
 async function render() {
   const all = Object.values((await chrome.storage.local.get('items')).items || {});
@@ -18,7 +21,6 @@ async function render() {
     : 'Acá aparecen los productos que visitás en MercadoLibre.<br>Se registran solos para armar su historial.';
 
   $('#list').innerHTML = items.map((it) => {
-    const s = S.stats(it), v = S.verdict(it);
     const when = tab === 'tracked'
       ? `Última revisión: ${it.lastCheck ? new Date(it.lastCheck).toLocaleString() : '—'}`
       : `Visto por última vez: ${it.lastSeen ? new Date(it.lastSeen).toLocaleDateString() : '—'}`;
@@ -26,19 +28,43 @@ async function render() {
       <div class="top">
         ${it.image ? `<img src="${S.esc(it.image)}" alt="">` : ''}
         <div><a href="${S.esc(it.url)}" target="_blank" rel="noopener">${S.esc(it.title)}</a>
-        <div class="price">${S.esc(S.money(s.cur, it.currency))}<span class="badge ${v.cls}">${S.esc(v.text)}</span></div></div>
+        <div class="price"></div></div>
       </div>
-      ${S.chart(it)}
-      <div class="stats"><span>Mín ${S.esc(S.money(s.min, it.currency))}</span><span>Prom ${S.esc(S.money(s.avg, it.currency))}</span><span>Máx ${S.esc(S.money(s.max, it.currency))}</span></div>
-      <div class="stats"><span>${S.esc(when)}</span><span>${s.n} registros</span></div>
+      <div class="chartbox"></div>
+      <div class="statsbox"></div>
+      <div class="stats"><span>${S.esc(when)}</span><span class="count"></span></div>
       ${it.lastError ? `<div class="err">⚠ ${S.esc(it.lastError)}</div>` : ''}
+      ${tab === 'tracked' ? S.alertsHtml(it) : ''}
       <div class="actions">
         ${tab === 'tracked'
-          ? `<input type="number" min="0" placeholder="Precio objetivo" value="${it.target || ''}"><button class="set">Guardar</button><button class="del">Dejar de seguir</button>`
-          : `<button class="follow">🔔 Seguir</button><button class="rm del-seen">Borrar</button>`}
+          ? `<button class="csv">⬇ CSV</button><button class="del">Dejar de seguir</button>`
+          : `<button class="follow">🔔 Seguir</button><button class="csv">⬇ CSV</button><button class="rm del-seen">Borrar</button>`}
       </div>
     </div>`;
   }).join('');
+  views.clear();
+  const cards = [...document.querySelectorAll('.card')];
+  cards.forEach((card) => fill(card, items.find((x) => x.id === card.dataset.id), null));
+  // Historial comunitario: se pide aparte y completa cada tarjeta cuando llega (el popup ya se ve con lo local).
+  const gen = ++renderGen;
+  cards.slice(0, 30).forEach(async (card) => {
+    const it = items.find((x) => x.id === card.dataset.id);
+    const r = await send({ type: 'remoteHistory', id: it.id });
+    if (gen === renderGen && card.isConnected && r && r.data && r.data.points && r.data.points.length) fill(card, it, r.data);
+  });
+}
+
+// Pinta precio, veredicto, gráfico y estadísticas de una tarjeta con el historial local (+ comunitario si lo hay).
+const views = new Map();
+let renderGen = 0;
+function fill(card, it, remote) {
+  const view = remote ? { ...it, history: S.merge(it.history, remote.points) } : it;
+  views.set(it.id, view);
+  const s = S.stats(view), v = S.verdict(view);
+  card.querySelector('.price').innerHTML = `${S.esc(S.money(s.cur, it.currency))}<span class="badge ${v.cls}">${S.esc(v.text)}</span>`;
+  card.querySelector('.statsbox').innerHTML = S.statsHtml(s, it.currency);
+  card.querySelector('.count').textContent = remote ? `${s.n} registros · ${remote.contributors} usuarios` : `${s.n} registros`;
+  S.mountChart(card.querySelector('.chartbox'), view.history, it.currency);
 }
 
 $('#list').addEventListener('click', async (e) => {
@@ -49,7 +75,12 @@ $('#list').addEventListener('click', async (e) => {
   if (c.contains('del')) await send({ type: 'untrack', id });
   else if (c.contains('follow')) await send({ type: 'track', id });
   else if (c.contains('del-seen')) await send({ type: 'remove', id });
-  else if (c.contains('set')) await send({ type: 'setTarget', id, target: Number(card.querySelector('input').value) });
+  else if (e.target.dataset.a === 'alerts') await send({ type: 'setAlerts', id, ...S.readAlerts(card) });
+  else if (c.contains('csv')) {
+    const it = ((await chrome.storage.local.get('items')).items || {})[id];
+    if (it) S.download(`precio-${id}.csv`, S.csv(it, views.get(id) && views.get(id).history));
+    return;
+  }
   else return;
   render();
 });

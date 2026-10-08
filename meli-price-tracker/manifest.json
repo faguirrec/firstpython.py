@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Meli Price Tracker",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "Historial de precios de MercadoLibre construido entre todos: mirá cómo evolucionó un producto y decidí cuándo comprar.",
   "permissions": [
     "storage",

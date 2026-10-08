@@ -1,5 +1,6 @@
-importScripts('lib/config.js', 'lib/extract.js');
+importScripts('lib/config.js', 'lib/extract.js', 'lib/shared.js');
 const X = self.MeliExtract;
+const S = self.MeliShared;
 
 const ALARM = 'mpt-check';
 const FLUSH_ALARM = 'mpt-flush';
@@ -91,25 +92,39 @@ function fmt(price, cur) {
   catch (e) { return String(price); }
 }
 
-// Agrega un punto al historial (si corresponde) y avisa si el producto está seguido y bajó.
+// Agrega un punto al historial (si corresponde) y avisa si el producto está seguido y se cumple alguna alerta.
 function record(item, price) {
   const last = item.history[item.history.length - 1];
   const now = Date.now();
   if (last && last[1] === price && now - last[0] < MIN_GAP_MS) return;
+  const before = item.history.slice(); // historial previo, para evaluar "mínimo de 90 días" sin contar este punto
   item.history.push([now, price]);
   if (item.history.length > MAX_HISTORY) item.history.splice(0, item.history.length - MAX_HISTORY);
   if (!tracked(item) || !last || price >= last[1]) return;
-  const drop = Math.round((1 - price / last[1]) * 100);
-  const hitTarget = item.target && price <= item.target;
-  if (drop >= 1 || hitTarget) {
-    chrome.notifications.create('mpt-' + item.id + '-' + now, {
-      type: 'basic',
-      iconUrl: 'icons/icon128.png',
-      title: hitTarget ? '🎯 Llegó a tu precio objetivo' : `📉 Bajó ${drop}%`,
-      message: `${item.title}\n${fmt(last[1], item.currency)} → ${fmt(price, item.currency)}`,
-      contextMessage: 'Click para abrir el producto'
-    });
+  const alert = checkAlerts(item, before, price, last[1]);
+  if (!alert) return;
+  chrome.notifications.create('mpt-' + item.id + '-' + now, {
+    type: 'basic',
+    iconUrl: 'icons/icon128.png',
+    title: alert.title,
+    message: `${item.title}\n${fmt(last[1], item.currency)} → ${fmt(price, item.currency)}`,
+    contextMessage: 'Click para abrir el producto'
+  });
+}
+
+// Devuelve { title } si la baja de `prev` a `price` cumple alguna alerta del producto; si no, null.
+// Prioridad: precio objetivo > mínimo de 90 días > % de baja.
+function checkAlerts(item, before, price, prev) {
+  if (item.target && price <= item.target) return { title: '🎯 Llegó a tu precio objetivo' };
+  if (item.alertAtMin && before.length >= 3) {
+    const span = (before[before.length - 1][0] - before[0][0]) / 86400000;
+    const min = Math.min(...S.sliceHistory(before, 90).map((p) => p[1]));
+    if (span >= 7 && price <= min) return { title: '🏷️ Mínimo de 90 días' };
   }
+  const pct = item.alertPct == null ? 1 : item.alertPct; // 0 = no avisar por % de baja
+  const drop = (1 - price / prev) * 100;
+  if (pct > 0 && drop >= pct) return { title: `📉 Bajó ${Math.round(drop)}%` };
+  return null;
 }
 
 // Mantiene acotado el almacenamiento: descarta los vistos (no seguidos) menos recientes.
@@ -185,10 +200,17 @@ const handlers = {
   remove: ({ id }) => serial(async () => {
     const items = await getItems(); delete items[id]; await setItems(items); return { ok: true };
   }),
-  setTarget: ({ id, target }) => serial(async () => {
+  // Alertas de un producto seguido: precio objetivo, % mínimo de baja (0 = off) y aviso de mínimo de 90 días.
+  setAlerts: ({ id, target, pct, atMin }) => serial(async () => {
     const items = await getItems();
-    if (items[id]) { items[id].target = target > 0 ? target : null; await setItems(items); }
-    return { item: items[id] || null };
+    const it = items[id];
+    if (it) {
+      it.target = target > 0 ? target : null;
+      it.alertPct = [0, 1, 5, 10, 20].includes(pct) ? pct : 1;
+      it.alertAtMin = !!atMin;
+      await setItems(items);
+    }
+    return { item: it || null };
   }),
   async checkNow() { await checkAll(); return { ok: true }; },
   async remoteHistory({ id }) { return { data: await remoteHistory(id) }; },

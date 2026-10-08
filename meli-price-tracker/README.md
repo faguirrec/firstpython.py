@@ -3,8 +3,10 @@
 Extensión de Chrome (Manifest V3) para ver y seguir el historial de precios de productos de MercadoLibre.
 
 ## Qué hace
-- **Historial en cada producto:** al abrir cualquier página de producto, la extensión registra el precio solo (sin tocar nada) y muestra un panel flotante con gráfico, mínimo / promedio / máximo y un veredicto (*mínimo histórico*, *buen momento*, *esperá*, …).
-- **Seguir y avisarme:** desde el panel (o el popup) marcás los productos que te interesan. Esos se revisan en segundo plano cada 60 min y te llega una notificación cuando bajan (≥1 %) o llegan a tu **precio objetivo**.
+- **Historial en cada producto:** al abrir cualquier página de producto, la extensión registra el precio solo (sin tocar nada) y muestra un panel flotante con un veredicto (*mínimo histórico*, *mínimo de 90 días*, *buen momento*, *esperá*, …).
+- **Gráfico interactivo:** rangos 7d / 30d / 90d / 1 año / todo, y al pasar el mouse ves la fecha y el precio exactos. Debajo, estadísticas por ventana (mínimo de 30 días, 90 días y 6 meses —solo las que el historial realmente cubre—, mínimo y máximo históricos con su fecha, % vs el máximo y sobre el mínimo).
+- **Exportar CSV** del historial de cualquier producto (panel y popup).
+- **Seguir y avisarme:** desde el panel (o el popup) marcás los productos que te interesan. Esos se revisan en segundo plano cada 60 min. Alertas configurables por producto: **precio objetivo**, **% mínimo de baja** (cualquier baja, 5 %, 10 %, 20 % o ninguna) y **“llegó al mínimo de 90 días”**.
 - **Popup:** pestañas **Siguiendo** y **Vistos** (todo lo que fuiste visitando, con su historial).
 - Funciona en MercadoLibre AR, MX, CL, CO, UY, PE, VE, EC y Brasil.
 - **Base comunitaria (fase 3):** el historial se arma entre todos. Cada extensión aporta, de forma anónima, `{producto, precio, moneda}` de lo que visita, y al abrir un producto trae el historial combinado, incluso si nunca lo habías visto. Se puede apagar desde el popup. Detalle en [PRIVACY.md](PRIVACY.md).
@@ -14,6 +16,12 @@ Extensión de Chrome (Manifest V3) para ver y seguir el historial de precios de 
 1. Abrí `chrome://extensions` y activá **Modo desarrollador**.
 2. **Cargar descomprimida** → elegí esta carpeta `meli-price-tracker/`.
 3. Entrá a un producto en MercadoLibre: aparece el botón 📉 abajo a la derecha.
+
+## Pruebas
+```bash
+node --test test/*.test.js        # extensión: estadísticas, veredicto, CSV, alertas (11 pruebas)
+cd server && npm test             # API (8 pruebas)
+```
 
 ## Servidor (`server/`)
 API Node + Express + SQLite (`better-sqlite3`). Endpoints: `POST /v1/observations`, `GET /v1/items/:id/history`, `GET /health`.
@@ -27,7 +35,8 @@ Despliegue en Fly.io: los pasos están en `server/fly.toml`. Si usás otro nombr
 ## Límites y notas
 - Historial: hasta 1000 puntos por producto (un punto cada vez que cambia el precio, o cada 6 h si no cambia). De los productos *solo vistos* se conservan los 1500 más recientes; los seguidos nunca se descartan.
 - Los productos *solo vistos* se actualizan únicamente cuando los visitás; los seguidos, además, cada hora (con Chrome abierto).
-- El veredicto necesita al menos 3 registros y 3 días de datos antes de opinar.
+- El veredicto necesita al menos 3 registros y 3 días de datos antes de opinar. Las ventanas de 90 días / 6 meses solo se muestran cuando el historial las cubre.
+- Las alertas de “mínimo de 90 días” se evalúan con el historial local del producto (necesita ≥3 registros y ≥7 días).
 - El precio se lee del JSON-LD / meta tags de la página. Si MercadoLibre cambia ese formato, hay que ajustar `lib/extract.js`.
 
 ## Hoja de ruta
