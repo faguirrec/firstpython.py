@@ -53,5 +53,14 @@
       <circle cx="${x(last[0])}" cy="${y(last[1])}" r="3.5" fill="#3483fa"/></svg>`;
   }
 
-  root.MeliShared = { esc, money, shortDate, isTracked, stats, verdict, chart };
+  // Une el historial comunitario con el local: los puntos locales solo se agregan
+  // si no hay ya un punto de la comunidad dentro de la misma ventana de 6 h.
+  function merge(local, remote) {
+    const GAP = 6 * 3600 * 1000;
+    const out = remote.map((p) => [p[0], p[1]]);
+    for (const l of local) if (!remote.some((r) => Math.abs(r[0] - l[0]) < GAP)) out.push([l[0], l[1]]);
+    return out.sort((a, b) => a[0] - b[0]);
+  }
+
+  root.MeliShared = { esc, money, shortDate, isTracked, stats, verdict, chart, merge };
 })(typeof self !== 'undefined' ? self : this);

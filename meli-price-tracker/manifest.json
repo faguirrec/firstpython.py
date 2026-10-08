@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Meli Price Tracker",
-  "version": "2.0.0",
-  "description": "Seguí el precio de tus productos de MercadoLibre a lo largo del tiempo y enterate cuándo conviene comprar.",
+  "version": "3.0.0",
+  "description": "Historial de precios de MercadoLibre construido entre todos: mirá cómo evolucionó un producto y decidí cuándo comprar.",
   "permissions": [
     "storage",
     "unlimitedStorage",
@@ -19,7 +19,8 @@
     "https://*.mercadolibre.com.ve/*",
     "https://*.mercadolibre.com.ec/*",
     "https://*.mercadolibre.com/*",
-    "https://*.mercadolivre.com.br/*"
+    "https://*.mercadolivre.com.br/*",
+    "https://meli-price-tracker.fly.dev/*"
   ],
   "background": {
     "service_worker": "background.js"

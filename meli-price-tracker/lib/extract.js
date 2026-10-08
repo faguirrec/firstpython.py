@@ -79,5 +79,10 @@
     return info;
   }
 
-  root.MeliExtract = { itemIdFromUrl, canonicalUrl, parseHtml, parseDocument };
+  const CURRENCY_BY_TLD = { ar: 'ARS', mx: 'MXN', cl: 'CLP', co: 'COP', uy: 'UYU', pe: 'PEN', ve: 'VES', ec: 'USD', br: 'BRL' };
+  function currencyForUrl(url) {
+    try { return CURRENCY_BY_TLD[new URL(url).hostname.split('.').pop()] || null; } catch (e) { return null; }
+  }
+
+  root.MeliExtract = { itemIdFromUrl, canonicalUrl, currencyForUrl, parseHtml, parseDocument };
 })(typeof self !== 'undefined' ? self : this);

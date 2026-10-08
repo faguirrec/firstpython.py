@@ -66,3 +66,15 @@ $('#refresh').addEventListener('click', async (e) => {
 });
 
 render();
+
+// --- Base comunitaria ---
+const box = $('#community'), msg = $('#foot-msg');
+send({ type: 'getSettings' }).then((st) => { if (st) box.checked = st.community; });
+box.addEventListener('change', () => send({ type: 'setSettings', community: box.checked }).then(() => {
+  msg.textContent = box.checked ? 'Base comunitaria activada.' : 'Base comunitaria desactivada.';
+}));
+$('#wipe').addEventListener('click', async () => {
+  if (!confirm('Se borrarán del servidor todos los precios que aportaste. Tu historial local no cambia. ¿Seguir?')) return;
+  const r = await send({ type: 'deleteContributions' });
+  msg.textContent = r && r.ok ? `Listo: se borraron ${r.deleted} aportes.` : 'No se pudo conectar con el servidor.';
+});

@@ -1,7 +1,10 @@
-importScripts('lib/extract.js');
+importScripts('lib/config.js', 'lib/extract.js');
 const X = self.MeliExtract;
 
 const ALARM = 'mpt-check';
+const FLUSH_ALARM = 'mpt-flush';
+const SERVER = self.MPT_CONFIG.SERVER_URL;
+const MAX_OUTBOX = 500;
 const CHECK_MINUTES = 60;
 const MIN_GAP_MS = 6 * 3600 * 1000; // si el precio no cambia, guardamos un punto cada 6 h
 const MAX_HISTORY = 1000;           // puntos por producto
@@ -14,6 +17,74 @@ const serial = (fn) => (queue = queue.then(fn, fn));
 const getItems = async () => (await chrome.storage.local.get('items')).items || {};
 const setItems = (items) => chrome.storage.local.set({ items });
 const tracked = (it) => it.tracked !== false; // ítems de la fase 1 no tienen el campo
+
+// --- Base comunitaria -------------------------------------------------------
+// Un solo interruptor: usar la base comunitaria implica también aportar a ella.
+// Solo se envía { id de producto, precio, moneda } + un código anónimo al azar.
+let newClientId; // misma UUID para llamadas concurrentes antes de que se guarde la primera vez
+async function getSettings() {
+  const { settings } = await chrome.storage.local.get('settings');
+  const st = settings || {};
+  if (!st.clientId) { st.clientId = newClientId || (newClientId = crypto.randomUUID()); }
+  if (st.community === undefined) st.community = true;
+  if (!settings || settings.clientId !== st.clientId || settings.community !== st.community) await chrome.storage.local.set({ settings: st });
+  return st;
+}
+
+async function enqueue(obs) {
+  if (!(await getSettings()).community) return;
+  const { outbox = [] } = await chrome.storage.local.get('outbox');
+  const q = outbox.filter((o) => o.id !== obs.id);
+  q.push(obs);
+  await chrome.storage.local.set({ outbox: q.slice(-MAX_OUTBOX) });
+  chrome.alarms.get(FLUSH_ALARM, (a) => { if (!a) chrome.alarms.create(FLUSH_ALARM, { delayInMinutes: 0.5 }); });
+}
+
+async function flushOutbox() {
+  const st = await getSettings();
+  const { outbox = [] } = await chrome.storage.local.get('outbox');
+  if (!outbox.length) return;
+  if (!st.community) { await chrome.storage.local.set({ outbox: [] }); return; }
+  for (let i = 0; i < outbox.length; i += 50) {
+    const batch = outbox.slice(i, i + 50);
+    try {
+      const res = await fetch(SERVER + '/v1/observations', {
+        method: 'POST', credentials: 'omit', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ client: st.clientId, items: batch })
+      });
+      // 4xx (salvo 429) = el servidor no los va a aceptar nunca: se descartan. 5xx/red/429 = reintentar luego.
+      if (!res.ok && (res.status >= 500 || res.status === 429)) throw new Error('HTTP ' + res.status);
+    } catch (e) {
+      await chrome.storage.local.set({ outbox: outbox.slice(i) });
+      chrome.alarms.create(FLUSH_ALARM, { delayInMinutes: 5 });
+      return;
+    }
+  }
+  await chrome.storage.local.set({ outbox: [] });
+}
+
+const remoteCache = new Map(); // id -> { at, promise }
+function remoteHistory(id) {
+  const hit = remoteCache.get(id);
+  if (hit && Date.now() - hit.at < 30 * 60000) return hit.promise;
+  const promise = (async () => {
+    if (!(await getSettings()).community) return null;
+    try {
+      const res = await fetch(`${SERVER}/v1/items/${id}/history`, { credentials: 'omit', signal: AbortSignal.timeout(6000) });
+      return res.ok ? await res.json() : null;
+    } catch (e) { return null; }
+  })();
+  remoteCache.set(id, { at: Date.now(), promise });
+  promise.then((r) => { if (!r) remoteCache.delete(id); }); // no cachear fallos
+  return promise;
+}
+
+// Encola el precio para la base comunitaria salvo que ya lo mandamos hace poco.
+async function share(it, price) {
+  if (it.sent && it.sent[1] === price && Date.now() - it.sent[0] < MIN_GAP_MS) return;
+  it.sent = [Date.now(), price];
+  await enqueue({ id: it.id, price, currency: it.currency });
+}
 
 function fmt(price, cur) {
   try { return new Intl.NumberFormat(undefined, { style: 'currency', currency: cur || 'ARS', maximumFractionDigits: 0 }).format(price); }
@@ -65,7 +136,7 @@ async function checkAll() {
       const cur = items[id];
       if (!cur || !tracked(cur)) return;
       cur.lastCheck = Date.now();
-      if (info) { delete cur.lastError; record(cur, info.price); } else cur.lastError = error;
+      if (info) { delete cur.lastError; record(cur, info.price); await share(cur, info.price); } else cur.lastError = error;
       await setItems(items);
     });
     await new Promise((r) => setTimeout(r, 1500)); // no bombardear a ML
@@ -86,9 +157,10 @@ const handlers = {
     it.url = item.url;
     it.title = item.title || it.title || item.id;
     it.image = item.image || it.image;
-    it.currency = item.currency || it.currency || 'ARS';
+    it.currency = item.currency || it.currency || X.currencyForUrl(item.url) || 'ARS';
     it.lastSeen = now;
     record(it, item.price);
+    await share(it, item.price);
     evict(items);
     await setItems(items);
     return { item: items[item.id] || null };
@@ -118,7 +190,28 @@ const handlers = {
     if (items[id]) { items[id].target = target > 0 ? target : null; await setItems(items); }
     return { item: items[id] || null };
   }),
-  async checkNow() { await checkAll(); return { ok: true }; }
+  async checkNow() { await checkAll(); return { ok: true }; },
+  async remoteHistory({ id }) { return { data: await remoteHistory(id) }; },
+  async getSettings() { const { clientId, ...pub } = await getSettings(); return pub; },
+  setSettings: ({ community }) => serial(async () => {
+    const st = await getSettings();
+    st.community = !!community;
+    await chrome.storage.local.set({ settings: st });
+    if (!st.community) { await chrome.storage.local.set({ outbox: [] }); remoteCache.clear(); }
+    return { ok: true };
+  }),
+  async deleteContributions() {
+    const st = await getSettings();
+    try {
+      const res = await fetch(SERVER + '/v1/contributions', {
+        method: 'DELETE', credentials: 'omit', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ client: st.clientId })
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      await chrome.storage.local.set({ outbox: [] });
+      return { ok: true, ...(await res.json()) };
+    } catch (e) { return { ok: false, error: String(e.message || e) }; }
+  }
 };
 
 chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
@@ -137,6 +230,12 @@ chrome.notifications.onClicked.addListener(async (nid) => {
 function ensureAlarm() {
   chrome.alarms.get(ALARM, (a) => { if (!a) chrome.alarms.create(ALARM, { periodInMinutes: CHECK_MINUTES, delayInMinutes: 1 }); });
 }
-chrome.runtime.onInstalled.addListener(ensureAlarm);
+chrome.runtime.onInstalled.addListener((d) => {
+  ensureAlarm();
+  if (d.reason === 'install') chrome.tabs.create({ url: chrome.runtime.getURL('welcome.html') });
+});
 chrome.runtime.onStartup.addListener(ensureAlarm);
-chrome.alarms.onAlarm.addListener((a) => { if (a.name === ALARM) checkAll(); });
+chrome.alarms.onAlarm.addListener((a) => {
+  if (a.name === ALARM) { checkAll(); flushOutbox(); }
+  else if (a.name === FLUSH_ALARM) flushOutbox();
+});

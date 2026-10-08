@@ -34,7 +34,7 @@
     .axis, .note, .grid small { color: #9a9aa3; } .btn.on { background: #26324d; color: #9cc0ff; }
   }`;
 
-  let host, shadow, open = false, current = null, currentId = null;
+  let host, shadow, open = false, current = null, currentId = null, remote = null;
 
   function ensureHost() {
     if (host && host.isConnected) return;
@@ -50,21 +50,24 @@
     const it = current;
     if (!it) return removeHost();
     ensureHost();
-    const v = S.verdict(it), s = S.stats(it), cur = it.currency;
+    // Para mostrar usamos el historial comunitario + el local; lo guardado en el navegador no se toca.
+    const view = remote && remote.points.length ? { ...it, history: S.merge(it.history, remote.points) } : it;
+    const v = S.verdict(view), s = S.stats(view), cur = it.currency;
     let inner;
     if (!open) {
       inner = `<button class="pill" data-a="open" title="Ver historial de precio">📉 ${S.esc(v.text)}</button>`;
     } else {
       const vsAvg = s.n >= 2 ? Math.round((s.cur / s.avg - 1) * 100) : null;
+      const who = remote && remote.contributors > 0 ? `Comunidad: ${remote.contributors} ${remote.contributors === 1 ? 'usuario' : 'usuarios'} · ` : '';
       const note = (s.n < 3 || s.days < 3)
         ? `Empezamos a registrar este producto el ${S.shortDate(s.firstAt)}. Volvé a visitarlo en los próximos días para ver cómo evoluciona.`
-        : `${s.n} registros en ${Math.max(1, Math.round(s.days))} días` + (vsAvg === null ? '' : ` · ${vsAvg > 0 ? '+' : ''}${vsAvg}% vs promedio`);
+        : `${who}${s.n} registros en ${Math.max(1, Math.round(s.days))} días` + (vsAvg === null ? '' : ` · ${vsAvg > 0 ? '+' : ''}${vsAvg}% vs promedio`);
       const isT = S.isTracked(it);
       inner = `<div class="panel">
         <div class="head"><span>📉 Historial de precio</span><button data-a="close" aria-label="Cerrar">✕</button></div>
         <div class="body">
           <div class="price">${S.esc(S.money(s.cur, cur))}<span class="badge ${v.cls}">${S.esc(v.text)}</span></div>
-          ${S.chart(it)}
+          ${S.chart(view)}
           <div class="axis"><span>${S.esc(S.shortDate(s.firstAt))}</span><span>hoy</span></div>
           <div class="grid">
             <div><small>Mínimo</small><b>${S.esc(S.money(s.min, cur))}</b></div>
@@ -102,7 +105,11 @@
     const res = await send({ type: 'visit', item: { id, url: X.canonicalUrl(location.href), ...info } });
     if (id !== currentId || !res || !res.item) return; // navegó mientras esperábamos
     current = res.item;
+    remote = null;
     draw();
+    // Historial de la comunidad: llega después y redibuja si el panel sigue en este producto.
+    const r = await send({ type: 'remoteHistory', id });
+    if (id === currentId && r && r.data && r.data.points && r.data.points.length) { remote = r.data; draw(); }
   }
 
   try { chrome.storage.local.get('panelOpen', (r) => { open = !!(r && r.panelOpen); run(); }); } catch (_) { run(); }

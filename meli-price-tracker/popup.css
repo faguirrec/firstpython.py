@@ -27,3 +27,8 @@ nav button.active { color:var(--accent); border-bottom-color:var(--accent); }
 .actions .follow { background:var(--accent); }
 .actions .rm { margin-left:auto; background:transparent; color:var(--bad); }
 .seen-note { color:var(--muted); font-size:11px; }
+footer { display:flex; flex-wrap:wrap; gap:6px 12px; align-items:center; padding:10px 14px; border-top:1px solid var(--line); color:var(--muted); font-size:11px; }
+footer label { display:flex; gap:5px; align-items:center; cursor:pointer; }
+footer a { color:var(--accent); }
+footer button { border:0; background:none; color:var(--bad); cursor:pointer; font-size:11px; padding:0; }
+#foot-msg { flex-basis:100%; }

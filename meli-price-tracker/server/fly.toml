@@ -1,0 +1,41 @@
+# Despliegue en Fly.io de la API de Meli Price Tracker (desde esta carpeta):
+#
+#   fly apps create meli-price-tracker          # o el nombre que elijas (cambiá `app` y SERVER_URL en la extensión)
+#   fly volumes create datos --size 1 --region scl --yes
+#   fly secrets set CLIENT_SALT=$(openssl rand -hex 32)
+#   fly deploy
+#
+# CLIENT_SALT: no lo cambies después; los aportes existentes dejarían de asociarse a su cliente.
+
+app = "meli-price-tracker"
+primary_region = "scl"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+  DB_PATH = "/data/prices.db"
+
+[[mounts]]
+  source = "datos"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  # SQLite en un volumen: una sola máquina, nunca más.
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

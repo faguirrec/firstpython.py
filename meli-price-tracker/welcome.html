@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Bienvenido a Meli Price Tracker</title>
+<style>
+  :root { color-scheme: light dark; --bg:#fff; --fg:#222; --muted:#666; --card:#f5f5f7; --line:#e2e2e6; --accent:#3483fa; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#1b1b1f; --fg:#eee; --muted:#9a9aa3; --card:#26262c; --line:#3a3a42; } }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.55 system-ui, sans-serif; }
+  main { max-width:620px; margin:0 auto; padding:32px 16px 48px; }
+  h1 { font-size:26px; margin:0 0 4px; } h2 { font-size:17px; margin:26px 0 6px; }
+  .lead { color:var(--muted); margin:0 0 20px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+  ul { margin:6px 0; padding-left:20px; } li { margin:3px 0; }
+  label { display:flex; gap:10px; align-items:flex-start; cursor:pointer; }
+  input[type=checkbox] { width:20px; height:20px; margin-top:3px; accent-color:var(--accent); }
+  small { color:var(--muted); display:block; }
+  #saved { color:var(--accent); font-size:14px; margin-top:8px; min-height:1.3em; }
+</style>
+</head>
+<body>
+<main>
+  <h1>📉 Meli Price Tracker</h1>
+  <p class="lead">Ya está listo. Abrí cualquier producto en MercadoLibre y vas a ver su historial de precio abajo a la derecha.</p>
+
+  <div class="card">
+    <label>
+      <input type="checkbox" id="community" checked>
+      <span><b>Usar y aportar a la base comunitaria</b>
+      <small>El historial se arma entre todos: lo que vos ves ayuda a los demás y lo que ven los demás te ayuda a vos, incluso en productos que abriste por primera vez. Podés cambiarlo cuando quieras desde el popup de la extensión.</small></span>
+    </label>
+    <div id="saved" role="status"></div>
+  </div>
+
+  <h2>Qué se envía</h2>
+  <ul>
+    <li>El <b>código del producto</b> (por ejemplo MLA123456789), su <b>precio</b> y la <b>moneda</b>.</li>
+    <li>Un <b>código anónimo al azar</b> generado en tu navegador, para evitar duplicados y abusos. El servidor guarda solo una versión cifrada (hash) de ese código.</li>
+  </ul>
+  <h2>Qué <u>no</u> se envía</h2>
+  <ul>
+    <li>Tu nombre, tu cuenta de MercadoLibre, tu correo, tus compras, tus búsquedas ni tu historial de navegación.</li>
+    <li>Qué productos seguís ni tus precios objetivo: eso queda solo en tu navegador.</li>
+  </ul>
+  <p class="lead">Al pedir el historial de un producto, el servidor ve qué producto consultaste y tu dirección IP, como cualquier sitio web. Si desactivás la base comunitaria, la extensión deja de hacer ambas cosas y funciona solo con tu historial local. Desde el popup también podés <b>borrar todo lo que aportaste</b>.</p>
+</main>
+<script src="welcome.js"></script>
+</body>
+</html>
