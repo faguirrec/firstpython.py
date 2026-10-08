@@ -1,0 +1,8 @@
+#mpt-btn {
+  position: fixed; right: 16px; bottom: 16px; z-index: 2147483647;
+  padding: 12px 16px; border: 0; border-radius: 999px; cursor: pointer;
+  font: 600 14px/1 system-ui, sans-serif; color: #2d3277; background: #ffe600;
+  box-shadow: 0 4px 14px rgba(0,0,0,.25);
+}
+#mpt-btn:hover { filter: brightness(.95); }
+#mpt-btn.mpt-on { background: #3483fa; color: #fff; }
