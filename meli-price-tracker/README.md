@@ -48,4 +48,3 @@ Despliegue en Fly.io: los pasos están en `server/fly.toml`. Si usás otro nombr
 2. ✅ Panel de historial en cualquier producto + registro pasivo de lo que visitás.
 3. ✅ Base de precios compartida (aporte anónimo de los usuarios + API), para ver historial desde la primera visita. *Pendiente:* desplegar el servidor y, más adelante, rastrear productos populares con la API oficial de MercadoLibre.
 4. ✅ Detección de descuentos inflados (precio tachado vs historial real) y vendedor. *Pendiente:* validar los selectores con páginas reales de MercadoLibre, y la recomendación “comprar ya / esperar” que combine todas las señales.
-4. ⏳ Detección de descuentos falsos y recomendación "comprar ya / esperar" con datos reales.
