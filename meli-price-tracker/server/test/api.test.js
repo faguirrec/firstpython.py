@@ -81,15 +81,12 @@ test('limita por cliente y por IP', async () => {
   s.close();
 });
 
-test('el cliente puede borrar sus aportes', async () => {
+test('solo se guarda el hash del cliente, nunca el código crudo', async () => {
   const s = await setup();
   await s.post(cid(1), [obs(100)]);
-  await s.post(cid(2), [obs(100)]);
-  const r = await (await fetch(s.base + '/v1/contributions', { method: 'DELETE', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ client: cid(1) }) })).json();
-  assert.equal(r.deleted, 1);
-  assert.equal((await s.history('MLA111222333')).contributors, 1);
-  const cols = s.db.prepare('SELECT client FROM observations').all();
-  assert.ok(cols.every((c) => c.client.length === 64 && !c.client.includes('-')), 'se guarda solo el hash');
+  const rows = s.db.prepare('SELECT client FROM observations').all();
+  assert.equal(rows.length, 1);
+  assert.ok(rows.every((c) => c.client.length === 64 && !c.client.includes('-')));
   s.close();
 });
 

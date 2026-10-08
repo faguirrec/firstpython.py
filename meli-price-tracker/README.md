@@ -7,7 +7,7 @@ Extensión de Chrome (Manifest V3) para ver y seguir el historial de precios de 
 - **Seguir y avisarme:** desde el panel (o el popup) marcás los productos que te interesan. Esos se revisan en segundo plano cada 60 min y te llega una notificación cuando bajan (≥1 %) o llegan a tu **precio objetivo**.
 - **Popup:** pestañas **Siguiendo** y **Vistos** (todo lo que fuiste visitando, con su historial).
 - Funciona en MercadoLibre AR, MX, CL, CO, UY, PE, VE, EC y Brasil.
-- **Base comunitaria (fase 3):** el historial se arma entre todos. Cada extensión aporta, de forma anónima, `{producto, precio, moneda}` de lo que visita, y al abrir un producto trae el historial combinado, incluso si nunca lo habías visto. Se puede apagar desde el popup y se pueden borrar los aportes. Detalle en [PRIVACY.md](PRIVACY.md).
+- **Base comunitaria (fase 3):** el historial se arma entre todos. Cada extensión aporta, de forma anónima, `{producto, precio, moneda}` de lo que visita, y al abrir un producto trae el historial combinado, incluso si nunca lo habías visto. Se puede apagar desde el popup. Detalle en [PRIVACY.md](PRIVACY.md).
 - Tu historial local, tus productos seguidos y tus precios objetivo se guardan solo en tu navegador (`chrome.storage.local`).
 
 ## Instalar (modo desarrollador)
@@ -16,7 +16,7 @@ Extensión de Chrome (Manifest V3) para ver y seguir el historial de precios de 
 3. Entrá a un producto en MercadoLibre: aparece el botón 📉 abajo a la derecha.
 
 ## Servidor (`server/`)
-API Node + Express + SQLite (`better-sqlite3`). Endpoints: `POST /v1/observations`, `GET /v1/items/:id/history`, `DELETE /v1/contributions`, `GET /health`.
+API Node + Express + SQLite (`better-sqlite3`). Endpoints: `POST /v1/observations`, `GET /v1/items/:id/history`, `GET /health`.
 
 ```bash
 cd server && npm install && npm test        # 8 pruebas

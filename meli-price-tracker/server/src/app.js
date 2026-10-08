@@ -16,7 +16,6 @@ export function createApp(db, { salt, now = () => Date.now(), ipLimit = 240 } = 
   const recentForItem = db.prepare(`SELECT price, client FROM observations WHERE item_id = ? AND ts >= ?`);
   const clientCount = db.prepare(`SELECT COUNT(*) AS n FROM observations WHERE client = ? AND ts >= ?`);
   const historyRows = db.prepare(`SELECT bucket, price, currency, client, ts FROM observations WHERE item_id = ? AND bucket >= ? ORDER BY bucket, ts`);
-  const deleteClient = db.prepare(`DELETE FROM observations WHERE client = ?`);
 
   const app = express();
   app.disable('x-powered-by');
@@ -83,13 +82,6 @@ export function createApp(db, { salt, now = () => Date.now(), ipLimit = 240 } = 
     const contributors = new Set(rows.map((r) => r.client)).size;
     res.set('Cache-Control', 'public, max-age=300');
     res.json({ id, currency, contributors, points });
-  });
-
-  // DELETE /v1/contributions { client } -> borra todo lo aportado por ese cliente
-  app.delete('/v1/contributions', (req, res) => {
-    const { client } = req.body || {};
-    if (!isClientId(client)) return res.status(400).json({ error: 'bad_request' });
-    res.json({ deleted: deleteClient.run(hashClient(client)).changes });
   });
 
   app.use((_req, res) => res.status(404).json({ error: 'not_found' }));

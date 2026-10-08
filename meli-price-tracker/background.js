@@ -199,19 +199,7 @@ const handlers = {
     await chrome.storage.local.set({ settings: st });
     if (!st.community) { await chrome.storage.local.set({ outbox: [] }); remoteCache.clear(); }
     return { ok: true };
-  }),
-  async deleteContributions() {
-    const st = await getSettings();
-    try {
-      const res = await fetch(SERVER + '/v1/contributions', {
-        method: 'DELETE', credentials: 'omit', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ client: st.clientId })
-      });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      await chrome.storage.local.set({ outbox: [] });
-      return { ok: true, ...(await res.json()) };
-    } catch (e) { return { ok: false, error: String(e.message || e) }; }
-  }
+  })
 };
 
 chrome.runtime.onMessage.addListener((msg, _sender, reply) => {

@@ -10,7 +10,7 @@ Tu cuenta de MercadoLibre, nombre, correo, compras, búsquedas, historial de nav
 
 ## Tus controles
 - **Interruptor** "Base comunitaria" en el popup (y en la página de bienvenida): apagado = la extensión no lee ni envía nada.
-- **Borrar mis aportes**: elimina del servidor todo lo que aportó tu código anónimo.
+- **Desinstalar** la extensión borra todo lo guardado en tu navegador. Los precios ya aportados son anónimos y permanecen en la base común.
 - Tu historial local vive en `chrome.storage.local`; se borra al desinstalar la extensión.
 
 ## Cómo se protege la base
