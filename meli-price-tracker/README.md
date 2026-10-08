@@ -5,6 +5,8 @@ Extensión de Chrome (Manifest V3) para ver y seguir el historial de precios de 
 ## Qué hace
 - **Historial en cada producto:** al abrir cualquier página de producto, la extensión registra el precio solo (sin tocar nada) y muestra un panel flotante con un veredicto (*mínimo histórico*, *mínimo de 90 días*, *buen momento*, *esperá*, …).
 - **Gráfico interactivo:** rangos 7d / 30d / 90d / 1 año / todo, y al pasar el mouse ves la fecha y el precio exactos. Debajo, estadísticas por ventana (mínimo de 30 días, 90 días y 6 meses —solo las que el historial realmente cubre—, mínimo y máximo históricos con su fecha, % vs el máximo y sobre el mínimo).
+- **Detector de descuentos inflados:** lee el precio tachado ("antes") de la publicación y lo compara con lo que el producto realmente costó en los últimos 60 días (historial local + comunitario). Resultado: *✅ Descuento real*, *🟡 Menos de lo que dice*, *⚠️ Descuento inflado* o *ℹ️ sin verificar* (si hay menos de 14 días de historial). Es una heurística; los umbrales están en `DISC` dentro de `lib/shared.js`.
+- **Vendedor:** muestra "Vendido por …", MercadoLíder y tienda oficial cuando la página los expone.
 - **Exportar CSV** del historial de cualquier producto (panel y popup).
 - **Seguir y avisarme:** desde el panel (o el popup) marcás los productos que te interesan. Esos se revisan en segundo plano cada 60 min. Alertas configurables por producto: **precio objetivo**, **% mínimo de baja** (cualquier baja, 5 %, 10 %, 20 % o ninguna) y **“llegó al mínimo de 90 días”**.
 - **Popup:** pestañas **Siguiendo** y **Vistos** (todo lo que fuiste visitando, con su historial).
@@ -19,7 +21,7 @@ Extensión de Chrome (Manifest V3) para ver y seguir el historial de precios de 
 
 ## Pruebas
 ```bash
-node --test test/*.test.js        # extensión: estadísticas, veredicto, CSV, alertas (11 pruebas)
+node --test test/*.test.js        # extensión: estadísticas, veredicto, CSV, alertas, extractor, descuentos (21 pruebas)
 cd server && npm test             # API (8 pruebas)
 ```
 
@@ -37,10 +39,13 @@ Despliegue en Fly.io: los pasos están en `server/fly.toml`. Si usás otro nombr
 - Los productos *solo vistos* se actualizan únicamente cuando los visitás; los seguidos, además, cada hora (con Chrome abierto).
 - El veredicto necesita al menos 3 registros y 3 días de datos antes de opinar. Las ventanas de 90 días / 6 meses solo se muestran cuando el historial las cubre.
 - Las alertas de “mínimo de 90 días” se evalúan con el historial local del producto (necesita ≥3 registros y ≥7 días).
+- **El precio tachado y el vendedor se leen de clases/textos de MercadoLibre** (`andes-money-amount--previous`, "Vendido por …") que no pude verificar contra páginas reales: los fixtures de `test/fixtures/` reproducen el formato *supuesto*. Si no se leen, el panel simplemente omite esas secciones. Para ajustar el extractor, reemplazá los fixtures por HTML real y corré las pruebas.
+- El "antes" solo vale mientras la página lo muestra: se descarta si tiene más de 3 días.
 - El precio se lee del JSON-LD / meta tags de la página. Si MercadoLibre cambia ese formato, hay que ajustar `lib/extract.js`.
 
 ## Hoja de ruta
 1. ✅ Seguimiento local de productos elegidos, con alertas.
 2. ✅ Panel de historial en cualquier producto + registro pasivo de lo que visitás.
 3. ✅ Base de precios compartida (aporte anónimo de los usuarios + API), para ver historial desde la primera visita. *Pendiente:* desplegar el servidor y, más adelante, rastrear productos populares con la API oficial de MercadoLibre.
+4. ✅ Detección de descuentos inflados (precio tachado vs historial real) y vendedor. *Pendiente:* validar los selectores con páginas reales de MercadoLibre, y la recomendación “comprar ya / esperar” que combine todas las señales.
 4. ⏳ Detección de descuentos falsos y recomendación "comprar ya / esperar" con datos reales.

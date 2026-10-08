@@ -112,6 +112,10 @@
   .grid small { display: block; color: var(--muted, #777); font-size: 10px; text-transform: uppercase; letter-spacing: .03em; }
   .grid b { font-size: 13px; }
   .delta { font-size: 12px; margin: 4px 0; color: var(--muted, #777); }
+  .disc { display: grid; gap: 2px; margin: 8px 0; padding: 7px 10px; border-radius: 8px; border-left: 4px solid #777; background: var(--cell, #f5f5f7); font-size: 12px; }
+  .disc.bad { border-left-color: #e63946; } .disc.good { border-left-color: #00a650; } .disc.warn { border-left-color: #c77d00; }
+  .disc span { color: var(--muted, #777); }
+  .seller { color: var(--muted, #777); font-size: 11px; margin: 2px 0 0; }
   .alerts { margin-top: 10px; border-top: 1px solid var(--line, #ccc); padding-top: 8px; display: grid; gap: 6px; }
   .alerts label { display: flex; gap: 6px; align-items: center; font-size: 12px; flex-wrap: wrap; }
   .alerts select, .alerts input[type=number] { padding: 4px 6px; border: 1px solid var(--line, #ccc); border-radius: 6px; font-size: 12px; background: transparent; color: inherit; }
@@ -161,7 +165,67 @@
     render();
   }
 
+  // --- Descuento declarado vs. historial real ---------------------------------
+  // Heurística: se compara el precio "antes" que muestra la publicación con lo que el producto realmente costó
+  // en los últimos 60 días (historial local + comunitario). Umbrales en un solo lugar para poder ajustarlos.
+  const DISC = { minClaimed: 0.03, minSpanDays: 14, windowDays: 60, inflatedRatio: 1.10, realShare: 0.5, maxAgeDays: 3 };
+
+  function timeWeightedAvg(pts, end) {
+    let sum = 0, total = 0;
+    for (let i = 0; i < pts.length; i++) {
+      const to = i + 1 < pts.length ? pts[i + 1][0] : end;
+      const w = Math.max(0, to - pts[i][0]);
+      sum += pts[i][1] * w; total += w;
+    }
+    return total ? sum / total : pts[pts.length - 1][1];
+  }
+
+  // item.list = { price, at } es el "antes" leído de la página. Devuelve null si no hay descuento que verificar.
+  function discountCheck(item, history, now) {
+    const L = item.list;
+    now = now || Date.now();
+    if (!L || !history || !history.length || now - L.at > DISC.maxAgeDays * DAY) return null;
+    const cur = history[history.length - 1][1];
+    if (!(L.price > cur * (1 + DISC.minClaimed))) return null; // la publicación no declara descuento
+    const claimed = 1 - cur / L.price;
+    const pc = (v) => Math.round(v * 100) + '%';
+    const span = (history[history.length - 1][0] - history[0][0]) / DAY;
+    const base = { claimed, list: L.price };
+    if (span < DISC.minSpanDays) {
+      return { ...base, status: 'unknown', cls: 'neutral', title: 'ℹ️ Descuento sin verificar',
+        text: `Dice ${pc(claimed)} OFF (antes ${money(L.price, item.currency)}). Todavía hay pocos días de historial (${Math.floor(span)} de ${DISC.minSpanDays} días) para comprobarlo.` };
+    }
+    const pts = sliceHistory(history, DISC.windowDays, now);
+    const end = Math.max(now, history[history.length - 1][0]);
+    const typical = timeWeightedAvg(pts, end);
+    const maxSeen = Math.max(...pts.map((p) => p[1]));
+    const realDrop = Math.max(0, 1 - cur / typical);
+    const out = { ...base, typical, maxSeen, realDrop };
+    const listSeen = L.price <= maxSeen * DISC.inflatedRatio;
+    if (!listSeen && realDrop < claimed * DISC.realShare) {
+      return { ...out, status: 'fake', cls: 'bad', title: '⚠️ Descuento inflado',
+        text: `Dice ${pc(claimed)} OFF, pero en los últimos ${DISC.windowDays} días costó ${money(typical, item.currency)} en promedio y nunca llegó a ${money(L.price, item.currency)}. La baja real es de ${pc(realDrop)}.` };
+    }
+    if (realDrop >= claimed * DISC.realShare && listSeen) {
+      return { ...out, status: 'ok', cls: 'good', title: '✅ Descuento real',
+        text: `El precio "antes" (${money(L.price, item.currency)}) se vio en los últimos ${DISC.windowDays} días. Bajó ${pc(realDrop)} frente al promedio.` };
+    }
+    return { ...out, status: 'partial', cls: 'warn', title: '🟡 Menos de lo que dice',
+      text: `Dice ${pc(claimed)} OFF, pero frente al promedio de ${DISC.windowDays} días la baja real es de ${pc(realDrop)}.` };
+  }
+
   // --- Estadísticas y alertas (HTML común al panel y al popup) ---------------
+  function discountHtml(d) {
+    return d ? `<div class="disc ${d.cls}"><b>${esc(d.title)}</b><span>${esc(d.text)}</span></div>` : '';
+  }
+  function sellerLine(seller) {
+    if (!seller || !seller.name) return '';
+    const bits = [`Vendido por ${seller.name}`];
+    if (seller.official) bits.push('Tienda oficial');
+    if (seller.lider) bits.push(seller.lider);
+    return bits.join(' · ');
+  }
+
   function statsHtml(s, cur) {
     const cell = (label, v, extra) => `<div><small>${esc(label)}</small><b>${esc(money(v, cur))}</b>${extra ? ` <small style="display:inline;text-transform:none">${esc(extra)}</small>` : ''}</div>`;
     const cells = [cell('Actual', s.cur), cell('Promedio', s.avg)]
@@ -213,7 +277,7 @@
   }
 
   root.MeliShared = {
-    esc, money, shortDate, longDate, isTracked, sliceHistory, windowStats, stats, verdict, merge,
+    esc, money, shortDate, longDate, isTracked, sliceHistory, windowStats, stats, verdict, merge, discountCheck, discountHtml, sellerLine,
     CHART_CSS, mountChart, statsHtml, alertsHtml, readAlerts, csv, download
   };
 })(typeof self !== 'undefined' ? self : this);

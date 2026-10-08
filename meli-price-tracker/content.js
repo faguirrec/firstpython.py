@@ -49,9 +49,10 @@
     // Para mostrar usamos el historial comunitario + el local; lo guardado en el navegador no se toca.
     const view = remote && remote.points.length ? { ...it, history: S.merge(it.history, remote.points) } : it;
     const v = S.verdict(view), s = S.stats(view), cur = it.currency;
+    const disc = S.discountCheck(it, view.history);
     let inner;
     if (!open) {
-      inner = `<button class="pill" data-a="open" title="Ver historial de precio">📉 ${S.esc(v.text)}</button>`;
+      inner = `<button class="pill" data-a="open" title="Ver historial de precio">${disc && disc.status === 'fake' ? '⚠️ Descuento inflado' : '📉 ' + S.esc(v.text)}</button>`;
     } else {
       const who = remote && remote.contributors > 0 ? `Comunidad: ${remote.contributors} ${remote.contributors === 1 ? 'usuario' : 'usuarios'} · ` : '';
       const note = (s.n < 3 || s.days < 3)
@@ -62,6 +63,8 @@
         <div class="head"><span>📉 Historial de precio</span><button data-a="close" aria-label="Cerrar">✕</button></div>
         <div class="body">
           <div class="price">${S.esc(S.money(s.cur, cur))}<span class="badge ${v.cls}">${S.esc(v.text)}</span></div>
+          ${it.seller ? `<div class="seller">${S.esc(S.sellerLine(it.seller))}</div>` : ''}
+          ${S.discountHtml(disc)}
           <div class="chartbox"></div>
           ${S.statsHtml(s, cur)}
           <div class="note">${S.esc(note)}</div>
@@ -97,7 +100,7 @@
     if (!id) return removeHost();
     const info = X.parseDocument(document);
     if (!info) return removeHost();
-    const res = await send({ type: 'visit', item: { id, url: X.canonicalUrl(location.href), ...info } });
+    const res = await send({ type: 'visit', item: { id, url: X.canonicalUrl(location.href), ...info } }); // incluye info.list y info.seller
     if (id !== currentId || !res || !res.item) return; // navegó mientras esperábamos
     current = res.item;
     remote = null;

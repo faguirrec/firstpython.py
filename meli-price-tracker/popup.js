@@ -30,6 +30,7 @@ async function render() {
         <div><a href="${S.esc(it.url)}" target="_blank" rel="noopener">${S.esc(it.title)}</a>
         <div class="price"></div></div>
       </div>
+      <div class="discbox"></div>
       <div class="chartbox"></div>
       <div class="statsbox"></div>
       <div class="stats"><span>${S.esc(when)}</span><span class="count"></span></div>
@@ -63,6 +64,7 @@ function fill(card, it, remote) {
   const s = S.stats(view), v = S.verdict(view);
   card.querySelector('.price').innerHTML = `${S.esc(S.money(s.cur, it.currency))}<span class="badge ${v.cls}">${S.esc(v.text)}</span>`;
   card.querySelector('.statsbox').innerHTML = S.statsHtml(s, it.currency);
+  card.querySelector('.discbox').innerHTML = S.discountHtml(S.discountCheck(it, view.history));
   card.querySelector('.count').textContent = remote ? `${s.n} registros · ${remote.contributors} usuarios` : `${s.n} registros`;
   S.mountChart(card.querySelector('.chartbox'), view.history, it.currency);
 }

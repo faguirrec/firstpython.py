@@ -151,7 +151,7 @@ async function checkAll() {
       const cur = items[id];
       if (!cur || !tracked(cur)) return;
       cur.lastCheck = Date.now();
-      if (info) { delete cur.lastError; record(cur, info.price); await share(cur, info.price); } else cur.lastError = error;
+      if (info) { delete cur.lastError; if (info.list) cur.list = { price: info.list, at: Date.now() }; record(cur, info.price); await share(cur, info.price); } else cur.lastError = error;
       await setItems(items);
     });
     await new Promise((r) => setTimeout(r, 1500)); // no bombardear a ML
@@ -174,6 +174,8 @@ const handlers = {
     it.image = item.image || it.image;
     it.currency = item.currency || it.currency || X.currencyForUrl(item.url) || 'ARS';
     it.lastSeen = now;
+    it.list = item.list ? { price: item.list, at: now } : null; // la página abierta es la fuente confiable: sin tachado = sin descuento
+    if (item.seller) it.seller = item.seller;
     record(it, item.price);
     await share(it, item.price);
     evict(items);
