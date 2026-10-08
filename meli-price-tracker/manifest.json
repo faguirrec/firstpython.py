@@ -1,9 +1,14 @@
 {
   "manifest_version": 3,
   "name": "Meli Price Tracker",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Seguí el precio de tus productos de MercadoLibre a lo largo del tiempo y enterate cuándo conviene comprar.",
-  "permissions": ["storage", "alarms", "notifications"],
+  "permissions": [
+    "storage",
+    "unlimitedStorage",
+    "alarms",
+    "notifications"
+  ],
   "host_permissions": [
     "https://*.mercadolibre.com.ar/*",
     "https://*.mercadolibre.com.mx/*",
@@ -16,11 +21,17 @@
     "https://*.mercadolibre.com/*",
     "https://*.mercadolivre.com.br/*"
   ],
-  "background": { "service_worker": "background.js" },
+  "background": {
+    "service_worker": "background.js"
+  },
   "action": {
     "default_title": "Meli Price Tracker",
     "default_popup": "popup.html",
-    "default_icon": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" }
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
   },
   "content_scripts": [
     {
@@ -36,10 +47,17 @@
         "https://*.mercadolibre.com/*",
         "https://*.mercadolivre.com.br/*"
       ],
-      "js": ["lib/extract.js", "content.js"],
-      "css": ["content.css"],
+      "js": [
+        "lib/extract.js",
+        "lib/shared.js",
+        "content.js"
+      ],
       "run_at": "document_idle"
     }
   ],
-  "icons": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" }
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
 }

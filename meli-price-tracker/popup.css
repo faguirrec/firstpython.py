@@ -21,3 +21,9 @@ svg.chart { width:100%; height:70px; display:block; }
 .actions button { border:0; border-radius:6px; padding:5px 9px; cursor:pointer; background:var(--accent); color:#fff; }
 .actions .del { margin-left:auto; background:transparent; color:var(--bad); }
 .err { color:var(--bad); font-size:11px; }
+nav { display:flex; border-bottom:1px solid var(--line); position:sticky; top:41px; background:var(--bg); z-index:1; }
+nav button { flex:1; padding:9px; border:0; background:none; color:var(--muted); font-weight:600; cursor:pointer; border-bottom:2px solid transparent; }
+nav button.active { color:var(--accent); border-bottom-color:var(--accent); }
+.actions .follow { background:var(--accent); }
+.actions .rm { margin-left:auto; background:transparent; color:var(--bad); }
+.seen-note { color:var(--muted); font-size:11px; }

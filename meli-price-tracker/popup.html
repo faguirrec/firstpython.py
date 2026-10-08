@@ -7,10 +7,15 @@
 <body>
   <header>
     <h1>📉 Meli Price Tracker</h1>
-    <button id="refresh" title="Revisar precios ahora">↻</button>
+    <button id="refresh" title="Revisar precios seguidos ahora">↻</button>
   </header>
+  <nav>
+    <button data-tab="tracked" class="active">Siguiendo <span id="n-tracked"></span></button>
+    <button data-tab="seen">Vistos <span id="n-seen"></span></button>
+  </nav>
   <main id="list"></main>
-  <p id="empty" hidden>Todavía no seguís ningún producto.<br>Abrí uno en MercadoLibre y tocá <b>“Seguir precio”</b>.</p>
+  <p id="empty" hidden></p>
+  <script src="lib/shared.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>
