@@ -1,0 +1,46 @@
+(function () {
+  var out = [];
+  function cut(s, n) { return s.length > n ? s.slice(0, n) + '...[cortado]' : s; }
+  function clean(h) { return h.replace(/<svg[\s\S]*?<\/svg>/g, '<svg/>').replace(/ style="[^"]*"/g, ''); }
+  function add(t, v) { out.push('=== ' + t + ' ===\n' + v); }
+  function up(el, n) { var b = el; for (var i = 0; i < n && b.parentElement; i++) b = b.parentElement; return b; }
+  add('URL', location.href);
+  var ld = [].slice.call(document.querySelectorAll('script[type="application/ld+json"]')).map(function (s) { return cut(s.textContent, 1500); });
+  add('JSON-LD', ld.join('\n---\n') || '(no hay)');
+  var prev = document.querySelector('.andes-money-amount--previous,[aria-label^="Antes"]');
+  if (prev) {
+    add('PRECIO ANTES (elemento)', cut(clean(prev.outerHTML), 1500));
+    add('BLOQUE DE PRECIO (3 niveles arriba)', cut(clean(up(prev, 3).outerHTML), 4000));
+  } else {
+    add('PRECIO ANTES', '(no encontre .andes-money-amount--previous ni aria-label "Antes")');
+  }
+  var labels = [].slice.call(document.querySelectorAll('[aria-label]')).filter(function (e) {
+    return /peso|\$|\x25|antes|off/i.test(e.getAttribute('aria-label'));
+  }).slice(0, 12).map(function (e) { return e.tagName + '.' + e.className + ' aria-label="' + e.getAttribute('aria-label') + '"'; });
+  add('ELEMENTOS CON aria-label DE PRECIO', labels.join('\n') || '(ninguno)');
+  var w = document.createTreeWalker(document.body, 4), n, sel = null;
+  while ((n = w.nextNode())) { if (/Vendido por/i.test(n.nodeValue)) { sel = n.parentElement; break; } }
+  if (sel) add('VENDEDOR', cut(clean(up(sel, 3).outerHTML), 3500));
+  else add('VENDEDOR', '(no encontre el texto "Vendido por")');
+  var text = out.join('\n\n');
+  var d = document.createElement('div');
+  d.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:2147483647;background:#fff;padding:8px;display:flex;flex-direction:column;gap:6px';
+  var t = document.createElement('textarea');
+  t.value = text;
+  t.style.cssText = 'flex:1;font:11px monospace;width:100%;box-sizing:border-box';
+  var b = document.createElement('button');
+  b.textContent = 'Copiar todo (' + text.length + ' caracteres)';
+  b.style.cssText = 'padding:14px;font:700 16px sans-serif;background:#ffe600;border:0';
+  b.onclick = function () {
+    t.focus(); t.select();
+    var done = function () { b.textContent = 'Copiado. Ya podes pegarlo en el chat'; };
+    try { navigator.clipboard.writeText(t.value).then(done, function () { document.execCommand('copy'); done(); }); }
+    catch (e) { document.execCommand('copy'); done(); }
+  };
+  var c = document.createElement('button');
+  c.textContent = 'Cerrar';
+  c.style.cssText = 'padding:10px;font:14px sans-serif';
+  c.onclick = function () { d.remove(); };
+  d.appendChild(t); d.appendChild(b); d.appendChild(c);
+  document.body.appendChild(d);
+})();
